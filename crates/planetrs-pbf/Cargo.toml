@@ -1,0 +1,19 @@
+[package]
+name = "planetrs-pbf"
+version.workspace = true
+description = "Reading OpenStreetMap PBF files: framing, blocks, and an id index over a sorted planet"
+documentation = "https://docs.rs/planetrs-pbf"
+readme = "README.md"
+keywords = ["openstreetmap", "osm", "pbf", "protobuf", "planet"]
+categories = ["parser-implementations", "science::geo", "encoding"]
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+flate2.workspace = true
+
+[lints]
+workspace = true

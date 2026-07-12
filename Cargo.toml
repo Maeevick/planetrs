@@ -1,0 +1,29 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/planetrs-pbf",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "MIT"
+repository = "https://github.com/maeevick/planetrs"
+homepage = "https://github.com/maeevick/planetrs"
+
+[workspace.dependencies]
+planetrs-pbf = { path = "crates/planetrs-pbf", version = "0.1.0" }
+flate2 = { version = "1.1", default-features = false, features = ["zlib-rs"] }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
+panic = "abort"
+
+[profile.dist]
+inherits = "release"
+strip = true
