@@ -1,0 +1,12 @@
+/target/
+**/target/
+*.osm.pbf
+*.osm.pbf.md5
+*.part
+*.part.meta
+*.partial
+*.mapclip
+*.mapclip-index
+.DS_Store
+.idea/
+.vscode/
