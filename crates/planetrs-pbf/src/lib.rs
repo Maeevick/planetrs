@@ -11,5 +11,6 @@
 //! Data read through this crate is © OpenStreetMap contributors, ODbL 1.0.
 
 pub mod error;
+pub mod proto;
 
 pub use error::PbfError;
