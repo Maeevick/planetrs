@@ -9,3 +9,7 @@
 //! the file's own header rather than assumed.
 //!
 //! Data read through this crate is © OpenStreetMap contributors, ODbL 1.0.
+
+pub mod error;
+
+pub use error::PbfError;
