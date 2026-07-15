@@ -10,7 +10,9 @@
 //!
 //! Data read through this crate is © OpenStreetMap contributors, ODbL 1.0.
 
+pub mod blob;
 pub mod error;
 pub mod proto;
 
+pub use blob::{BlobKind, Framing, Location};
 pub use error::PbfError;
