@@ -12,11 +12,13 @@
 
 pub mod blob;
 pub mod block;
+pub mod entity;
 pub mod error;
 pub mod header;
 pub mod proto;
 
 pub use blob::{BlobKind, Framing, Location};
 pub use block::{Block, Contents, IdSpan, Section, block, block_contents, contents, id_span, inflate};
+pub use entity::{DenseGroup, RawRelation, RawWay, dense_group, visit_relations, visit_ways};
 pub use error::PbfError;
 pub use header::FileHeader;
