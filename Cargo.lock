@@ -29,6 +29,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "planetrs-geo"
+version = "0.1.0"
+
+[[package]]
 name = "planetrs-pbf"
 version = "0.1.0"
 dependencies = [

@@ -1,0 +1,16 @@
+[package]
+name = "planetrs-geo"
+version.workspace = true
+description = "Bounding boxes in kilometres, and the integer windows a PBF block is tested against"
+documentation = "https://docs.rs/planetrs-geo"
+readme = "README.md"
+keywords = ["geo", "bounding-box", "openstreetmap", "gis", "coordinates"]
+categories = ["science::geo", "mathematics"]
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[lints]
+workspace = true
