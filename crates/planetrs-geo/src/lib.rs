@@ -5,6 +5,8 @@
 //! `1/cos(latitude)` shorter than a degree of latitude, so the same box in raw degrees is 1.62
 //! times too wide at Rotterdam and 2.88 times too wide at Tromsø.
 
+mod area;
 mod bounds;
 
+pub use area::{Area, GeoError};
 pub use bounds::{BoundingBox, metres_per_degree};
