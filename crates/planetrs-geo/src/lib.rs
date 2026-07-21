@@ -7,6 +7,8 @@
 
 mod area;
 mod bounds;
+mod window;
 
 pub use area::{Area, GeoError};
 pub use bounds::{BoundingBox, metres_per_degree};
+pub use window::Window;
