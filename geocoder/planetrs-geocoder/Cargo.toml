@@ -1,0 +1,21 @@
+[package]
+name = "planetrs-geocoder"
+description = "Turning a place or a postal address into a coordinate, from OpenStreetMap data alone"
+documentation = "https://docs.rs/planetrs-geocoder"
+readme = "../README.md"
+keywords = ["geocoding", "geocoder", "openstreetmap", "address", "osm"]
+categories = ["science::geo", "text-processing"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+planetrs-pbf.workspace = true
+rayon.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true
