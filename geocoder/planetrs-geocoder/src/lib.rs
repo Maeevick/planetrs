@@ -69,3 +69,4 @@
 #![warn(missing_docs)]
 
 mod rings;
+mod text;
