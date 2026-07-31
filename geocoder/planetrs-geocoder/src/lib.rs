@@ -68,6 +68,7 @@
 
 #![warn(missing_docs)]
 
+mod filing;
 mod rarity;
 mod rings;
 mod similarity;
