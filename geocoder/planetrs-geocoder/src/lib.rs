@@ -69,4 +69,5 @@
 #![warn(missing_docs)]
 
 mod rings;
+mod similarity;
 mod text;
