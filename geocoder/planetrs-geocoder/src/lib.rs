@@ -70,6 +70,7 @@
 
 mod boundary;
 mod filing;
+mod gazetteer;
 mod rarity;
 mod rings;
 mod similarity;
@@ -77,4 +78,5 @@ mod street;
 mod territory;
 mod text;
 
+pub use gazetteer::Basis;
 pub use street::Quality;
