@@ -73,5 +73,8 @@ mod filing;
 mod rarity;
 mod rings;
 mod similarity;
+mod street;
 mod territory;
 mod text;
+
+pub use street::Quality;
