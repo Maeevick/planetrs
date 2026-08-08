@@ -72,6 +72,7 @@ mod boundary;
 mod filing;
 mod gazetteer;
 mod harvest;
+mod loose;
 mod rarity;
 mod rings;
 mod similarity;
