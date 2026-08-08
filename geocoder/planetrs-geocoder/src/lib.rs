@@ -75,6 +75,7 @@ mod harvest;
 mod loose;
 mod rarity;
 mod rings;
+mod shops;
 mod similarity;
 mod street;
 mod territory;
