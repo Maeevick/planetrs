@@ -68,6 +68,7 @@
 
 #![warn(missing_docs)]
 
+mod assemble;
 mod boundary;
 mod filing;
 mod gazetteer;
