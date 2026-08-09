@@ -79,6 +79,7 @@ mod rings;
 mod shops;
 mod similarity;
 mod street;
+mod street_index;
 mod territory;
 mod text;
 
