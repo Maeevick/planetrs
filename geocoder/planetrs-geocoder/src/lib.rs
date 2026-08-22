@@ -75,6 +75,7 @@ mod filing;
 mod gazetteer;
 mod harvest;
 mod index_file;
+mod locate;
 mod loose;
 mod rarity;
 mod rings;
@@ -86,4 +87,5 @@ mod territory;
 mod text;
 
 pub use gazetteer::Basis;
+pub use locate::{Answer, Precision, Site, refusal_of};
 pub use street::Quality;
