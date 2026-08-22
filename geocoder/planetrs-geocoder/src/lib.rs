@@ -74,6 +74,7 @@ mod file_streets;
 mod filing;
 mod gazetteer;
 mod harvest;
+mod index_file;
 mod loose;
 mod rarity;
 mod rings;
