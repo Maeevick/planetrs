@@ -70,6 +70,7 @@
 
 mod assemble;
 mod boundary;
+mod build;
 mod file_streets;
 mod filing;
 mod gazetteer;
@@ -89,6 +90,7 @@ mod territory;
 mod text;
 mod trace;
 
+pub use build::{BuildError, DEFAULT_COUNTRIES, IndexSummary, build_index};
 pub use gazetteer::Basis;
 pub use locate::{Answer, Precision, Site, refusal_of};
 pub use street::Quality;
