@@ -87,6 +87,7 @@ mod street;
 mod street_index;
 mod territory;
 mod text;
+mod trace;
 
 pub use gazetteer::Basis;
 pub use locate::{Answer, Precision, Site, refusal_of};
