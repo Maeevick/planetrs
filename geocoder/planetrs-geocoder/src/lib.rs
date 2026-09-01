@@ -74,6 +74,7 @@ mod build;
 mod file_streets;
 mod filing;
 mod gazetteer;
+mod geocoder;
 mod harvest;
 pub mod index;
 mod index_file;
@@ -92,5 +93,6 @@ mod trace;
 
 pub use build::{BuildError, DEFAULT_COUNTRIES, IndexSummary, build_index};
 pub use gazetteer::Basis;
+pub use geocoder::{Geocoder, OpenError};
 pub use locate::{Answer, Precision, Site, refusal_of};
 pub use street::Quality;
