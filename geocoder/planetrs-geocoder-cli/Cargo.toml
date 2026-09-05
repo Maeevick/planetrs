@@ -1,0 +1,26 @@
+[package]
+name = "planetrs-geocoder-cli"
+description = "Command line geocoder over an OpenStreetMap planet file"
+publish = false
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[lib]
+name = "planetrs_geocoder_cli"
+path = "src/lib.rs"
+
+[dependencies]
+planetrs-geocoder.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+thiserror.workspace = true
+ureq.workspace = true
+md-5.workspace = true
+fs4.workspace = true
+
+[lints]
+workspace = true
