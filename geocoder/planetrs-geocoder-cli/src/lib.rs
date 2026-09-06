@@ -4,6 +4,7 @@
 //! with [`exit_code_of`]: answers on stdout, everything else on stderr.
 
 pub mod data_dir;
+pub mod download;
 pub mod files;
 pub mod progress;
 pub mod sites;
