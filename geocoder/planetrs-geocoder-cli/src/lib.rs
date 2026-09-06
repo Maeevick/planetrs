@@ -5,4 +5,5 @@
 
 pub mod data_dir;
 pub mod files;
+pub mod progress;
 pub mod sites;
