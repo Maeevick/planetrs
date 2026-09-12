@@ -13,6 +13,11 @@ homepage.workspace = true
 name = "planetrs_geocoder_cli"
 path = "src/lib.rs"
 
+[[bin]]
+name = "planetrs-geocoder"
+path = "src/main.rs"
+doc = false
+
 [dependencies]
 planetrs-geocoder.workspace = true
 anyhow.workspace = true
