@@ -9,3 +9,7 @@
 //! testable without a planet file anywhere near it.
 //!
 //! Data read through this crate is © OpenStreetMap contributors, ODbL 1.0.
+
+pub mod error;
+
+pub use error::ClipError;
