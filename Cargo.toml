@@ -5,6 +5,7 @@ members = [
     "crates/planetrs-geo",
     "geocoder/planetrs-geocoder",
     "geocoder/planetrs-geocoder-cli",
+    "mapclipper/planetrs-mapclipper",
 ]
 
 [workspace.package]

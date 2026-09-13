@@ -1,0 +1,32 @@
+[package]
+name = "planetrs-mapclipper"
+version.workspace = true
+description = "Cutting a small illustrated map out of the OpenStreetMap planet file, offline"
+documentation = "https://docs.rs/planetrs-mapclipper"
+readme = "../README.md"
+keywords = ["openstreetmap", "map", "svg", "geojson", "cartography"]
+categories = ["science::geo", "command-line-utilities", "visualization"]
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[features]
+default = ["png"]
+# Rasterising, through resvg. Turning it off leaves GeoJSON and SVG, and drops every dependency
+# beyond flate2, rayon and clap.
+png = ["dep:resvg"]
+
+[dependencies]
+planetrs-pbf.workspace = true
+planetrs-geo.workspace = true
+rayon.workspace = true
+resvg = { version = "0.48", default-features = false, features = [
+  "text",
+  "system-fonts",
+], optional = true }
+clap.workspace = true
+
+[lints]
+workspace = true
