@@ -12,5 +12,6 @@
 
 pub mod error;
 pub mod progress;
+pub mod report;
 
 pub use error::ClipError;
