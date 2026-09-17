@@ -10,6 +10,7 @@
 //!
 //! Data read through this crate is © OpenStreetMap contributors, ODbL 1.0.
 
+pub mod credit;
 pub mod error;
 pub mod progress;
 pub mod report;
