@@ -12,7 +12,9 @@
 
 pub mod credit;
 pub mod error;
+pub mod harvest;
 pub mod progress;
 pub mod report;
 
 pub use error::ClipError;
+pub use harvest::Harvest;
