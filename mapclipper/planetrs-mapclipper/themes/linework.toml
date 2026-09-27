@@ -1,0 +1,42 @@
+name = "linework"
+description = "Three tones and the road network. The roads are what make a city read as a city"
+
+background = "#f4f2ec"
+ink = "#33353a"
+
+# Built ground gets no colour at all. What carries the city instead is the road network, which is
+# denser where the city is dense, so density reads off the drawing rather than off a fill.
+order = ["green", "water", "waterway", "sea", "road-minor", "road-major"]
+
+[green]
+fill = "#e3e9da"
+
+[water]
+fill = "#aad2e5"
+
+[waterway]
+stroke = "#aad2e5"
+width = 1.0
+
+[sea]
+fill = "#aad2e5"
+
+[road-minor]
+stroke = "#ffffff"
+width = 1.0
+
+[road-major]
+stroke = "#ffffff"
+width = 2.2
+
+[label-settlement]
+size = 13
+colour = "#33353a"
+
+[label-water]
+size = 10
+colour = "#5f93ad"
+
+[label-area]
+size = 10
+colour = "#7c8a72"

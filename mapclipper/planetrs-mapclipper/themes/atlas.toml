@@ -1,0 +1,82 @@
+name = "atlas"
+description = "Everything the harvest holds, in the muted tones a reader expects from a printed map"
+
+background = "#f2efe9"
+ink = "#37383a"
+
+# Back to front. Water goes down before the land uses beside it and before the buildings, because a
+# quay and a shed genuinely stand on reclaimed ground above it. The shore goes last, so it stays
+# legible over whatever ran up to it.
+order = [
+  "sea", "urban", "green", "beach", "wetland", "industrial", "water", "waterway",
+  "building", "runway", "rail", "road-minor", "road-major", "pier", "coastline",
+]
+
+[sea]
+fill = "#b9d5e8"
+
+[water]
+fill = "#c3dbeb"
+stroke = "#9dbfd6"
+width = 0.4
+
+# A stream is a centreline a couple of metres wide, so it is stroked and never filled.
+[waterway]
+stroke = "#9dbfd6"
+width = 0.8
+
+[wetland]
+fill = "#cfdfd4"
+
+[beach]
+fill = "#efe6cd"
+
+[green]
+fill = "#d9e4cd"
+
+[urban]
+fill = "#e9e2d8"
+
+[industrial]
+fill = "#e5e0da"
+
+[building]
+fill = "#d8d1c8"
+
+[pier]
+fill = "#d0c8be"
+stroke = "#b8ada0"
+width = 0.8
+
+[runway]
+stroke = "#d0c8be"
+width = 2.0
+
+[rail]
+stroke = "#b4aba1"
+width = 0.6
+
+[road-minor]
+stroke = "#ded5c7"
+width = 0.9
+
+[road-major]
+stroke = "#e7c08d"
+width = 1.6
+
+[coastline]
+stroke = "#7ea9c5"
+width = 1.0
+
+# Names. A theme that states none of this still labels, with these same defaults.
+[label-settlement]
+size = 13
+colour = "#3a3a3c"
+
+[label-water]
+size = 10
+colour = "#5b8ca8"
+
+[label-area]
+size = 10
+colour = "#6b7a5e"

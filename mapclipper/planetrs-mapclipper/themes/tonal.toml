@@ -1,0 +1,41 @@
+name = "tonal"
+description = "Four tones: ground, vegetation, built ground and water. What a band two hundred pixels tall can carry"
+
+background = "#f0ece6"
+ink = "#33353a"
+
+# Water goes down LAST here, which the detailed order cannot do. Land use polygons routinely overlap
+# the water beside them, and with the buildings and quays gone there is nothing left that should
+# cover it. Drawing it last is what gives a crisp shoreline.
+order = ["green", "urban", "industrial", "water", "waterway", "sea"]
+
+[green]
+fill = "#dde6d2"
+
+[urban]
+fill = "#e2d9cc"
+
+[industrial]
+fill = "#d8d0c4"
+
+[water]
+fill = "#a6cfe4"
+
+[waterway]
+stroke = "#a6cfe4"
+width = 1.0
+
+[sea]
+fill = "#a6cfe4"
+
+[label-settlement]
+size = 12
+colour = "#33353a"
+
+[label-water]
+size = 10
+colour = "#5b8ca8"
+
+[label-area]
+size = 10
+colour = "#75806a"

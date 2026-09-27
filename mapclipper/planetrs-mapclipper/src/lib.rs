@@ -16,7 +16,9 @@ pub mod harvest;
 pub mod progress;
 pub mod report;
 pub mod scene;
+pub mod theme;
 
 pub use error::ClipError;
 pub use harvest::Harvest;
 pub use scene::{Canvas, Category, Feature, Place, Rules, Scene};
+pub use theme::Theme;
