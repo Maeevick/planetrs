@@ -14,6 +14,7 @@ pub mod cli;
 pub mod credit;
 pub mod error;
 pub mod harvest;
+pub mod output;
 pub mod progress;
 pub mod report;
 pub mod scene;
