@@ -17,6 +17,7 @@ pub mod harvest;
 pub mod output;
 pub mod progress;
 pub mod report;
+pub mod run;
 pub mod scene;
 pub mod theme;
 
