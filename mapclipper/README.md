@@ -1,0 +1,217 @@
+# planetrs-mapclipper
+
+Cutting a small illustrated map out of the OpenStreetMap planet file, offline. No tile service, no
+API, no network at run time.
+
+Trix, the Chaotic Apprentice of the [planetrs](https://github.com/maeevick/planetrs) goblins, was
+expelled from several academies for "inappropriate experimentations with infrastructure". This is the
+infrastructure she is now allowed to experiment with, and so far nothing has caught fire.
+
+![Monaco, drawn with the atlas theme](https://raw.githubusercontent.com/maeevick/planetrs/main/docs/monaco-atlas.png)
+
+```sh
+planetrs-mapclipper clip planet-260907.osm.pbf \
+  --lat 5.269 --lon -4.012 --width-km 29 --height-km 16.53 \
+  --width-px 1000 --height-px 570 --theme linework \
+  --marker name --name "en=Port of Abidjan" \
+  --png abidjan.png
+```
+
+## Two verbs, and why
+
+The work splits in two, and the split is the design rather than an optimisation.
+
+**Harvesting** reads the planet. A PBF file has no spatial index, so every question about a place is
+a full scan of ninety-four gigabytes. It is minutes.
+
+**Rendering** draws what was harvested. It is milliseconds, and it can be asked again at another
+framing, another canvas, another theme.
+
+```sh
+planetrs-mapclipper harvest planet.osm.pbf --lat 5.269 --lon -4.012 \
+  --width-km 40 --height-km 40 --out abidjan.mapclip     # once
+
+planetrs-mapclipper render abidjan.mapclip --lat 5.269 --lon -4.012 \
+  --width-km 29 --height-km 16.53 --width-px 1000 --height-px 570 \
+  --theme linework --svg abidjan.svg                      # as often as you like
+```
+
+Tying them together makes every question about colour or framing cost a full pass, which is the
+difference between trying six framings and settling for the first.
+
+`clip` does both in one go, for the first time you look at a place.
+
+## A harvest is a thing you can give away
+
+A `.mapclip` is a few tens of megabytes and holds everything the planet has for one area. It is
+versioned, it records the exact planet file it was cut from and names the licence its data is under,
+and **it is byte-deterministic**: the same planet and the same area produce the same bytes, so a
+checksum over one means something.
+
+That matters because it makes the expensive half transferable. Somebody with a harvest can render
+from it with no planet file at all.
+
+Under ODbL a harvest is a **derivative database**, so publishing one carries share-alike.
+
+## What it draws
+
+| Output | What it is | Under ODbL |
+| ------ | ---------- | ---------- |
+| `--geojson` | lon/lat, never projected, as RFC 7946 requires | a derivative database: share-alike |
+| `--svg` | Web Mercator, one path per feature, grouped by category | a produced work: attribution |
+| `--png` | the SVG rasterised through resvg, in process | a produced work: attribution |
+
+The GeoJSON names the licence and links to it in its `attribution` member, as data has to. The SVG
+and the PNG show `© OpenStreetMap contributors` and the full address of
+<https://www.openstreetmap.org/copyright> in their bottom right corner, where no label is allowed to
+cover them; a picture holds no link, so the address is written out, and the SVG links it as well. A
+map is a Produced Work, and a credit hidden in a file's metadata would be gone the moment it became a
+picture.
+
+The GeoJSON and the SVG are byte-deterministic given the same harvest. **A PNG is not**, because the
+glyphs come from whatever fonts the machine has. That is equally true of a browser. When a run has
+to be defensible afterwards, keep the harvest and the SVG.
+
+## Themes are files, not code
+
+```sh
+planetrs-mapclipper themes                    # atlas, tonal, linework
+planetrs-mapclipper render … --theme ./mine.toml
+```
+
+A theme names a background, an ink, a draw order and what each category is painted with:
+
+```toml
+name = "linework"
+background = "#f4f2ec"
+ink = "#33353a"
+order = ["green", "water", "sea", "road-minor", "road-major"]
+
+[water]
+fill = "#aad2e5"
+
+[road-major]
+stroke = "#ffffff"
+width = 2.2
+```
+
+A category with a colour but no place in `order` is not drawn, which is how a theme turns something
+off without deleting it. The reader is strict: an unknown key or an unknown category is an error
+naming its own line, because a theme that silently styles nothing produces a blank map rather than a
+complaint.
+
+The categories are fixed by the tool, so a theme decides what a quay looks like and never what counts
+as one.
+
+## Names
+
+```sh
+planetrs-mapclipper render abidjan.mapclip … --labels settlements
+planetrs-mapclipper render abidjan.mapclip … --labels settlements,water
+planetrs-mapclipper render abidjan.mapclip … --labels all
+```
+
+Three classes: `settlements` (towns, villages, hamlets), `water` (ponds, lakes, rivers, brooks) and
+`areas` (woods, parks, industrial estates). Off by default.
+
+**Names always go into the GeoJSON, whatever `--labels` says.** They sit in a `labels` member beside
+`features`, each with its text, class, rank and position. A reader drawing its own map wants to
+place them its own way rather than take ours, and RFC 7946 allows the foreign member.
+
+What `--labels` decides is only what the *picture* carries, because placement is a pixel problem and
+pixels only exist at drawing time. The scene ranks every name it found; the renderer then walks them
+strongest first and draws each one whose box is still free. A village therefore beats a brook for a
+crowded corner, a name that would run off the canvas is dropped rather than clipped, and nothing is
+ever drawn over the marker.
+
+Two things this deliberately does not do. **Roads are not labelled**, because text following a
+curving path at intervals is a different and much larger job, and doing it badly looks worse than
+not doing it. And a watercourse gets **one** label, not one per way: OSM splits a brook wherever
+anything about it changes, so one brook can arrive as a dozen separate ways and drawing each would
+stack the same word down its length.
+
+Sizes and colours come from the theme:
+
+```toml
+[label-settlement]
+size = 13
+colour = "#3a3a3c"
+
+[label-water]
+size = 10
+colour = "#5b8ca8"
+```
+
+A theme that states none of this still labels, using the built-in defaults, and `halo` falls back to
+the theme's background so a name stays readable over water.
+
+## Two things worth knowing about the data
+
+**OSM does not store the sea.** It stores `natural=coastline` as open, directed ways with land on
+the left and water on the right. A frame cut out of that has a few line fragments and nothing saying
+which side is wet. Recovering the surface means closing those fragments against the frame's own
+edges, walking the boundary **clockwise**. The other way yields the land, which is the same polygon
+inverted and looks entirely plausible until you notice the sea is inland.
+
+**A stream is a line, not a surface.** OSM stores `waterway=river|stream|canal` as a centreline a
+couple of metres wide, and only `waterway=dock|riverbank` and `natural=water` as surfaces. They are
+separate categories here (`waterway` and `water`) so a theme can stroke one and fill the other.
+Conflating them, and then letting SVG close an open path implicitly before filling it, draws a brook
+as a wedge following its own course and makes it read wider than the pond beside it.
+
+**Detail below a pixel is not free.** One frame's GeoJSON went from 38 MB to 485 KB with no visible
+difference, because 153 025 of 158 307 features were buildings under a pixel across. Simplification
+is Douglas–Peucker at half a pixel, and the threshold is in pixels rather than metres because the
+frame is what decides what can be seen.
+
+## Framing
+
+Ground size is asked for in kilometres, never in degrees. A degree of longitude is `1/cos(latitude)`
+shorter than a degree of latitude, so a box in raw degrees is 1.62 times too wide at Rotterdam and
+2.88 times too wide at Tromsø.
+
+`width-km ÷ width-px` gives metres per pixel, which is the only number that compares two renders
+directly. **The frame's aspect ratio and the canvas's must match** or the map is stretched: 29 km on
+1000 px wants 16.53 km on 570, not 17.1. `planetrs-mapclipper` measures the disagreement and says so.
+
+`--margin` is how far beyond the frame to collect, as a share of it. A way is kept when one of its
+nodes falls in the collected box, so drawing it needs the vertices just outside the frame too, or a
+quay running off the edge stops dead at the boundary instead of leaving the picture.
+
+## The id index
+
+Five passes read the planet, and the last two fetch a multipolygon's member ways and then their
+nodes by id. Those used to be full scans of the way and node sections: half the I/O of the whole
+harvest, spent fetching a few thousand entities.
+
+The planet declares `Sort.Type_then_ID`, so ids ascend within a section and a blob's span never
+overlaps its neighbour's. Passes one and two inflate those sections anyway, so recording each blob's
+first and last id costs nothing, and the passes that follow read a handful of blobs instead of
+eighteen thousand. The index is kept beside the planet file as a sidecar of under a megabyte, so
+later runs on other areas get it for free.
+
+The sort order is **checked against the file's own header**, not assumed. A file that does not
+declare it is refused rather than bisected wrongly.
+
+## Installing
+
+```sh
+cargo install planetrs-mapclipper
+```
+
+Release archives for macOS and Linux are on the
+[releases page](https://github.com/maeevick/planetrs/releases), and a planet or a smaller extract
+comes from `planetrs-geocoder download` or any OpenStreetMap mirror. A harvest needs a file that
+declares `Sort.Type_then_ID`, as the planet and Geofabrik's extracts do.
+
+`--no-default-features` drops the PNG output and with it every dependency beyond `flate2`, `rayon`
+and `clap`. Clap stays because the library's entry point, `run::run`, takes the parsed command. The
+library crates under `crates/` pull nothing beyond `flate2`, so embedding the reader costs nothing.
+
+## Data and licence
+
+The code is MIT ([LICENSE](https://github.com/maeevick/planetrs/blob/main/LICENSE)). OpenStreetMap is
+© OpenStreetMap contributors and available under the Open Data Commons Open Database License (ODbL)
+by the OpenStreetMap Foundation (OSMF): <https://www.openstreetmap.org/copyright>. A harvest and a
+GeoJSON are Derivative Databases, shared under the ODbL with the notice they carry; an SVG or a PNG is
+a Produced Work and keeps its credit, and the copyright page's address, visible.
