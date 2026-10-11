@@ -1,0 +1,20 @@
+# The third-party licences shipped in every release archive, as THIRD-PARTY-LICENSES.html.
+
+accepted = [
+    "MIT",
+    "Apache-2.0",
+    "Zlib",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "CDLA-Permissive-2.0",
+]
+targets = [
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "x86_64-unknown-linux-musl",
+    "aarch64-unknown-linux-musl",
+]
+ignore-build-dependencies = false
+ignore-dev-dependencies = true
