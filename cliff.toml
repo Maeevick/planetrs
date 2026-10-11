@@ -1,0 +1,39 @@
+# git-cliff: the next CHANGELOG.md entry, from the conventional commit titles since the last tag.
+
+[changelog]
+header = """
+# Changelog
+
+Every notable change, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and the version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html): until 1.0,
+a minor version may break the API or the index format.
+"""
+body = """
+{% if version %}\
+## [{{ version | trim_start_matches(pat="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+{% else %}\
+## [Unreleased]
+{% endif %}\
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | striptags | trim | upper_first }}
+{% for commit in commits %}
+- {% if commit.scope %}{{ commit.scope }}: {% endif %}{{ commit.message | upper_first }}\
+{% endfor %}
+{% endfor %}
+"""
+trim = true
+
+[git]
+conventional_commits = true
+filter_unconventional = true
+protect_breaking_commits = true
+tag_pattern = "v[0-9].*"
+sort_commits = "oldest"
+commit_parsers = [
+    { message = "^feat", group = "<!-- 0 -->Added" },
+    { message = "^fix", group = "<!-- 1 -->Fixed" },
+    { message = "^perf", group = "<!-- 2 -->Faster" },
+    { message = "^refactor", group = "<!-- 3 -->Changed" },
+    { message = "^docs", group = "<!-- 4 -->Documentation" },
+    { message = "^(build|ci|chore|test)", skip = true },
+]
