@@ -1,0 +1,20 @@
+name: Idea
+description: Something planetrs could do, or do better
+labels: [enhancement]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What you are trying to do
+      description: The task, before any idea of how planetrs should help with it.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help
+  - type: textarea
+    id: example
+    attributes:
+      label: An example
+      description: A site, an area or a command, invented or public.

@@ -1,0 +1,49 @@
+name: Bug report
+description: An answer that is wrong, a command that fails, or a crash
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        Thank you. Please never paste somebody else's private data here: invent the site, or use a
+        public landmark.
+  - type: dropdown
+    id: tool
+    attributes:
+      label: Which part
+      options:
+        - planetrs-geocoder
+        - planetrs-mapclipper
+        - a library crate
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The output of `planetrs-geocoder --version` or `planetrs-mapclipper --version`.
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: System
+      description: macOS or Linux, and the processor.
+  - type: textarea
+    id: command
+    attributes:
+      label: What you ran
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: What happened, and what you expected
+    validations:
+      required: true
+  - type: textarea
+    id: trace
+    attributes:
+      label: For a geocoding answer, what `planetrs-geocoder trace "…"` prints
+      render: text
