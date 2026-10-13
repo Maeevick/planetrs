@@ -24,7 +24,7 @@ flate2 = { version = "1.1", default-features = false, features = ["zlib-rs"] }
 rayon = "1.12"
 thiserror = "2"
 anyhow = "1"
-clap = { version = "4.6", features = ["derive"] }
+clap = { version = "4.6.7", features = ["derive"] }
 ureq = { version = "3.4", default-features = false, features = ["rustls"] }
 md-5 = "0.11"
 fs4 = "1.1"
