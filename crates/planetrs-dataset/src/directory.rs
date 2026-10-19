@@ -116,7 +116,8 @@ pub struct CarriedOver {
 /// `others` says another tool builds, so that rebuilding one tool's parts never loses the other's.
 ///
 /// A file is hard-linked into place, or copied where a link cannot be made, and listed in the
-/// rebuild's manifest as the previous one listed it.
+/// rebuild's manifest as the previous one listed it. A dataset answers for one planet, so when the
+/// previous one was built from another, its parts are left behind and named instead.
 pub fn carry_over(
     previous: &Path,
     building: &Path,
@@ -130,6 +131,12 @@ pub fn carry_over(
         .into_iter()
         .filter(|entry| others(&entry.part))
         .collect();
+    if before.planet != rebuilt.planet {
+        return Ok(CarriedOver {
+            kept: Vec::new(),
+            left: carried.into_iter().map(|entry| entry.part).collect(),
+        });
+    }
     for entry in &carried {
         link_or_copy(&previous.join(&entry.file), &building.join(&entry.file))?;
     }
