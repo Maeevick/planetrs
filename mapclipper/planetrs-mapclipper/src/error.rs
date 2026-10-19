@@ -111,6 +111,13 @@ pub enum ClipError {
     /// The dataset holds no map index to cut a harvest from.
     #[error("the dataset holds no map index")]
     NoMapIndex,
+    /// The area reaches beyond the countries the dataset indexes, where it would lack what the planet
+    /// holds.
+    #[error("the area reaches beyond the countries the dataset indexes, {}", countries.join(", "))]
+    OutsideTheDataset {
+        /// The countries the dataset indexes.
+        countries: Vec<String>,
+    },
     /// A map index could not be recorded in the dataset.
     #[error("recording a map index in {} failed", directory.display())]
     Recording {
