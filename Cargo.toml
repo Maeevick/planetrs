@@ -25,7 +25,7 @@ planetrs-geo = { path = "crates/planetrs-geo", version = "0.1.0" }
 planetrs-dataset = { path = "crates/planetrs-dataset", version = "0.1.0" }
 planetrs-cli = { path = "crates/planetrs-cli", version = "0.1.0" }
 planetrs-geocoder = { path = "geocoder/planetrs-geocoder", version = "0.1.0" }
-planetrs-mapclipper = { path = "mapclipper/planetrs-mapclipper", version = "0.1.0" }
+planetrs-mapclipper = { path = "mapclipper/planetrs-mapclipper", version = "0.1.0", default-features = false }
 flate2 = { version = "1.1", default-features = false, features = ["zlib-rs"] }
 rayon = "1.12"
 thiserror = "2"
