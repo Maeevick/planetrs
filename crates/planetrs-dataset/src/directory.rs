@@ -70,11 +70,17 @@ pub fn record(
     rows: u64,
 ) -> Result<Manifest, RecordError> {
     std::fs::create_dir_all(directory).map_err(io_at(directory))?;
-    write_whole(&directory.join(name), bytes)?;
     let recorded = recorded_in(directory)?.unwrap_or_else(|| Manifest {
         planet: planet.clone(),
         files: Vec::new(),
     });
+    if recorded.planet != *planet {
+        return Err(RecordError::OtherPlanet {
+            recorded: Box::new(recorded.planet),
+            offered: Box::new(planet.clone()),
+        });
+    }
+    write_whole(&directory.join(name), bytes)?;
     let mut files: Vec<Entry> = recorded
         .files
         .into_iter()
