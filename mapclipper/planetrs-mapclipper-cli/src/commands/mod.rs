@@ -124,6 +124,11 @@ fn next_step(failure: &ClipError) -> Option<String> {
             Some("build one: planetrs-mapclipper index, or read the planet: --planet PATH".into())
         }
         ClipError::NoMapIndex => Some("build one: planetrs-mapclipper index".into()),
+        ClipError::OutsideTheDataset { countries } => Some(format!(
+            "read the planet: --planet PATH, or index the countries it reaches as well: \
+             planetrs-mapclipper index --countries {},…",
+            countries.join(",")
+        )),
         ClipError::Planet(PbfError::UnsortedSections) => Some(
             "this reader needs a planet file written with Sort.Type_then_ID, as \
              planet.openstreetmap.org publishes"
