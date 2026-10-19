@@ -900,6 +900,7 @@ dependencies = [
  "fs4",
  "md-5",
  "planetrs-geocoder",
+ "planetrs-pbf",
  "thiserror",
  "ureq",
 ]

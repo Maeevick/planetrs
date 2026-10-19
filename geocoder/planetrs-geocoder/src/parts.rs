@@ -6,10 +6,11 @@ use std::collections::{BTreeMap, HashMap};
 use planetrs_dataset::{gazetteer, geocoder_index};
 
 use crate::boundary::Country;
-use crate::gazetteer::Commune;
+use crate::gazetteer::{Commune, Gazetteer};
 use crate::rarity::WordRarity;
-use crate::shops::ShopIndex;
-use crate::street_index::StreetIndex;
+use crate::shops::{Shop, ShopIndex};
+use crate::street_index::{AddressPoint, Street, StreetIndex};
+use crate::text::HouseNumber;
 
 /// A position kept to the seven decimals of a degree OpenStreetMap records it at, about a
 /// centimetre, which is what every index has stored and every lookup has been tuned on.
@@ -191,4 +192,96 @@ fn shops_of(commune: i64, shops: &ShopIndex) -> Vec<geocoder_index::Entry> {
         .collect();
     lines.sort_by(|left, right| left.0.cmp(&right.0));
     lines.into_iter().map(|(_, entry)| entry).collect()
+}
+
+/// The gazetteer read back into the one the lookups settle sites with: its communes, its countries
+/// in the order of their codes, and the absorbing commune and the area of whichever communes have
+/// them.
+pub(crate) fn settling_gazetteer(areas: Vec<gazetteer::Area>) -> Gazetteer {
+    let parents = areas
+        .iter()
+        .filter_map(|area| area.absorbed_by.map(|commune| (area.relation, commune)))
+        .collect();
+    let surfaces = areas
+        .iter()
+        .filter_map(|area| area.square_kilometres.map(|surface| (area.relation, surface)))
+        .collect();
+    let (countries, communes): (Vec<gazetteer::Area>, Vec<gazetteer::Area>) =
+        areas.into_iter().partition(|area| area.level == COUNTRY_LEVEL);
+    let mut countries: Vec<Country> = countries
+        .into_iter()
+        .map(|area| Country {
+            code: area.country.unwrap_or_default(),
+            names: area.names,
+        })
+        .collect();
+    countries.sort_by(|left, right| left.code.cmp(&right.code));
+    let communes = communes
+        .into_iter()
+        .map(|area| Commune {
+            relation: area.relation,
+            level: area.level,
+            names: area.names,
+            postcodes: area.postcodes,
+            centre: area.centre,
+            country: area.country,
+        })
+        .collect();
+    Gazetteer::of(communes, countries)
+        .with_parents(parents)
+        .with_areas(surfaces)
+}
+
+/// A country's geocoder index read back into the street and shop indexes the lookups search.
+pub(crate) fn indexes_of(entries: Vec<geocoder_index::Entry>) -> (StreetIndex, ShopIndex) {
+    let mut streets = Vec::new();
+    let mut shops = Vec::new();
+    for entry in entries {
+        match entry {
+            geocoder_index::Entry::Door {
+                commune,
+                street,
+                number,
+                suffix,
+                position,
+            } => streets.push((
+                commune,
+                Street {
+                    name: street,
+                    addresses: vec![AddressPoint {
+                        number: HouseNumber { number, suffix },
+                        position,
+                    }],
+                    path: vec![],
+                },
+            )),
+            geocoder_index::Entry::Middle {
+                commune,
+                street,
+                position,
+            } => streets.push((
+                commune,
+                Street {
+                    name: street,
+                    addresses: vec![],
+                    path: vec![position],
+                },
+            )),
+            geocoder_index::Entry::Shop {
+                commune,
+                names,
+                street,
+                position,
+            } => shops.push((
+                commune,
+                Shop {
+                    names,
+                    street,
+                    position,
+                },
+            )),
+            geocoder_index::Entry::Names { .. } | geocoder_index::Entry::Word { .. } => {}
+        }
+    }
+    (StreetIndex::of(streets), ShopIndex::of(shops))
 }

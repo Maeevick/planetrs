@@ -4,9 +4,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
-use planetrs_geocoder::index::{
-    AddressPoint, Commune, Country, HouseNumber, Street, StreetIndex, write_index, write_streets,
-};
+use planetrs_pbf::testing::{MemberKind, Node, PlanetFile, Relation, Way};
 
 const SITE: &str = "Acme;8 Route des Tilleuls;89100;Sens;France";
 const HEADER: &str = "label;address;postal code;city;country;lat;lon;precision";
@@ -21,34 +19,80 @@ fn scratch(name: &str) -> PathBuf {
     directory
 }
 
+/// A ring of four corners closed on its first node, as one way.
+fn ring(way: i64, first_node: i64, south: f64, west: f64, north: f64, east: f64) -> (Vec<Node>, Way) {
+    let corners = [(south, west), (south, east), (north, east), (north, west)];
+    let nodes = corners
+        .iter()
+        .zip(first_node..)
+        .map(|((latitude, longitude), id)| Node::at(id, *latitude, *longitude))
+        .collect();
+    (
+        nodes,
+        Way::through(way, (first_node..first_node + 4).chain([first_node])),
+    )
+}
+
+/// France around Sens, Sens with its outline and centre, and a door on the Route des Tilleuls.
+fn yonne() -> PlanetFile {
+    let (country_corners, country_outline) = ring(2001, 1001, 47.9, 3.0, 48.5, 3.6);
+    let (commune_corners, commune_outline) = ring(2011, 1011, 48.15, 3.22, 48.24, 3.32);
+    country_corners
+        .into_iter()
+        .chain(commune_corners)
+        .fold(PlanetFile::sorted(), PlanetFile::with_node)
+        .with_node(Node::at(1020, 48.197, 3.283).tagged("place", "town"))
+        .with_node(Node::at(1031, 48.1995, 3.2645))
+        .with_node(Node::at(1032, 48.2005, 3.2660))
+        .with_node(
+            Node::at(1041, 48.2, 3.2652)
+                .tagged("addr:housenumber", "8")
+                .tagged("addr:street", "Route des Tilleuls"),
+        )
+        .with_way(country_outline)
+        .with_way(commune_outline)
+        .with_way(
+            Way::through(2031, [1031, 1032])
+                .tagged("highway", "residential")
+                .tagged("name", "Route des Tilleuls"),
+        )
+        .with_relation(
+            Relation::of(3001)
+                .tagged("boundary", "administrative")
+                .tagged("admin_level", "2")
+                .tagged("ISO3166-1", "FR")
+                .tagged("name", "France")
+                .with_member(MemberKind::Way, 2001, "outer"),
+        )
+        .with_relation(
+            Relation::of(3011)
+                .tagged("boundary", "administrative")
+                .tagged("admin_level", "8")
+                .tagged("name", "Sens")
+                .tagged("postal_code", "89100")
+                .with_member(MemberKind::Node, 1020, "admin_centre")
+                .with_member(MemberKind::Way, 2011, "outer"),
+        )
+}
+
+/// A dataset built by the binary itself from the fixture planet, as a person would build one.
 fn index_in(directory: &Path) -> PathBuf {
+    let planet = directory.join("yonne.osm.pbf");
+    yonne().write(&planet).unwrap();
     let index = directory.join("index");
-    let sens = Commune {
-        relation: 1,
-        level: 8,
-        names: vec!["SENS".into()],
-        postcodes: vec!["89100".into()],
-        centre: Some([3.283, 48.197]),
-        country: Some("FR".into()),
-    };
-    let france = Country {
-        code: "FR".into(),
-        names: vec!["FRANCE".into()],
-    };
-    write_index(&index, &[sens], &[france], "a test").unwrap();
-    let door = AddressPoint {
-        number: HouseNumber {
-            number: 8,
-            suffix: String::new(),
-        },
-        position: [3.2652, 48.2],
-    };
-    let tilleuls = Street {
-        name: "ROUTE TILLEULS".into(),
-        addresses: vec![door],
-        path: vec![],
-    };
-    write_streets(&index, &StreetIndex::of(vec![(1, tilleuls)]), "a test").unwrap();
+    let built = run(
+        directory,
+        &[
+            "--index",
+            &index.display().to_string(),
+            "index",
+            "--planet",
+            &planet.display().to_string(),
+            "--countries",
+            "FR",
+        ],
+    );
+    assert!(built.status.success(), "{}", text(&built.stderr));
     index
 }
 

@@ -1,77 +1,93 @@
 //! An index opened for lookups, which is all a caller needs once the index is built.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+use planetrs_dataset::directory::MANIFEST;
+use planetrs_dataset::{Dataset, DatasetError, DirectoryFiles, Part, Unreachable};
 use thiserror::Error;
 
 use crate::gazetteer::Gazetteer;
-use crate::index_file::{
-    COMMUNES, IndexError, read_areas, read_index, read_parents, read_shops, read_streets,
-};
 use crate::locate::{Answer, Site, locate};
+use crate::parts::{indexes_of, settling_gazetteer};
 use crate::shops::ShopIndex;
 use crate::street_index::StreetIndex;
 use crate::trace::trace;
 
-/// The communes, streets, doors and shops of an index, held in memory for lookups.
+/// The communes, streets, doors and shops of a dataset, held in memory for lookups.
 ///
-/// Opening reads every file of the index once; each lookup after that is pure and touches no disk.
+/// Opening reads the gazetteer and every country's geocoder index once; each lookup after that is
+/// pure and touches no disk, and searches the streets and shops of the site's own country.
 pub struct Geocoder {
     gazetteer: Gazetteer,
-    streets: StreetIndex,
-    shops: ShopIndex,
+    countries: HashMap<String, (StreetIndex, ShopIndex)>,
+    nowhere: (StreetIndex, ShopIndex),
 }
 
 /// Why an index could not be opened.
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum OpenError {
-    /// The directory holds no index: it has no communes file.
+    /// The directory holds no dataset: it has no manifest.
     #[error("no index in {}", directory.display())]
     NoIndex {
         /// The directory that was searched.
         directory: PathBuf,
     },
-    /// An index is there but one of its files could not be read.
+    /// A dataset is there but one of its files could not be read.
     #[error("the index in {} could not be read", directory.display())]
     Unreadable {
-        /// The directory holding the index.
+        /// The directory holding the dataset.
         directory: PathBuf,
         /// The file that failed, and how.
         #[source]
-        source: IndexError,
+        source: DatasetError,
     },
 }
 
 impl Geocoder {
-    /// Opens the index built into `directory`.
+    /// Opens the dataset in `directory`.
     ///
-    /// Only the communes and countries are required. An index built without streets, shops, former
-    /// towns or areas opens all the same, and its lookups stop at the commune.
+    /// Only the gazetteer is required. A dataset indexing no country opens all the same, and its
+    /// lookups stop at the commune.
     pub fn open(directory: impl AsRef<Path>) -> Result<Self, OpenError> {
         let directory = directory.as_ref();
-        if !directory.join(COMMUNES).is_file() {
-            return Err(OpenError::NoIndex {
-                directory: directory.to_path_buf(),
-            });
-        }
         let unreadable = |source| OpenError::Unreadable {
             directory: directory.to_path_buf(),
             source,
         };
-        let (communes, countries) = read_index(directory).map_err(unreadable)?;
-        let parents = read_parents(directory).map_err(unreadable)?;
-        let areas = read_areas(directory).map_err(unreadable)?;
-        let gazetteer = Gazetteer::of(communes, countries)
-            .with_parents(parents)
-            .with_areas(areas);
-        let streets = read_streets(directory).map_err(unreadable)?;
-        let shops = read_shops(directory).map_err(unreadable)?;
+        let dataset = Dataset::open(DirectoryFiles::at(directory)).map_err(|source| match source {
+            DatasetError::Unreachable(Unreachable::Missing { file }) if file == MANIFEST => {
+                OpenError::NoIndex {
+                    directory: directory.to_path_buf(),
+                }
+            }
+            other => unreadable(other),
+        })?;
+        let gazetteer = settling_gazetteer(dataset.gazetteer().map_err(unreadable)?);
+        let mut indexed = HashMap::new();
+        for entry in &dataset.manifest().files {
+            if let Part::GeocoderIndex { country } = &entry.part {
+                let entries = dataset
+                    .geocoder_index(country)
+                    .map_err(unreadable)?
+                    .unwrap_or_default();
+                indexed.insert(country.clone(), indexes_of(entries));
+            }
+        }
         Ok(Self {
             gazetteer,
-            streets,
-            shops,
+            countries: indexed,
+            nowhere: (StreetIndex::default(), ShopIndex::default()),
         })
+    }
+
+    /// The streets and shops of the country a site names, or none when the dataset does not index it.
+    fn indexes_for(&self, site: &Site) -> &(StreetIndex, ShopIndex) {
+        self.gazetteer
+            .country_code_for(&site.without_parentheses().country)
+            .and_then(|code| self.countries.get(code))
+            .unwrap_or(&self.nowhere)
     }
 
     /// Where the site is and how precisely, or nothing when not even its commune could be settled.
@@ -79,24 +95,71 @@ impl Geocoder {
     /// An answer at a commune's centre is still an answer: [`crate::refusal_of`] says whether a
     /// person should look at it before it is used.
     pub fn locate(&self, site: &Site) -> Option<Answer> {
-        locate(&self.gazetteer, &self.streets, &self.shops, site)
+        let (streets, shops) = self.indexes_for(site);
+        locate(&self.gazetteer, streets, shops, site)
     }
 
     /// Every decision [`Geocoder::locate`] takes for the site, one line each, ending with its answer.
     pub fn trace(&self, site: &Site) -> Vec<String> {
-        trace(&self.gazetteer, &self.streets, &self.shops, site)
+        let (streets, shops) = self.indexes_for(site);
+        trace(&self.gazetteer, streets, shops, site)
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use planetrs_dataset::directory::record;
+    use planetrs_dataset::{Provenance, gazetteer, geocoder_index};
+
     use super::*;
     use crate::boundary::Country;
     use crate::gazetteer::Commune;
-    use crate::index_file::{write_index, write_streets};
     use crate::locate::Precision;
+    use crate::parts::{gazetteer_of, geocoder_index_of};
     use crate::street_index::{AddressPoint, Street};
     use crate::text::HouseNumber;
+
+    fn planet() -> Provenance {
+        Provenance {
+            source_name: "a test planet".into(),
+            file_size: 1,
+            blob_count: 1,
+            replication_timestamp: 0,
+            replication_sequence: 0,
+            writing_program: "a test".into(),
+        }
+    }
+
+    /// A dataset holding the given communes and countries, and, when there are any, France's streets.
+    fn written_dataset(name: &str, communes: &[Commune], streets: Option<StreetIndex>) -> PathBuf {
+        let directory = scratch(name);
+        let relations = HashMap::from([("FR".to_string(), 2_202_162)]);
+        let areas = gazetteer_of(
+            communes,
+            &[france()],
+            &relations,
+            &HashMap::new(),
+            &HashMap::new(),
+        );
+        let bytes = gazetteer::to_parquet(&areas, &planet()).expect("the gazetteer is encoded");
+        record(
+            &directory,
+            &planet(),
+            Part::Gazetteer,
+            "gazetteer.parquet",
+            &bytes,
+            1,
+        )
+        .expect("the gazetteer is recorded");
+        if let Some(streets) = streets {
+            let entries = geocoder_index_of("FR", communes, &streets, &ShopIndex::default());
+            let bytes = geocoder_index::to_parquet("FR", &entries, &planet()).expect("the index is encoded");
+            let part = Part::GeocoderIndex { country: "FR".into() };
+            record(&directory, &planet(), part, "geocoder-FR.parquet", &bytes, 1)
+                .expect("the index is recorded");
+        }
+        directory
+    }
 
     fn scratch(name: &str) -> PathBuf {
         let directory = std::env::temp_dir().join(format!("planetrs-geocoder-{name}-{}", std::process::id()));
@@ -133,8 +196,6 @@ mod tests {
     }
 
     fn written_index(name: &str) -> PathBuf {
-        let directory = scratch(name);
-        write_index(&directory, &[sens()], &[france()], "a test").expect("the gazetteer is written");
         let streets = StreetIndex::of(vec![(
             1,
             Street {
@@ -149,8 +210,7 @@ mod tests {
                 path: vec![],
             },
         )]);
-        write_streets(&directory, &streets, "a test").expect("the streets are written");
-        directory
+        written_dataset(name, &[sens()], Some(streets))
     }
 
     #[test]
@@ -170,8 +230,7 @@ mod tests {
 
     #[test]
     fn given_an_index_without_streets_when_opened_then_the_commune_still_answers() {
-        let directory = scratch("communes-only");
-        write_index(&directory, &[sens()], &[france()], "a test").expect("the gazetteer is written");
+        let directory = written_dataset("communes-only", &[sens()], None);
 
         let found = Geocoder::open(&directory)
             .expect("the index opens")
@@ -195,7 +254,8 @@ mod tests {
     #[test]
     fn given_an_index_file_that_does_not_parse_when_opened_then_it_is_unreadable() {
         let directory = written_index("malformed");
-        std::fs::write(directory.join("streets.tsv"), "not\tan\tindex\tline\n").expect("the file is spoilt");
+        std::fs::write(directory.join("geocoder-FR.parquet"), "not a parquet file")
+            .expect("the file is spoilt");
 
         assert!(matches!(
             Geocoder::open(&directory),
