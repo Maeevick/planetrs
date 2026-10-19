@@ -110,22 +110,34 @@ impl PlanetFile {
         self
     }
 
-    /// The file's bytes, framing included.
+    /// The file's bytes, framing included, every section in id order as `Sort.Type_then_ID` promises.
     pub fn to_bytes(&self) -> Vec<u8> {
-        let header = Message::new()
+        let mut nodes = self.nodes.clone();
+        nodes.sort_by_key(|node| node.id);
+        let mut ways = self.ways.clone();
+        ways.sort_by_key(|way| way.id);
+        let blocks = [
+            (!nodes.is_empty()).then(|| node_block(&nodes)),
+            (!ways.is_empty()).then(|| way_block(&ways)),
+        ];
+        std::iter::once(framed("OSMHeader", &self.header_block()))
+            .chain(
+                blocks
+                    .into_iter()
+                    .flatten()
+                    .map(|block| framed("OSMData", &block)),
+            )
+            .flatten()
+            .collect()
+    }
+
+    fn header_block(&self) -> Vec<u8> {
+        Message::new()
             .text(4, "OsmSchema-V0.6")
             .text(4, DENSE_NODES)
             .text(5, SORT_TYPE_THEN_ID)
             .text(16, &self.writing_program)
-            .into_bytes();
-        let mut nodes = self.nodes.clone();
-        nodes.sort_by_key(|node| node.id);
-        let data = (!nodes.is_empty()).then(|| framed("OSMData", &node_block(&nodes)));
-        [Some(framed("OSMHeader", &header)), data]
-            .into_iter()
-            .flatten()
-            .flatten()
-            .collect()
+            .into_bytes()
     }
 
     /// Writes the file at `path`, replacing whatever was there: fixtures live in temporary places.
@@ -157,6 +169,27 @@ fn node_block(nodes: &[Node]) -> Vec<u8> {
         dense
     };
     let group = Message::new().bytes(2, &dense.into_bytes()).into_bytes();
+    primitive_block(&strings, &group)
+}
+
+/// A block of ways, each with its tags as two parallel arrays of indices and its refs delta-coded.
+fn way_block(ways: &[Way]) -> Vec<u8> {
+    let strings = StringTable::of(ways.iter().flat_map(|way| &way.tags));
+    let group = ways
+        .iter()
+        .fold(Message::new(), |group, way| {
+            let encoded = Message::new()
+                .number(1, way.id as u64)
+                .bytes(2, &packed(way.tags.iter().map(|(key, _)| strings.index_of(key))))
+                .bytes(
+                    3,
+                    &packed(way.tags.iter().map(|(_, value)| strings.index_of(value))),
+                )
+                .bytes(8, &deltas(way.refs.iter().copied()))
+                .into_bytes();
+            group.bytes(3, &encoded)
+        })
+        .into_bytes();
     primitive_block(&strings, &group)
 }
 
