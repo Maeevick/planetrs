@@ -8,13 +8,13 @@
 //! can be seen. The same harvest drawn at 1000 pixels and at 208 keeps different detail, and it
 //! should.
 
-pub mod classify;
-pub mod density;
-pub mod label;
-pub mod plane;
-pub mod rings;
-pub mod shore;
-pub mod simplify;
+mod classify;
+mod density;
+mod label;
+mod plane;
+mod rings;
+mod shore;
+mod simplify;
 
 use std::collections::BTreeMap;
 

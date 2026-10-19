@@ -11,7 +11,7 @@
 //! or a checksum over the result says nothing.
 
 pub mod format;
-pub mod id_filter;
+mod id_filter;
 pub mod passes;
 
 use planetrs_geo::BoundingBox;
