@@ -129,6 +129,11 @@ impl ForReadingFiles for HttpFiles {
                     file: file.to_string(),
                 });
             }
+            StatusCode::PRECONDITION_FAILED => {
+                return Err(Unreachable::Changed {
+                    file: file.to_string(),
+                });
+            }
             other => return Err(failed(file, format!("the server answered {other} to {asked}"))),
         }
         let starts_where_asked = header(&response, "content-range")
