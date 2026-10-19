@@ -78,13 +78,13 @@ pub fn to_parquet(
     reach_metres: f64,
     planet: &Provenance,
 ) -> Result<Vec<u8>, TableError> {
-    let _ = reach_metres;
-    cut_at(country, entries, planet, ENTRIES_PER_ROW_GROUP)
+    cut_at(country, entries, reach_metres, planet, ENTRIES_PER_ROW_GROUP)
 }
 
 pub(crate) fn cut_at(
     country: &str,
     entries: &[Entry],
+    reach_metres: f64,
     planet: &Provenance,
     per_row_group: usize,
 ) -> Result<Vec<u8>, TableError> {
@@ -97,6 +97,7 @@ pub(crate) fn cut_at(
         &[
             geoparquet::geo(&["Point"]),
             manifest::notice(&format!("geocoder-{country}"), planet),
+            (REACH, format!("{reach_metres}")),
         ],
         &["commune"],
     )
@@ -205,6 +206,9 @@ pub(crate) fn entries_of(columns: &[Column]) -> Result<Vec<Entry>, TableError> {
         })
         .collect()
 }
+
+/// The key the footer names the country's reach under, in metres.
+pub(crate) const REACH: &str = "planetrs.reach_metres";
 
 const NAMES: &str = "names";
 const WORD: &str = "word";
@@ -439,7 +443,7 @@ mod tests {
         ];
         let entries: Vec<Entry> = words.into_iter().chain(communes).collect();
 
-        let written = cut_at("FR", &entries, &planet(), 4)?;
+        let written = cut_at("FR", &entries, 0.0, &planet(), 4)?;
 
         assert_eq!(
             tables::row_groups(&written, "commune")?,

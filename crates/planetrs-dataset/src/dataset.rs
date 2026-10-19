@@ -150,7 +150,10 @@ impl CountryIndex {
     /// How far, in metres, the middle of any street of the country lies from its commune's centre,
     /// so that whoever looks for streets near a point knows which communes could hold one.
     pub fn reach_metres(&self) -> f64 {
-        0.0
+        self.footer
+            .metadata_value(geocoder_index::REACH)
+            .and_then(|reach| reach.parse().ok())
+            .unwrap_or(f64::INFINITY)
     }
 }
 
@@ -442,7 +445,7 @@ mod tests {
     /// A dataset whose French index has every byte outside `kept` and its footer zeroed, so that a
     /// read reaching anywhere else fails.
     fn holding_france_with_only(kept: &[std::ops::Range<usize>]) -> Result<FilesInMemory, TableError> {
-        let mut index = geocoder_index::cut_at("FR", &france_in_small_row_groups(), &planet(), 2)?;
+        let mut index = geocoder_index::cut_at("FR", &france_in_small_row_groups(), 0.0, &planet(), 2)?;
         let length = index.len();
         let footer_length = u32::from_le_bytes([
             index[length - 8],
@@ -474,7 +477,7 @@ mod tests {
 
     /// Where each row group of the French index lies, by commune span.
     fn row_group_ranges() -> Result<Vec<(i64, std::ops::Range<usize>)>, TableError> {
-        let index = geocoder_index::cut_at("FR", &france_in_small_row_groups(), &planet(), 2)?;
+        let index = geocoder_index::cut_at("FR", &france_in_small_row_groups(), 0.0, &planet(), 2)?;
         Ok(crate::tables::row_group_bytes(&index, "commune")?
             .into_iter()
             .map(|(lowest, range)| (lowest, range.start as usize..range.end as usize))

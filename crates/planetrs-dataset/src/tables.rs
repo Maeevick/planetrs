@@ -323,6 +323,16 @@ pub(crate) fn footer_from_tail(tail: &[u8], length: u64) -> Result<Tail, TableEr
 }
 
 impl Footer {
+    /// The value the footer carries under `key`, if it carries one.
+    pub(crate) fn metadata_value(&self, key: &str) -> Option<String> {
+        self.metadata
+            .file_metadata()
+            .key_value_metadata()?
+            .iter()
+            .find(|pair| pair.key == key)
+            .and_then(|pair| pair.value.clone())
+    }
+
     /// Every row group, with the span of the integer column `pruned_by`.
     pub(crate) fn row_groups(&self, pruned_by: &str) -> Vec<RowGroupBytes> {
         let column = self
