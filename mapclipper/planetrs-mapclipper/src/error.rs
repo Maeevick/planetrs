@@ -3,8 +3,8 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
-use planetrs_dataset::TableError;
 use planetrs_dataset::directory::RecordError;
+use planetrs_dataset::{DatasetError, TableError};
 use planetrs_geo::GeoError;
 use planetrs_pbf::PbfError;
 
@@ -105,6 +105,12 @@ pub enum ClipError {
     /// A map index could not be encoded.
     #[error("encoding a map index failed")]
     Encoding(#[source] TableError),
+    /// The dataset could not be read.
+    #[error(transparent)]
+    Dataset(#[from] DatasetError),
+    /// The dataset holds no map index to cut a harvest from.
+    #[error("the dataset holds no map index")]
+    NoMapIndex,
     /// A map index could not be recorded in the dataset.
     #[error("recording a map index in {} failed", directory.display())]
     Recording {
