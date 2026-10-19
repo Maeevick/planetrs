@@ -10,7 +10,7 @@ use rayon::prelude::*;
 use crate::boundary::Country;
 use crate::gazetteer::Commune;
 use crate::harvest::Harvest;
-use crate::rings::{Outline, join_into_rings};
+use planetrs_geo::outline::{Outline, join_into_rings};
 
 /// Each way's node identifiers, as the ways pass read them.
 pub type WayNodes = HashMap<i64, Vec<i64>>;

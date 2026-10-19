@@ -7,7 +7,7 @@
 
 use std::collections::HashMap;
 
-pub use crate::rings::Outline;
+pub use planetrs_geo::Outline;
 
 /// About five kilometres, roughly a commune across, so a cell holds a handful of them.
 const CELL_DEGREES: f64 = 0.05;

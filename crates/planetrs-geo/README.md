@@ -1,6 +1,7 @@
 # planetrs-geo
 
-Bounding boxes in kilometres, and the integer windows a PBF block is tested against.
+Bounding boxes in kilometres, the integer windows a PBF block is tested against, and outlines a
+point is tested inside.
 
 Grimble, archivist to the [planetrs](https://github.com/maeevick/planetrs) goblins, keeps this crate
 for the same reason he keeps a ruler: the planet is filed in degrees, and a degree of longitude is

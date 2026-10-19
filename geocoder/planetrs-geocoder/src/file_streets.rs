@@ -266,8 +266,8 @@ pub fn file_streets(
 mod tests {
     use super::*;
     use crate::harvest::{AssociatedStreet, RawAddress, RawBuilding, RawHighway, RawPlace};
-    use crate::rings::Outline;
     use crate::street_index::StreetIndex;
+    use planetrs_geo::Outline;
 
     fn square(west: f64, south: f64, side: f64) -> Outline {
         Outline::of(vec![vec![

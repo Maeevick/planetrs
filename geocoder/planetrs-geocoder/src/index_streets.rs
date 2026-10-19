@@ -16,11 +16,11 @@ use crate::file_streets::{FilingReport, StreetSources, file_streets};
 use crate::filing::CommuneOutlines;
 use crate::gazetteer::MUNICIPALITY_LEVELS;
 use crate::harvest::{Harvest, largest_node_id, node_positions, scan_territory_nodes, scan_territory_ways};
-use crate::rings::{Outline, join_into_rings};
 use crate::shops::{Shop, ShopIndex};
 use crate::street_index::StreetIndex;
-use crate::territory::{IdentifierSet, TerritoryMask};
 use crate::text::{FRENCH, comparison_key};
+use planetrs_geo::outline::{Outline, join_into_rings};
+use planetrs_geo::territory::{IdentifierSet, TerritoryMask};
 
 /// What indexing the streets found, so every gap is a number rather than a surprise.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -145,7 +145,7 @@ pub fn index_streets(
             .iter()
             .filter_map(|ring| ring.iter().map(|id| positions.get(id).copied()).collect())
             .collect();
-        let area = crate::rings::area_square_kilometres(&rings);
+        let area = planetrs_geo::outline::area_square_kilometres(&rings);
         let outline = Outline::of(rings);
         if !outline.is_empty() {
             areas.insert(*relation, area);

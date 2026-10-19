@@ -17,8 +17,8 @@ use planetrs_pbf::{
 use rayon::prelude::*;
 
 use crate::boundary::{AdministrativeArea, Country, administrative_area_of, centre_node_of, country_of};
-use crate::rings::Outline;
-use crate::territory::{IdentifierSet, TerritoryMask};
+use planetrs_geo::Outline;
+use planetrs_geo::territory::{IdentifierSet, TerritoryMask};
 
 /// An administrative area, with the node standing for its centre and the ways its outline is built from.
 #[derive(Debug, Clone, PartialEq, Eq)]

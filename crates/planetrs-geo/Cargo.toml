@@ -1,7 +1,7 @@
 [package]
 name = "planetrs-geo"
 version.workspace = true
-description = "Bounding boxes in kilometres, and the integer windows a PBF block is tested against"
+description = "Bounding boxes in kilometres, the integer windows a PBF block is tested against, and outlines a point is tested inside"
 documentation = "https://docs.rs/planetrs-geo"
 readme = "README.md"
 keywords = ["geo", "bounding-box", "openstreetmap", "gis", "coordinates"]

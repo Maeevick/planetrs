@@ -82,12 +82,10 @@ mod locate;
 mod loose;
 mod parts;
 mod rarity;
-mod rings;
 mod shops;
 mod similarity;
 mod street;
 mod street_index;
-mod territory;
 mod text;
 mod trace;
 

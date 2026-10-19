@@ -7,7 +7,7 @@
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use crate::rings::Outline;
+use crate::outline::Outline;
 
 const CELL_DEGREES: f64 = 0.05;
 const COLUMNS: usize = (360.0 / CELL_DEGREES) as usize;
@@ -111,7 +111,7 @@ impl IdentifierSet {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rings::Outline;
+    use crate::outline::Outline;
 
     fn square(west: f64, south: f64, side: f64) -> Outline {
         Outline::of(vec![vec![
