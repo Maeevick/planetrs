@@ -41,74 +41,94 @@ pub struct Cli {
 #[derive(Subcommand, Debug)]
 pub enum Command {
     /// Read the planet for one area and keep it, so drawing never reads the planet again
-    Harvest {
-        /// The planet file, as published at planet.openstreetmap.org/pbf/
-        planet: PathBuf,
-
-        #[command(flatten)]
-        framing: Framing,
-
-        /// Where the harvest goes
-        #[arg(long, short = 'o', value_name = "FILE")]
-        out: PathBuf,
-
-        /// Where the blob id index is kept, so later runs prune the passes that fetch by id
-        #[arg(long, value_name = "FILE")]
-        index: Option<PathBuf>,
-    },
+    Harvest(HarvestArgs),
 
     /// Draw a harvest, at any framing it covers, in any theme
-    Render {
-        /// A harvest, as `planetrs-mapclipper harvest` writes
-        harvest: PathBuf,
-
-        #[command(flatten)]
-        framing: Framing,
-
-        #[command(flatten)]
-        drawing: Drawing,
-
-        #[command(flatten)]
-        outputs: Outputs,
-    },
+    Render(RenderArgs),
 
     /// Harvest and draw in one go
-    Clip {
-        /// The planet file, as published at planet.openstreetmap.org/pbf/
-        planet: PathBuf,
-
-        #[command(flatten)]
-        framing: Framing,
-
-        #[command(flatten)]
-        drawing: Drawing,
-
-        #[command(flatten)]
-        outputs: Outputs,
-
-        /// Keep the harvest here, so drawing it again costs milliseconds
-        #[arg(long, value_name = "FILE")]
-        keep_harvest: Option<PathBuf>,
-
-        /// Where the blob id index is kept
-        #[arg(long, value_name = "FILE")]
-        index: Option<PathBuf>,
-    },
+    Clip(ClipArgs),
 
     /// Report what a planet file or a harvest holds
-    Inspect {
-        /// A planet file or a harvest; which one is read from the file itself
-        file: PathBuf,
-
-        #[arg(long, short = 'O', value_enum, default_value_t = Shape::Text)]
-        output: Shape,
-    },
+    Inspect(InspectArgs),
 
     /// List the themes built in
-    Themes {
-        #[arg(long, short = 'O', value_enum, default_value_t = Shape::Text)]
-        output: Shape,
-    },
+    Themes(ThemesArgs),
+}
+
+/// What `harvest` reads, and where it keeps what it read.
+#[derive(Args, Debug)]
+pub struct HarvestArgs {
+    /// The planet file, as published at planet.openstreetmap.org/pbf/
+    pub planet: PathBuf,
+
+    #[command(flatten)]
+    pub framing: Framing,
+
+    /// Where the harvest goes
+    #[arg(long, short = 'o', value_name = "FILE")]
+    pub out: PathBuf,
+
+    /// Where the blob id index is kept, so later runs prune the passes that fetch by id
+    #[arg(long, value_name = "FILE")]
+    pub index: Option<PathBuf>,
+}
+
+/// Which harvest `render` draws, and how.
+#[derive(Args, Debug)]
+pub struct RenderArgs {
+    /// A harvest, as `planetrs-mapclipper harvest` writes
+    pub harvest: PathBuf,
+
+    #[command(flatten)]
+    pub framing: Framing,
+
+    #[command(flatten)]
+    pub drawing: Drawing,
+
+    #[command(flatten)]
+    pub outputs: Outputs,
+}
+
+/// What `clip` reads and draws, and whether it keeps the harvest.
+#[derive(Args, Debug)]
+pub struct ClipArgs {
+    /// The planet file, as published at planet.openstreetmap.org/pbf/
+    pub planet: PathBuf,
+
+    #[command(flatten)]
+    pub framing: Framing,
+
+    #[command(flatten)]
+    pub drawing: Drawing,
+
+    #[command(flatten)]
+    pub outputs: Outputs,
+
+    /// Keep the harvest here, so drawing it again costs milliseconds
+    #[arg(long, value_name = "FILE")]
+    pub keep_harvest: Option<PathBuf>,
+
+    /// Where the blob id index is kept
+    #[arg(long, value_name = "FILE")]
+    pub index: Option<PathBuf>,
+}
+
+/// The file `inspect` reports on.
+#[derive(Args, Debug)]
+pub struct InspectArgs {
+    /// A planet file or a harvest; which one is read from the file itself
+    pub file: PathBuf,
+
+    #[arg(long, short = 'O', value_enum, default_value_t = Shape::Text)]
+    pub output: Shape,
+}
+
+/// How `themes` lists them.
+#[derive(Args, Debug)]
+pub struct ThemesArgs {
+    #[arg(long, short = 'O', value_enum, default_value_t = Shape::Text)]
+    pub output: Shape,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, ValueEnum)]
@@ -361,7 +381,7 @@ mod tests {
             "a.mapclip",
         ]);
 
-        let Command::Harvest { framing, .. } = cli.command else {
+        let Command::Harvest(HarvestArgs { framing, .. }) = cli.command else {
             panic!("a harvest")
         };
         assert_eq!(framing.lon, -4.012);
@@ -421,7 +441,7 @@ mod tests {
             "fr=Port d'Abidjan",
         ]);
 
-        let Command::Render { drawing, framing, .. } = cli.command else {
+        let Command::Render(RenderArgs { drawing, framing, .. }) = cli.command else {
             panic!("a render")
         };
         let place = drawing.place(&framing);
@@ -451,7 +471,7 @@ mod tests {
             "Abidjan",
         ]);
 
-        let Command::Render { drawing, framing, .. } = cli.command else {
+        let Command::Render(RenderArgs { drawing, framing, .. }) = cli.command else {
             panic!("a render")
         };
 
@@ -482,7 +502,7 @@ mod tests {
             "-4.01",
         ]);
 
-        let Command::Render { drawing, framing, .. } = cli.command else {
+        let Command::Render(RenderArgs { drawing, framing, .. }) = cli.command else {
             panic!("a render")
         };
 
@@ -507,7 +527,7 @@ mod tests {
             "a.svg",
         ]);
 
-        let Command::Render { drawing, framing, .. } = cli.command else {
+        let Command::Render(RenderArgs { drawing, framing, .. }) = cli.command else {
             panic!("a render")
         };
 
@@ -545,7 +565,7 @@ mod tests {
             "10",
         ]);
 
-        let Command::Render { outputs, .. } = cli.command else {
+        let Command::Render(RenderArgs { outputs, .. }) = cli.command else {
             panic!("a render")
         };
 

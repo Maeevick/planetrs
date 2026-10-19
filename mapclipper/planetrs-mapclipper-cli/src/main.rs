@@ -9,7 +9,7 @@ use planetrs_mapclipper_cli::run;
 fn main() -> ExitCode {
     let cli = Cli::parse();
 
-    match run::run(cli.command) {
+    match run(cli.command) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("error: {error}");
