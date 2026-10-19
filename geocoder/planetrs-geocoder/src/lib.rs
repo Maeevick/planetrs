@@ -77,7 +77,6 @@ mod gazetteer;
 mod geocoder;
 mod harvest;
 pub mod index;
-mod index_file;
 mod index_streets;
 mod locate;
 mod loose;

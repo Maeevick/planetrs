@@ -12,7 +12,6 @@ use thiserror::Error;
 
 use crate::assemble::assemble;
 use crate::harvest::{harvest_boundaries, nodes_by_id, ways_by_id};
-use crate::index_file::{IndexError, write_areas, write_index, write_parents, write_shops, write_streets};
 use crate::index_streets::index_streets;
 use crate::parts::{gazetteer_of, geocoder_index_of};
 
@@ -53,15 +52,6 @@ pub enum BuildError {
         #[source]
         source: PbfError,
     },
-    /// An index file could not be written.
-    #[error("writing the index to {} failed", directory.display())]
-    Writing {
-        /// The directory the index was being written to.
-        directory: PathBuf,
-        /// What failed.
-        #[source]
-        source: IndexError,
-    },
     /// A part of the dataset could not be encoded as GeoParquet.
     #[error("encoding a part of the dataset failed")]
     Encoding(#[source] TableError),
@@ -92,10 +82,6 @@ pub fn build_index(
     let elapsed = || started.elapsed().as_secs_f64();
     let reading = |source| BuildError::Planet {
         path: planet.to_path_buf(),
-        source,
-    };
-    let writing = |source| BuildError::Writing {
-        directory: directory.to_path_buf(),
         source,
     };
 
@@ -171,10 +157,6 @@ pub fn build_index(
         ));
     }
 
-    let provenance = format!(
-        "planet {} bytes, {} blobs, replication timestamp {}",
-        fingerprint.file_size, fingerprint.blob_count, fingerprint.replication_timestamp
-    );
     let source = Provenance {
         source_name: planet
             .file_name()
@@ -199,7 +181,6 @@ pub fn build_index(
             source,
         })
     };
-    write_index(directory, &assembled.communes, &assembled.countries, &provenance).map_err(writing)?;
 
     if !countries.is_empty() {
         let streets_progress = |step: &str| progress(&format!("streets        {step} at {:.1}s", elapsed()));
@@ -218,23 +199,14 @@ pub fn build_index(
             "               {} roads, {} hamlets; {} outline broken chains, {} unreadable blobs",
             filing.highways_filed, filing.places_filed, report.outline_broken_chains, report.unreadable_blobs
         ));
-        write_parents(directory, &indexed.parents, &provenance).map_err(writing)?;
         progress(&format!(
             "former towns   {} placed inside the commune that absorbed them",
             report.former_towns_placed
         ));
-        write_shops(directory, &indexed.shops, &provenance).map_err(writing)?;
-        write_areas(directory, &indexed.areas, &provenance).map_err(writing)?;
         progress(&format!(
             "shops          {} read, {} filed under a commune",
             report.shops_read, report.shops_filed
         ));
-        write_streets(
-            directory,
-            &indexed.streets,
-            &format!("{provenance}, countries {}", countries.join(",")),
-        )
-        .map_err(writing)?;
         progress(&format!("written        streets in {:.1}s", elapsed()));
         summary.doors = filing.addresses_filed;
         summary.roads = filing.highways_filed;

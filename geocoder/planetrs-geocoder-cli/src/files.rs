@@ -285,14 +285,14 @@ mod tests {
         let directory = scratch("replace");
         let (finished, destination) = (directory.join("index.building"), directory.join("index"));
         fs::create_dir_all(&finished).unwrap();
-        fs::write(finished.join("communes.tsv"), "new").unwrap();
+        fs::write(finished.join("manifest.json"), "new").unwrap();
         fs::create_dir_all(&destination).unwrap();
-        fs::write(destination.join("communes.tsv"), "old").unwrap();
+        fs::write(destination.join("manifest.json"), "old").unwrap();
 
         replace_directory(&finished, &destination).unwrap();
 
         assert_eq!(
-            fs::read_to_string(destination.join("communes.tsv")).unwrap(),
+            fs::read_to_string(destination.join("manifest.json")).unwrap(),
             "new"
         );
         assert!(!finished.exists());
