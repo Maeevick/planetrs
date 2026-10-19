@@ -90,6 +90,7 @@ fn cut_at(
             geoparquet::geo(&["Point"]),
             manifest::notice(&format!("geocoder-{country}"), planet),
         ],
+        &["commune"],
     )
 }
 

@@ -21,6 +21,7 @@ use parquet::arrow::arrow_writer::ArrowWriterOptions;
 use parquet::basic::{Compression, GzipLevel};
 use parquet::file::metadata::KeyValue;
 use parquet::file::properties::{EnabledStatistics, WriterProperties};
+use parquet::schema::types::ColumnPath;
 
 /// The writer every file of a dataset names, rather than the library that happens to encode it.
 const WRITER: &str = concat!("planetrs-dataset version ", env!("CARGO_PKG_VERSION"));
@@ -104,8 +105,13 @@ fn unreadable(error: impl std::fmt::Display) -> TableError {
     }
 }
 
-/// The row groups as one Parquet file, with `metadata` among its key-value pairs.
-pub(crate) fn write(row_groups: &[Vec<Column>], metadata: &[(&str, String)]) -> Result<Vec<u8>, TableError> {
+/// The row groups as one Parquet file, with `metadata` among its key-value pairs and statistics
+/// on the columns `pruned_by` alone, the ones a reader picks row groups by.
+pub(crate) fn write(
+    row_groups: &[Vec<Column>],
+    metadata: &[(&str, String)],
+    pruned_by: &[&str],
+) -> Result<Vec<u8>, TableError> {
     let first = row_groups.first().map(Vec::as_slice).unwrap_or_default();
     let schema = Arc::new(Schema::new(first.iter().map(field_of).collect::<Vec<_>>()));
     let properties = WriterProperties::builder()
@@ -113,7 +119,7 @@ pub(crate) fn write(row_groups: &[Vec<Column>], metadata: &[(&str, String)]) -> 
         .set_compression(Compression::GZIP(
             GzipLevel::try_new(GZIP_LEVEL).map_err(unwritable)?,
         ))
-        .set_statistics_enabled(EnabledStatistics::Chunk)
+        .set_statistics_enabled(EnabledStatistics::None)
         .set_max_row_group_row_count(None)
         .set_max_row_group_bytes(None)
         .set_key_value_metadata(Some(
@@ -121,7 +127,12 @@ pub(crate) fn write(row_groups: &[Vec<Column>], metadata: &[(&str, String)]) -> 
                 .iter()
                 .map(|(key, value)| KeyValue::new(key.to_string(), value.clone()))
                 .collect(),
-        ))
+        ));
+    let properties = pruned_by
+        .iter()
+        .fold(properties, |properties, name| {
+            properties.set_column_statistics_enabled(ColumnPath::from(*name), EnabledStatistics::Chunk)
+        })
         .build();
     let options = ArrowWriterOptions::new()
         .with_properties(properties)

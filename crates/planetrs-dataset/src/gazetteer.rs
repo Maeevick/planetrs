@@ -45,6 +45,7 @@ pub fn to_parquet(areas: &[Area], planet: &Provenance) -> Result<Vec<u8>, TableE
     tables::write(
         &row_groups,
         &[geoparquet::geo(&["Point"]), manifest::notice("gazetteer", planet)],
+        &["relation"],
     )
 }
 
