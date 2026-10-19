@@ -92,13 +92,13 @@ impl std::error::Error for ManifestError {}
 impl Manifest {
     /// The manifest as the JSON file a dataset opens with.
     pub fn to_json(&self) -> String {
-        String::new()
+        serde_json::to_string_pretty(self).unwrap_or_default()
     }
 
     /// A manifest read from its JSON file.
     pub fn from_json(text: &str) -> Result<Self, ManifestError> {
-        Err(ManifestError::NotAManifest {
-            detail: format!("{} bytes not read yet", text.len()),
+        serde_json::from_str(text).map_err(|error| ManifestError::NotAManifest {
+            detail: error.to_string(),
         })
     }
 }
