@@ -64,9 +64,23 @@ pub enum Entry {
     },
 }
 
+/// How many entries a row group holds at most, unless one commune alone holds more. Sized so that
+/// looking a street up in one commune fetches tens of kilobytes rather than the country.
+const ENTRIES_PER_ROW_GROUP: usize = 20_000;
+
 /// The geocoder index of `country` as a GeoParquet file, its entries in the order given: the word
 /// counts first, then each commune's entries together, communes in numeric order.
 pub fn to_parquet(country: &str, entries: &[Entry], planet: &Provenance) -> Result<Vec<u8>, TableError> {
+    cut_at(country, entries, planet, ENTRIES_PER_ROW_GROUP)
+}
+
+fn cut_at(
+    country: &str,
+    entries: &[Entry],
+    planet: &Provenance,
+    per_row_group: usize,
+) -> Result<Vec<u8>, TableError> {
+    let _ = per_row_group;
     tables::write(
         &[columns_of(entries)],
         &[
@@ -328,6 +342,69 @@ mod tests {
         let read_back = from_parquet(&to_parquet("FR", &entries, &planet())?)?;
 
         assert_eq!(read_back, entries);
+        Ok(())
+    }
+
+    fn door(commune: i64, number: u32) -> Entry {
+        Entry::Door {
+            commune,
+            street: "RUE GARE".into(),
+            number,
+            suffix: String::new(),
+            position: [3.29, 48.21],
+        }
+    }
+
+    #[test]
+    fn given_word_counts_and_communes_when_cut_into_row_groups_then_words_stand_apart_and_no_commune_is_split()
+    -> Result<(), TableError> {
+        let words = [
+            Entry::Names { count: 9 },
+            Entry::Word {
+                word: "GARE".into(),
+                count: 2,
+            },
+            Entry::Word {
+                word: "RUE".into(),
+                count: 5,
+            },
+            Entry::Word {
+                word: "TILLEULS".into(),
+                count: 1,
+            },
+        ];
+        let communes = [
+            door(10, 1),
+            door(10, 2),
+            door(20, 1),
+            door(20, 2),
+            door(20, 3),
+            door(30, 1),
+        ];
+        let entries: Vec<Entry> = words.into_iter().chain(communes).collect();
+
+        let written = cut_at("FR", &entries, &planet(), 4)?;
+
+        assert_eq!(
+            tables::row_groups(&written, "commune")?,
+            vec![
+                tables::RowGroupSpan {
+                    rows: 4,
+                    lowest: 0,
+                    highest: 0
+                },
+                tables::RowGroupSpan {
+                    rows: 2,
+                    lowest: 10,
+                    highest: 10
+                },
+                tables::RowGroupSpan {
+                    rows: 4,
+                    lowest: 20,
+                    highest: 30
+                },
+            ]
+        );
         Ok(())
     }
 }

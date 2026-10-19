@@ -181,6 +181,23 @@ pub(crate) fn metadata(bytes: &[u8]) -> Result<Vec<(String, String)>, TableError
         .collect())
 }
 
+/// One row group as its footer describes it: how many rows, and the lowest and highest value of an
+/// integer column, which is what a reader picks row groups by.
+#[cfg(test)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct RowGroupSpan {
+    pub(crate) rows: i64,
+    pub(crate) lowest: i64,
+    pub(crate) highest: i64,
+}
+
+/// Every row group of a file, with the span of the integer column `name`.
+#[cfg(test)]
+pub(crate) fn row_groups(bytes: &[u8], name: &str) -> Result<Vec<RowGroupSpan>, TableError> {
+    let _ = (bytes, name);
+    Ok(Vec::new())
+}
+
 fn field_of(column: &Column) -> Field {
     let (kind, nullable) = match &column.values {
         Values::Integers(_) => (DataType::Int64, false),
