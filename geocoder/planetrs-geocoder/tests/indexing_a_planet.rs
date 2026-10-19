@@ -7,7 +7,8 @@
 use std::path::PathBuf;
 
 use planetrs_dataset::{DirectoryFiles, Manifest, Part};
-use planetrs_geocoder::{Geocoder, Precision, Site, build_index};
+use planetrs_geocoder::{BuildError, Geocoder, Precision, Site, build_index};
+use planetrs_pbf::PbfError;
 use planetrs_pbf::testing::{MemberKind, Node, PlanetFile, Relation, Way};
 
 type Outcome = Result<(), Box<dyn std::error::Error>>;
@@ -75,6 +76,23 @@ fn yonne() -> PlanetFile {
                 .with_member(MemberKind::Node, 1020, "admin_centre")
                 .with_member(MemberKind::Way, 2011, "outer"),
         )
+}
+
+/// The fixture one entity to a blob, with a third relation so that the last blob lies past every
+/// blob the search for the sections reads, and that blob's checksum broken: only a pass over the
+/// relations meets it.
+fn yonne_with_a_damaged_last_blob() -> Vec<u8> {
+    let mut bytes = yonne()
+        .with_relation(
+            Relation::of(3021)
+                .tagged("type", "route")
+                .with_member(MemberKind::Way, 2031, ""),
+        )
+        .in_blobs_of(1)
+        .to_bytes();
+    let last = bytes.len() - 1;
+    bytes[last] ^= 0xff;
+    bytes
 }
 
 fn scratch(name: &str) -> PathBuf {
@@ -187,5 +205,30 @@ fn given_a_planet_indexed_for_france_when_its_directory_is_read_then_a_manifest_
         vec![Part::Gazetteer, Part::GeocoderIndex { country: "FR".into() }]
     );
     assert_eq!(manifest.planet.source_name, "yonne.osm.pbf");
+    Ok(())
+}
+
+#[test]
+fn given_a_planet_with_a_damaged_blob_when_indexed_then_the_build_stops_at_that_blob_and_records_nothing()
+-> Outcome {
+    let directory = scratch("damaged");
+    std::fs::create_dir_all(&directory)?;
+    let planet = directory.join("yonne.osm.pbf");
+    std::fs::write(&planet, yonne_with_a_damaged_last_blob())?;
+    let index = directory.join("index");
+
+    let built = build_index(&planet, &index, &["FR"], &|_| {});
+
+    assert!(
+        matches!(
+            built,
+            Err(BuildError::Planet {
+                source: PbfError::AtBlob { .. },
+                ..
+            })
+        ),
+        "{built:?}"
+    );
+    assert!(!index.join("manifest.json").exists());
     Ok(())
 }
