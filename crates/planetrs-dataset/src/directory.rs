@@ -58,19 +58,42 @@ pub fn record(
 ) -> Result<Manifest, RecordError> {
     std::fs::create_dir_all(directory).map_err(io_at(directory))?;
     write_whole(&directory.join(name), bytes)?;
-    let manifest = Manifest {
+    let recorded = recorded_in(directory)?.unwrap_or_else(|| Manifest {
         planet: planet.clone(),
-        files: vec![Entry {
-            part,
-            file: name.to_string(),
-            url: None,
-            bytes: bytes.len() as u64,
-            sha256: sha256_of(bytes),
-            rows,
-        }],
+        files: Vec::new(),
+    });
+    let mut files: Vec<Entry> = recorded
+        .files
+        .into_iter()
+        .filter(|entry| entry.part != part)
+        .collect();
+    files.push(Entry {
+        part,
+        file: name.to_string(),
+        url: None,
+        bytes: bytes.len() as u64,
+        sha256: sha256_of(bytes),
+        rows,
+    });
+    files.sort_by(|left, right| left.part.cmp(&right.part));
+    let manifest = Manifest {
+        planet: recorded.planet,
+        files,
     };
     write_whole(&directory.join(MANIFEST), manifest.to_json().as_bytes())?;
     Ok(manifest)
+}
+
+/// The manifest already in `directory`, if there is one.
+fn recorded_in(directory: &Path) -> Result<Option<Manifest>, RecordError> {
+    let path = directory.join(MANIFEST);
+    match std::fs::read_to_string(&path) {
+        Ok(text) => Manifest::from_json(&text)
+            .map(Some)
+            .map_err(RecordError::Manifest),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(source) => Err(RecordError::Io { path, source }),
+    }
 }
 
 /// Writes a file under a temporary name first, so that it appears whole or not at all.

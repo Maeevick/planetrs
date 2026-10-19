@@ -31,8 +31,9 @@ pub struct Provenance {
     pub writing_program: String,
 }
 
-/// Which part of the dataset a file is.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// Which part of the dataset a file is, ordered as a manifest lists them: the gazetteer first, then
+/// the geocoder indexes, then the map indexes, each by country.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(tag = "part", rename_all = "kebab-case")]
 pub enum Part {
     /// The planet-wide gazetteer, read whole.
