@@ -3,7 +3,7 @@
 use crate::directory::MANIFEST;
 use crate::files::{ForReadingFiles, Unreachable};
 use crate::gazetteer;
-use crate::manifest::{Manifest, ManifestError};
+use crate::manifest::{Manifest, ManifestError, Part};
 use crate::tables::TableError;
 
 /// A dataset whose manifest has been read.
@@ -47,11 +47,10 @@ impl std::error::Error for DatasetError {}
 impl<F: ForReadingFiles> Dataset<F> {
     /// The dataset whose files `files` reaches, once its manifest is read.
     pub fn open(files: F) -> Result<Self, DatasetError> {
-        let _ = MANIFEST;
-        Err(DatasetError::Unreachable(Unreachable::Missing {
-            file: "manifest.json".into(),
-        }))
-        .map(|manifest| Self { files, manifest })
+        let text = whole(&files, MANIFEST)?;
+        let manifest =
+            Manifest::from_json(&String::from_utf8_lossy(&text)).map_err(DatasetError::Manifest)?;
+        Ok(Self { files, manifest })
     }
 
     /// What the dataset holds and where it came from.
@@ -61,15 +60,30 @@ impl<F: ForReadingFiles> Dataset<F> {
 
     /// Every area of the gazetteer, read whole.
     pub fn gazetteer(&self) -> Result<Vec<gazetteer::Area>, DatasetError> {
-        let _ = &self.files;
-        Ok(Vec::new())
+        let entry = self
+            .manifest
+            .files
+            .iter()
+            .find(|entry| entry.part == Part::Gazetteer)
+            .ok_or(DatasetError::NoGazetteer)?;
+        let address = entry.url.as_deref().unwrap_or(&entry.file);
+        gazetteer::from_parquet(&whole(&self.files, address)?).map_err(|source| DatasetError::Table {
+            file: entry.file.clone(),
+            source,
+        })
     }
+}
+
+/// A whole file, read as one range.
+fn whole(files: &impl ForReadingFiles, file: &str) -> Result<Vec<u8>, DatasetError> {
+    let length = files.length(file).map_err(DatasetError::Unreachable)?;
+    files.read(file, 0..length).map_err(DatasetError::Unreachable)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::manifest::{Entry, Part, Provenance};
+    use crate::manifest::{Entry, Provenance};
     use crate::testing::FilesInMemory;
 
     fn planet() -> Provenance {
