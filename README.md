@@ -108,6 +108,24 @@ planetrs-mapclipper index
 planetrs-mapclipper clip --lat 48.8530 --lon 2.3499 --width-km 3.5 --height-km 2 --png notre-dame.png
 ```
 
+## The dataset
+
+Both tools read a dataset rather than the planet: a directory of GeoParquet files built once from one
+planet file, in `~/.local/share/planetrs/dataset` unless `--dataset` or `PLANETRS_DATASET` names
+another directory or a web address.
+
+```text
+manifest.json         the planet it was built from, the licence, and each file's size and checksum
+gazetteer.parquet     every administrative area of the planet, which settles a site's commune
+geocoder-FR.parquet   a country's streets, doors and shops, by commune
+map-FR.parquet        a country's ways, named places and multipolygons, by place
+```
+
+`planetrs-geocoder index` writes the gazetteer and the geocoder indexes, `planetrs-mapclipper index`
+the map indexes, each keeping the other's files when they come from the same planet. A lookup reads
+the communes it needs and a map the row groups around its box, so a dataset served over HTTP is read
+a few megabytes at a time, and two builds from one planet agree to the byte.
+
 ## The workspace
 
 ```text
