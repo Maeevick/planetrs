@@ -130,41 +130,89 @@ pub(crate) fn write(
     metadata: &[(&str, String)],
     pruned_by: &[&str],
 ) -> Result<Vec<u8>, TableError> {
-    let first = row_groups.first().map(Vec::as_slice).unwrap_or_default();
-    let schema = Arc::new(Schema::new(first.iter().map(field_of).collect::<Vec<_>>()));
-    let properties = WriterProperties::builder()
-        .set_created_by(WRITER.to_string())
-        .set_compression(Compression::GZIP(
-            GzipLevel::try_new(GZIP_LEVEL).map_err(unwritable)?,
-        ))
-        .set_statistics_enabled(EnabledStatistics::None)
-        .set_max_row_group_row_count(None)
-        .set_max_row_group_bytes(None)
-        .set_key_value_metadata(Some(
-            metadata
-                .iter()
-                .map(|(key, value)| KeyValue::new(key.to_string(), value.clone()))
-                .collect(),
-        ));
-    let properties = pruned_by
-        .iter()
-        .fold(properties, |properties, name| {
-            let path = ColumnPath::new(name.split('.').map(str::to_string).collect());
-            properties.set_column_statistics_enabled(path, EnabledStatistics::Chunk)
-        })
-        .build();
-    let options = ArrowWriterOptions::new()
-        .with_properties(properties)
-        .with_skip_arrow_metadata(true);
-    let mut writer =
-        ArrowWriter::try_new_with_options(Vec::new(), Arc::clone(&schema), options).map_err(unwritable)?;
+    let mut writer = TableWriter::new(metadata, pruned_by);
     for columns in row_groups {
-        let arrays = columns.iter().map(|column| array_of(&column.values)).collect();
-        let batch = RecordBatch::try_new(Arc::clone(&schema), arrays).map_err(unwritable)?;
-        writer.write(&batch).map_err(unwritable)?;
-        writer.flush().map_err(unwritable)?;
+        writer.write(columns)?;
     }
-    writer.into_inner().map_err(unwritable)
+    writer.finish()
+}
+
+/// A Parquet file written a row group at a time, so that a table larger than memory is never held
+/// whole: only the row group being written and the bytes already encoded are.
+pub(crate) struct TableWriter {
+    metadata: Vec<(String, String)>,
+    pruned_by: Vec<String>,
+    open: Option<(ArrowWriter<Vec<u8>>, Arc<Schema>)>,
+}
+
+impl TableWriter {
+    /// A file to come, with `metadata` among its key-value pairs and statistics on the columns
+    /// `pruned_by` alone.
+    pub(crate) fn new(metadata: &[(&str, String)], pruned_by: &[&str]) -> Self {
+        Self {
+            metadata: metadata
+                .iter()
+                .map(|(key, value)| (key.to_string(), value.clone()))
+                .collect(),
+            pruned_by: pruned_by.iter().map(|name| name.to_string()).collect(),
+            open: None,
+        }
+    }
+
+    /// Writes one row group. The first fixes the columns every later one has.
+    pub(crate) fn write(&mut self, columns: &[Column]) -> Result<(), TableError> {
+        if self.open.is_none() {
+            self.open = Some(self.opened(columns)?);
+        }
+        let Some((writer, schema)) = self.open.as_mut() else {
+            return Err(unwritable("the file could not be opened"));
+        };
+        let arrays = columns.iter().map(|column| array_of(&column.values)).collect();
+        let batch = RecordBatch::try_new(Arc::clone(schema), arrays).map_err(unwritable)?;
+        writer.write(&batch).map_err(unwritable)?;
+        writer.flush().map_err(unwritable)
+    }
+
+    /// The file's bytes, its footer written after the last row group.
+    pub(crate) fn finish(self) -> Result<Vec<u8>, TableError> {
+        let (writer, _) = match self.open {
+            Some(open) => open,
+            None => self.opened(&[])?,
+        };
+        writer.into_inner().map_err(unwritable)
+    }
+
+    fn opened(&self, columns: &[Column]) -> Result<(ArrowWriter<Vec<u8>>, Arc<Schema>), TableError> {
+        let schema = Arc::new(Schema::new(columns.iter().map(field_of).collect::<Vec<_>>()));
+        let properties = WriterProperties::builder()
+            .set_created_by(WRITER.to_string())
+            .set_compression(Compression::GZIP(
+                GzipLevel::try_new(GZIP_LEVEL).map_err(unwritable)?,
+            ))
+            .set_statistics_enabled(EnabledStatistics::None)
+            .set_max_row_group_row_count(None)
+            .set_max_row_group_bytes(None)
+            .set_key_value_metadata(Some(
+                self.metadata
+                    .iter()
+                    .map(|(key, value)| KeyValue::new(key.clone(), value.clone()))
+                    .collect(),
+            ));
+        let properties = self
+            .pruned_by
+            .iter()
+            .fold(properties, |properties, name| {
+                let path = ColumnPath::new(name.split('.').map(str::to_string).collect());
+                properties.set_column_statistics_enabled(path, EnabledStatistics::Chunk)
+            })
+            .build();
+        let options = ArrowWriterOptions::new()
+            .with_properties(properties)
+            .with_skip_arrow_metadata(true);
+        let writer = ArrowWriter::try_new_with_options(Vec::new(), Arc::clone(&schema), options)
+            .map_err(unwritable)?;
+        Ok((writer, schema))
+    }
 }
 
 /// Every row of a Parquet file, its row groups joined, as named columns.
