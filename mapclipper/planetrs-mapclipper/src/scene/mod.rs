@@ -23,10 +23,13 @@ use planetrs_geo::{Area, BoundingBox};
 use crate::error::ClipError;
 use crate::harvest::{Harvest, Provenance, Tags, tag};
 
-pub use classify::{Category, EVERY_CATEGORY, category};
+use classify::category;
+use rings::NodeTable;
+
+pub use classify::Category;
 pub use label::{Label, LabelClass};
 pub use plane::Point;
-pub use rings::{NodeTable, Shape};
+pub use rings::Shape;
 
 /// Half a pixel of tolerance is under the width of the thinnest stroke a theme draws.
 const TOLERANCE_PIXELS: f64 = 0.5;

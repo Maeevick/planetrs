@@ -60,32 +60,6 @@ pub struct HarvestReport {
 }
 
 impl HarvestReport {
-    pub fn total_blobs(&self) -> u64 {
-        [
-            self.nodes,
-            self.ways,
-            self.relations,
-            self.member_ways,
-            self.member_nodes,
-        ]
-        .iter()
-        .map(|pass| pass.blobs)
-        .sum()
-    }
-
-    pub fn total_bytes(&self) -> u64 {
-        [
-            self.nodes,
-            self.ways,
-            self.relations,
-            self.member_ways,
-            self.member_nodes,
-        ]
-        .iter()
-        .map(|pass| pass.inflated_bytes)
-        .sum()
-    }
-
     pub fn elapsed(&self) -> Duration {
         [
             self.nodes,

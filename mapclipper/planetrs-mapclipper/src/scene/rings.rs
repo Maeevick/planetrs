@@ -35,10 +35,6 @@ impl NodeTable {
     pub fn at(&self, id: i64) -> Option<Point> {
         self.0.get(&id).copied()
     }
-
-    pub fn holds(&self, id: i64) -> bool {
-        self.0.contains_key(&id)
-    }
 }
 
 /// Resolves a way's refs into one or more runs of coordinates.
