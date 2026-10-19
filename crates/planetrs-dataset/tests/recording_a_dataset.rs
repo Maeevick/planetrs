@@ -2,7 +2,9 @@
 
 use std::path::PathBuf;
 
-use planetrs_dataset::directory::{CarriedOver, MANIFEST, RecordError, carry_over, record};
+use planetrs_dataset::directory::{
+    CarriedOver, MANIFEST, RecordError, carry_over, record, record_written, written_beside,
+};
 use planetrs_dataset::testing::FilesInMemory;
 use planetrs_dataset::{Dataset, DirectoryFiles, Entry, Manifest, Part, Provenance, geocoder_index};
 
@@ -312,6 +314,44 @@ fn given_a_dataset_of_an_older_planet_when_carried_over_then_nothing_joins_the_r
             kept: vec![],
             left: vec![map_of_france]
         }
+    );
+    Ok(())
+}
+
+#[test]
+fn given_a_part_written_beside_the_dataset_when_recorded_then_it_takes_its_name_and_the_manifest_lists_it_with_its_checksum()
+-> Outcome {
+    let directory = scratch("written");
+    std::fs::create_dir_all(&directory)?;
+    std::fs::write(
+        written_beside(&directory, "map-MC.parquet"),
+        b"PAR1 a gazetteer PAR1",
+    )?;
+
+    record_written(
+        &directory,
+        &planet(),
+        Part::MapIndex { country: "MC".into() },
+        "map-MC.parquet",
+        3,
+    )?;
+
+    assert_eq!(
+        std::fs::read(directory.join("map-MC.parquet"))?,
+        b"PAR1 a gazetteer PAR1"
+    );
+    assert!(!written_beside(&directory, "map-MC.parquet").exists());
+    let manifest = Manifest::from_json(&std::fs::read_to_string(directory.join(MANIFEST))?)?;
+    assert_eq!(
+        manifest.files,
+        vec![Entry {
+            part: Part::MapIndex { country: "MC".into() },
+            file: "map-MC.parquet".into(),
+            url: None,
+            bytes: 21,
+            sha256: "6b4914a574a6da19a6a71157fc79486645632c732add132be96f06417c5179ae".into(),
+            rows: 3,
+        }]
     );
     Ok(())
 }

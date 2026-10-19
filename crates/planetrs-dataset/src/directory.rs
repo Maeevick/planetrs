@@ -103,6 +103,28 @@ pub fn record(
     Ok(manifest)
 }
 
+/// Where a part is written beside the dataset in `directory` before [`record_written`] gives it its
+/// name: a part too large to hold in memory is written there as it is encoded.
+pub fn written_beside(directory: &Path, name: &str) -> PathBuf {
+    directory.join(format!("{name}.partial"))
+}
+
+/// Records the file already written at [`written_beside`] as the file `name` of the dataset in
+/// `directory`, as the given part built from `planet`, and returns the manifest that now lists it.
+pub fn record_written(
+    directory: &Path,
+    planet: &Provenance,
+    part: Part,
+    name: &str,
+    rows: u64,
+) -> Result<Manifest, RecordError> {
+    let _ = (directory, planet, part, name, rows);
+    Err(RecordError::Io {
+        path: directory.to_path_buf(),
+        source: std::io::Error::other("not yet"),
+    })
+}
+
 /// What carrying a dataset's parts into a rebuild brought in and left behind.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct CarriedOver {
