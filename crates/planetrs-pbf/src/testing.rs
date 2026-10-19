@@ -11,7 +11,7 @@ use std::path::Path;
 use flate2::Compression;
 use flate2::write::ZlibEncoder;
 
-use crate::entity::to_zigzag;
+use crate::entity::{MEMBER_NODE, MEMBER_WAY, to_zigzag};
 use crate::header::{DENSE_NODES, SORT_TYPE_THEN_ID};
 
 /// The program a fixture names in its header, so a harvest or an index built from one says so.
@@ -79,6 +79,16 @@ pub enum MemberKind {
     Node,
     Way,
     Relation,
+}
+
+impl MemberKind {
+    fn code(self) -> u64 {
+        match self {
+            Self::Node => MEMBER_NODE,
+            Self::Way => MEMBER_WAY,
+            Self::Relation => 2,
+        }
+    }
 }
 
 /// One member of a fixture relation: its kind, its id and its role, which may be empty.
@@ -175,9 +185,12 @@ impl PlanetFile {
         nodes.sort_by_key(|node| node.id);
         let mut ways = self.ways.clone();
         ways.sort_by_key(|way| way.id);
+        let mut relations = self.relations.clone();
+        relations.sort_by_key(|relation| relation.id);
         let blocks = [
             (!nodes.is_empty()).then(|| node_block(&nodes)),
             (!ways.is_empty()).then(|| way_block(&ways)),
+            (!relations.is_empty()).then(|| relation_block(&relations)),
         ];
         std::iter::once(framed("OSMHeader", &self.header_block()))
             .chain(
@@ -207,7 +220,7 @@ impl PlanetFile {
 
 /// A block of dense nodes: three delta-coded arrays and one flat stream of tags, ended per node by 0.
 fn node_block(nodes: &[Node]) -> Vec<u8> {
-    let strings = StringTable::of(nodes.iter().flat_map(|node| &node.tags));
+    let strings = StringTable::of(nodes.iter().flat_map(|node| texts_of(&node.tags)));
     let ids = deltas(nodes.iter().map(|node| node.id));
     let latitudes = deltas(nodes.iter().map(|node| node.latitude / GRANULARITY));
     let longitudes = deltas(nodes.iter().map(|node| node.longitude / GRANULARITY));
@@ -233,7 +246,7 @@ fn node_block(nodes: &[Node]) -> Vec<u8> {
 
 /// A block of ways, each with its tags as two parallel arrays of indices and its refs delta-coded.
 fn way_block(ways: &[Way]) -> Vec<u8> {
-    let strings = StringTable::of(ways.iter().flat_map(|way| &way.tags));
+    let strings = StringTable::of(ways.iter().flat_map(|way| texts_of(&way.tags)));
     let group = ways
         .iter()
         .fold(Message::new(), |group, way| {
@@ -252,6 +265,44 @@ fn way_block(ways: &[Way]) -> Vec<u8> {
     primitive_block(&strings, &group)
 }
 
+/// A block of relations, each with its members as three parallel arrays: roles, delta-coded ids and
+/// kinds.
+fn relation_block(relations: &[Relation]) -> Vec<u8> {
+    let strings = StringTable::of(relations.iter().flat_map(|relation| {
+        texts_of(&relation.tags).chain(relation.members.iter().map(|member| member.role.as_str()))
+    }));
+    let group = relations
+        .iter()
+        .fold(Message::new(), |group, relation| {
+            let members = &relation.members;
+            let encoded = Message::new()
+                .number(1, relation.id as u64)
+                .bytes(
+                    2,
+                    &packed(relation.tags.iter().map(|(key, _)| strings.index_of(key))),
+                )
+                .bytes(
+                    3,
+                    &packed(relation.tags.iter().map(|(_, value)| strings.index_of(value))),
+                )
+                .bytes(
+                    8,
+                    &packed(members.iter().map(|member| strings.index_of(&member.role))),
+                )
+                .bytes(9, &deltas(members.iter().map(|member| member.id)))
+                .bytes(10, &packed(members.iter().map(|member| member.kind.code())))
+                .into_bytes();
+            group.bytes(4, &encoded)
+        })
+        .into_bytes();
+    primitive_block(&strings, &group)
+}
+
+fn texts_of(tags: &Tags) -> impl Iterator<Item = &str> {
+    tags.iter()
+        .flat_map(|(key, value)| [key.as_str(), value.as_str()])
+}
+
 fn primitive_block(strings: &StringTable, group: &[u8]) -> Vec<u8> {
     Message::new()
         .bytes(1, &strings.to_bytes())
@@ -264,13 +315,11 @@ fn primitive_block(strings: &StringTable, group: &[u8]) -> Vec<u8> {
 struct StringTable(Vec<String>);
 
 impl StringTable {
-    fn of<'a>(tags: impl Iterator<Item = &'a (String, String)>) -> Self {
+    fn of<'a>(texts: impl Iterator<Item = &'a str>) -> Self {
         let mut strings = vec![String::new()];
-        for (key, value) in tags {
-            for text in [key, value] {
-                if !strings.contains(text) {
-                    strings.push(text.clone());
-                }
+        for text in texts {
+            if !strings.iter().any(|known| known == text) {
+                strings.push(text.to_string());
             }
         }
         Self(strings)
@@ -369,7 +418,7 @@ mod tests {
 
     use super::*;
     use crate::block::block;
-    use crate::entity::{MEMBER_NODE, MEMBER_WAY, dense_group, visit_relations, visit_ways};
+    use crate::entity::{dense_group, visit_relations, visit_ways};
     use crate::error::PbfError;
     use crate::planet::Planet;
 
