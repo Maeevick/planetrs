@@ -78,8 +78,19 @@ impl<F: ForReadingFiles> Dataset<F> {
     /// The entries of `country`'s geocoder index read whole, or nothing when the dataset does not
     /// index that country.
     pub fn geocoder_index(&self, country: &str) -> Result<Option<Vec<geocoder_index::Entry>>, DatasetError> {
-        let _ = country;
-        Ok(None)
+        let wanted = Part::GeocoderIndex {
+            country: country.to_string(),
+        };
+        let Some(entry) = self.manifest.files.iter().find(|entry| entry.part == wanted) else {
+            return Ok(None);
+        };
+        let address = entry.url.as_deref().unwrap_or(&entry.file);
+        geocoder_index::from_parquet(&whole(&self.files, address)?)
+            .map(Some)
+            .map_err(|source| DatasetError::Table {
+                file: entry.file.clone(),
+                source,
+            })
     }
 }
 
