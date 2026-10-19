@@ -301,4 +301,31 @@ mod tests {
         );
         Ok(())
     }
+
+    #[test]
+    fn given_the_same_areas_when_written_twice_then_the_two_files_are_byte_identical()
+    -> Result<(), TableError> {
+        let areas = france_sens_and_a_former_town();
+
+        let (first, second) = (to_parquet(&areas, &planet())?, to_parquet(&areas, &planet())?);
+
+        assert_eq!(first, second);
+        Ok(())
+    }
+
+    #[test]
+    fn given_a_gazetteer_file_cut_short_or_not_parquet_at_all_when_read_then_it_is_refused_rather_than_misread()
+    -> Result<(), TableError> {
+        let written = to_parquet(&france_sens_and_a_former_town(), &planet())?;
+
+        let refused = [
+            &written[..written.len() - 9],
+            b"PAR1 but nothing else".as_slice(),
+            &[],
+        ]
+        .map(|bytes| matches!(from_parquet(bytes), Err(TableError::Unreadable { .. })));
+
+        assert_eq!(refused, [true, true, true]);
+        Ok(())
+    }
 }
