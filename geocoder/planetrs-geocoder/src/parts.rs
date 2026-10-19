@@ -285,3 +285,104 @@ pub(crate) fn indexes_of(entries: Vec<geocoder_index::Entry>) -> (StreetIndex, S
     }
     (StreetIndex::of(streets), ShopIndex::of(shops))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn commune(relation: i64, country: &str) -> Commune {
+        Commune {
+            relation,
+            level: 8,
+            names: vec![format!("COMMUNE {relation}")],
+            postcodes: vec![],
+            centre: Some([3.28, 48.19]),
+            country: Some(country.into()),
+        }
+    }
+
+    fn street(name: &str) -> Street {
+        Street {
+            name: name.into(),
+            addresses: vec![],
+            path: vec![[3.268_208_249_9, 48.197_500_6]],
+        }
+    }
+
+    #[test]
+    fn given_a_position_finer_than_seven_decimals_when_kept_then_it_reads_as_the_index_has_always_stored_it()
+    {
+        let kept = at_osm_precision(3.268_208_249_9);
+
+        assert_eq!(kept, "3.2682082".parse::<f64>().unwrap_or_default());
+    }
+
+    #[test]
+    fn given_shops_of_one_commune_when_written_then_they_follow_the_text_of_their_lines() {
+        let shop = |name: &str, longitude: f64| {
+            (
+                1,
+                Shop {
+                    names: vec![name.into()],
+                    street: String::new(),
+                    position: [longitude, 48.19],
+                },
+            )
+        };
+        let shops = ShopIndex::of(vec![shop("CASINO", 3.3), shop("ALDI", 3.29), shop("ALDI", 3.1)]);
+
+        let entries = geocoder_index_of("FR", &[commune(1, "FR")], &StreetIndex::default(), &shops);
+
+        let written: Vec<(String, f64)> = entries
+            .iter()
+            .filter_map(|entry| match entry {
+                geocoder_index::Entry::Shop { names, position, .. } => Some((names.join("|"), position[0])),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            written,
+            vec![
+                ("ALDI".into(), 3.1),
+                ("ALDI".into(), 3.29),
+                ("CASINO".into(), 3.3)
+            ]
+        );
+    }
+
+    #[test]
+    fn given_streets_in_two_countries_when_each_index_is_written_then_its_word_counts_cover_its_own_names_only()
+     {
+        let streets = StreetIndex::of(vec![
+            (1, street("AVENUE GARE")),
+            (1, street("RUE GARE")),
+            (2, street("BOULEVARD PRINCESSE CHARLOTTE")),
+        ]);
+        let communes = [commune(1, "FR"), commune(2, "MC")];
+
+        let entries = geocoder_index_of("FR", &communes, &streets, &ShopIndex::default());
+
+        let counts: Vec<&geocoder_index::Entry> = entries
+            .iter()
+            .filter(|entry| {
+                matches!(
+                    entry,
+                    geocoder_index::Entry::Names { .. } | geocoder_index::Entry::Word { .. }
+                )
+            })
+            .collect();
+        let word = |word: &str, count| geocoder_index::Entry::Word {
+            word: word.into(),
+            count,
+        };
+        assert_eq!(
+            counts,
+            vec![
+                &geocoder_index::Entry::Names { count: 2 },
+                &word("AVENUE", 1),
+                &word("GARE", 2),
+                &word("RUE", 1)
+            ]
+        );
+    }
+}
