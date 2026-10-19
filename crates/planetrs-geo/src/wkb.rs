@@ -39,8 +39,16 @@ impl std::error::Error for WkbError {}
 
 /// The longitude and latitude of a WKB point.
 pub fn read_point(bytes: &[u8]) -> Result<(f64, f64), WkbError> {
-    let _ = bytes;
-    Err(WkbError::NotA { kind: "point" })
+    if bytes.len() != 21 || bytes[0] != LITTLE_ENDIAN || bytes[1..5] != POINT.to_le_bytes() {
+        return Err(WkbError::NotA { kind: "point" });
+    }
+    Ok((f64_of(&bytes[5..13]), f64_of(&bytes[13..21])))
+}
+
+fn f64_of(bytes: &[u8]) -> f64 {
+    let mut exact = [0u8; 8];
+    exact.copy_from_slice(bytes);
+    f64::from_le_bytes(exact)
 }
 
 #[cfg(test)]
