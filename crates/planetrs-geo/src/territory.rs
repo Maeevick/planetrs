@@ -114,6 +114,11 @@ impl IdentifierSet {
 /// only keep that far from a border it does not cross.
 const COVERAGE_DEGREES: f64 = 0.01;
 
+/// How near a border a cell counts as touched by it: a hundredth of the finest unit a planet stores
+/// positions in, so that a border along the sides of cells touches the cells on both sides of it,
+/// however its position and theirs round.
+const TOUCHING_DEGREES: f64 = 1e-9;
+
 /// The cells of a hundredth of a degree that lie wholly inside a country indexed, where a box can be
 /// cut from a dataset and lack nothing the planet holds.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -259,15 +264,23 @@ fn crossed_by_outer_borders(outlines: &[&Outline]) -> HashSet<(i32, i32)> {
 
 /// Marks every cell the edge touches, its sides and corners included.
 fn mark_cells_touched([x1, y1, x2, y2]: [f64; 4], crossed: &mut HashSet<(i32, i32)>) {
-    for row in cell_of_coverage(y1.min(y2))..=cell_of_coverage(y1.max(y2)) {
-        for column in cell_of_coverage(x1.min(x2))..=cell_of_coverage(x1.max(x2)) {
+    let cells_near = |low: f64, high: f64| {
+        cell_of_coverage(low - TOUCHING_DEGREES)..=cell_of_coverage(high + TOUCHING_DEGREES)
+    };
+    for row in cells_near(y1.min(y2), y1.max(y2)) {
+        for column in cells_near(x1.min(x2), x1.max(x2)) {
             let (west, south) = (
                 f64::from(column) * COVERAGE_DEGREES,
                 f64::from(row) * COVERAGE_DEGREES,
             );
             if segment_touches(
                 [x1, y1, x2, y2],
-                [west, south, west + COVERAGE_DEGREES, south + COVERAGE_DEGREES],
+                [
+                    west - TOUCHING_DEGREES,
+                    south - TOUCHING_DEGREES,
+                    west + COVERAGE_DEGREES + TOUCHING_DEGREES,
+                    south + COVERAGE_DEGREES + TOUCHING_DEGREES,
+                ],
             ) {
                 crossed.insert((row, column));
             }
