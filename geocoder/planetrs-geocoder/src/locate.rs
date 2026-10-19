@@ -5,7 +5,7 @@
 //! number not found leaves the street.
 
 pub use crate::gazetteer::Gazetteer;
-use crate::gazetteer::{Basis, locate_by_town_and_postcode};
+use crate::gazetteer::{Basis, Located, locate_by_town_and_postcode};
 pub use crate::shops::ShopIndex;
 use crate::shops::{only_shop_in_communes, shop_on_street};
 use crate::street::Quality;
@@ -307,6 +307,44 @@ fn on_the_street(
     }
 }
 
+/// Where a site's commune was settled, and the former towns inside it that its postcode names.
+pub(crate) struct Settled {
+    pub(crate) located: Located,
+    pub(crate) former_towns: Vec<i64>,
+}
+
+impl Settled {
+    /// Every commune whose streets and shops a lookup of the site searches.
+    pub(crate) fn searched(&self) -> Vec<i64> {
+        self.located
+            .relations
+            .iter()
+            .chain(&self.former_towns)
+            .copied()
+            .collect()
+    }
+}
+
+/// Step five settles the commune before any street is looked for, and names the former towns of a
+/// merged commune its postcode points at, which is all a lookup needs to know of the gazetteer.
+pub(crate) fn settle(gazetteer: &Gazetteer, site: &Site) -> Option<Settled> {
+    let site = site.without_parentheses();
+    let located = locate_by_town_and_postcode(gazetteer, &site.town, &site.postcode, &site.country)?;
+    let former_towns = if located.basis == Basis::NameAndPostcode {
+        gazetteer
+            .former_communes_at(&site.postcode, &site.country, &located.relations)
+            .into_iter()
+            .filter(|relation| !located.relations.contains(relation))
+            .collect()
+    } else {
+        Vec::new()
+    };
+    Some(Settled {
+        located,
+        former_towns,
+    })
+}
+
 /// Step nine reads the label once the address has said all it can.
 ///
 /// Step nineteen adds the middle of several shops of the label within a kilometre, and only in
@@ -338,18 +376,12 @@ pub fn locate(
 ) -> Option<Answer> {
     let site = &site.without_parentheses();
     let readings = street_readings(&site.address);
-    let settled = locate_by_town_and_postcode(gazetteer, &site.town, &site.postcode, &site.country)?;
-    let former_towns: Vec<i64> = if settled.basis == Basis::NameAndPostcode {
-        gazetteer
-            .former_communes_at(&site.postcode, &site.country, &settled.relations)
-            .into_iter()
-            .filter(|relation| !settled.relations.contains(relation))
-            .collect()
-    } else {
-        Vec::new()
-    };
-    let mut searched = settled.relations.clone();
-    searched.extend(former_towns.iter().copied());
+    let found = settle(gazetteer, site)?;
+    let searched = found.searched();
+    let Settled {
+        located: settled,
+        former_towns,
+    } = found;
     let cut = street_queries(&site.address);
     let loose = [Reach::Tiers, Reach::UniqueStreet].into_iter().find_map(|reach| {
         cut.iter().find_map(|(doors, street)| {
