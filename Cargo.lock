@@ -881,6 +881,7 @@ dependencies = [
  "planetrs-dataset",
  "planetrs-geo",
  "planetrs-pbf",
+ "rayon",
  "serde",
  "serde_json",
  "sha2",

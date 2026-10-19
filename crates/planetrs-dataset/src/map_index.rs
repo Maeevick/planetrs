@@ -11,9 +11,11 @@ use planetrs_geo::wkb;
 
 use crate::geoparquet;
 use crate::manifest::{self, Provenance};
+use rayon::prelude::*;
+
 use crate::tables::{
-    self, Column, TableError, Tail, Values, boxes, bytes, integer_lists, integers, optional_integers,
-    small_integer_lists, text_lists, texts,
+    self, Column, TableError, TableWriter, Tail, Values, boxes, bytes, integer_lists, integers,
+    optional_integers, small_integer_lists, text_lists, texts,
 };
 
 /// How many rows a row group holds before the next element starts another. An element is never
@@ -107,10 +109,23 @@ pub fn to_parquet(
     grid: Grid,
     planet: &Provenance,
 ) -> Result<Vec<u8>, TableError> {
-    cut_at(country, elements, grid, planet, ROWS_PER_ROW_GROUP)
+    to_parquet_from(country, elements.len(), |at| elements[at].clone(), grid, planet)
+}
+
+/// [`to_parquet`] for `count` elements built by `element_at` when they are needed, twice each,
+/// rather than held all at once: a country's map index is larger than memory.
+pub fn to_parquet_from(
+    country: &str,
+    count: usize,
+    element_at: impl Fn(usize) -> Element + Sync,
+    grid: Grid,
+    planet: &Provenance,
+) -> Result<Vec<u8>, TableError> {
+    written(country, count, element_at, grid, planet, ROWS_PER_ROW_GROUP)
 }
 
 /// [`to_parquet`], with row groups of about `rows_per_row_group` rows.
+#[cfg(test)]
 pub(crate) fn cut_at(
     country: &str,
     elements: &[Element],
@@ -118,27 +133,38 @@ pub(crate) fn cut_at(
     planet: &Provenance,
     rows_per_row_group: usize,
 ) -> Result<Vec<u8>, TableError> {
-    let mut placed: Vec<(u64, (u8, i64), Vec<Row>)> = elements
-        .iter()
-        .map(|element| {
-            let rows = rows_of(element)?;
-            Ok((hilbert_key(rows[0].bbox), order_of(element), rows))
+    written(
+        country,
+        elements.len(),
+        |at| elements[at].clone(),
+        grid,
+        planet,
+        rows_per_row_group,
+    )
+}
+
+fn written(
+    country: &str,
+    count: usize,
+    element_at: impl Fn(usize) -> Element + Sync,
+    grid: Grid,
+    planet: &Provenance,
+    rows_per_row_group: usize,
+) -> Result<Vec<u8>, TableError> {
+    let mut placed: Vec<(u64, (u8, i64), usize, usize)> = (0..count)
+        .into_par_iter()
+        .map(|at| {
+            let element = element_at(at);
+            Ok((
+                hilbert_key(box_of(&element)?),
+                order_of(&element),
+                at,
+                rows_in(&element),
+            ))
         })
         .collect::<Result<_, TableError>>()?;
-    placed.sort_by_key(|(key, order, _)| (*key, *order));
-    let mut row_groups = Vec::new();
-    let mut group: Vec<Row> = Vec::new();
-    for (_, _, rows) in placed {
-        group.extend(rows);
-        if group.len() >= rows_per_row_group {
-            row_groups.push(columns_of(std::mem::take(&mut group)));
-        }
-    }
-    if !group.is_empty() || row_groups.is_empty() {
-        row_groups.push(columns_of(group));
-    }
-    tables::write(
-        &row_groups,
+    placed.par_sort_unstable_by_key(|(key, order, _, _)| (*key, *order));
+    let mut writer = TableWriter::new(
         &[
             geoparquet::geo_covered_by_bbox(&["Point", "LineString", "GeometryCollection"]),
             manifest::notice("map index", planet),
@@ -152,7 +178,61 @@ pub(crate) fn cut_at(
             ),
         ],
         &["bbox.xmin", "bbox.ymin", "bbox.xmax", "bbox.ymax"],
-    )
+    );
+    let mut group: Vec<usize> = Vec::new();
+    let mut rows = 0;
+    let mut groups_written = 0;
+    for (_, _, at, element_rows) in placed {
+        group.push(at);
+        rows += element_rows;
+        if rows >= rows_per_row_group {
+            write_group(&mut writer, &group, &element_at)?;
+            groups_written += 1;
+            group.clear();
+            rows = 0;
+        }
+    }
+    if !group.is_empty() || groups_written == 0 {
+        write_group(&mut writer, &group, &element_at)?;
+    }
+    writer.finish()
+}
+
+/// Builds the elements at `group`, in that order, and writes their rows as one row group.
+fn write_group(
+    writer: &mut TableWriter,
+    group: &[usize],
+    element_at: &(impl Fn(usize) -> Element + Sync),
+) -> Result<(), TableError> {
+    let rows: Vec<Vec<Row>> = group
+        .par_iter()
+        .map(|at| rows_of(&element_at(*at)))
+        .collect::<Result<_, TableError>>()?;
+    writer.write(&columns_of(rows.into_iter().flatten().collect()))
+}
+
+/// The box of an element's own row: a node's point, a way's placed nodes, a multipolygon's members.
+fn box_of(element: &Element) -> Result<[f64; 4], TableError> {
+    match element {
+        Element::Node { at, .. } => {
+            let [longitude, latitude] = degrees(*at);
+            Ok([longitude, latitude, longitude, latitude])
+        }
+        Element::Way(line) => bounds_of(line).ok_or_else(|| unplaced("way", line.id)),
+        Element::Multipolygon { id, ways, .. } => ways
+            .iter()
+            .filter_map(bounds_of)
+            .reduce(union)
+            .ok_or_else(|| unplaced("multipolygon", *id)),
+    }
+}
+
+/// How many rows an element is written as: its own, and one per member way of a multipolygon.
+fn rows_in(element: &Element) -> usize {
+    match element {
+        Element::Multipolygon { ways, .. } => 1 + ways.len(),
+        _ => 1,
+    }
 }
 
 /// The elements of a map index file, with the grid its positions were read on.
@@ -210,21 +290,14 @@ fn rows_of(element: &Element) -> Result<Vec<Row>, TableError> {
                 bbox: [longitude, latitude, longitude, latitude],
             }])
         }
-        Element::Way(line) => {
-            let bbox = bounds_of(line).ok_or_else(|| unplaced("way", line.id))?;
-            Ok(vec![line_row("way", line, None, bbox)])
-        }
+        Element::Way(line) => Ok(vec![line_row("way", line, None, box_of(element)?)]),
         Element::Multipolygon {
             id,
             tags,
             members,
             ways,
         } => {
-            let bbox = ways
-                .iter()
-                .filter_map(bounds_of)
-                .reduce(union)
-                .ok_or_else(|| unplaced("multipolygon", *id))?;
+            let bbox = box_of(element)?;
             let own = Row {
                 kind: "multipolygon",
                 id: *id,

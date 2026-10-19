@@ -23,6 +23,7 @@ arrow-array.workspace = true
 arrow-schema.workspace = true
 bytes.workspace = true
 parquet.workspace = true
+rayon.workspace = true
 planetrs-geo.workspace = true
 planetrs-pbf.workspace = true
 serde.workspace = true
