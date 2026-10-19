@@ -17,6 +17,13 @@ pub fn point(longitude: f64, latitude: f64) -> Vec<u8> {
     .concat()
 }
 
+/// A line as WKB: a byte order, a geometry type, the count of vertices, then each vertex's longitude
+/// and latitude.
+pub fn line_string(vertices: &[[f64; 2]]) -> Vec<u8> {
+    let _ = vertices;
+    Vec::new()
+}
+
 /// Why bytes could not be read as the geometry asked for.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WkbError {
@@ -43,6 +50,12 @@ pub fn read_point(bytes: &[u8]) -> Result<(f64, f64), WkbError> {
         return Err(WkbError::NotA { kind: "point" });
     }
     Ok((f64_of(&bytes[5..13]), f64_of(&bytes[13..21])))
+}
+
+/// The vertices of a WKB line, each as longitude and latitude.
+pub fn read_line_string(bytes: &[u8]) -> Result<Vec<[f64; 2]>, WkbError> {
+    let _ = bytes;
+    Err(WkbError::NotA { kind: "line string" })
 }
 
 fn f64_of(bytes: &[u8]) -> f64 {
@@ -92,5 +105,28 @@ mod tests {
                 .iter()
                 .all(|read| *read == Err(WkbError::NotA { kind: "point" }))
         );
+    }
+
+    #[test]
+    fn given_a_line_when_written_as_wkb_then_it_is_its_vertex_count_then_each_vertex_and_reads_back_to_the_bit()
+     {
+        let vertices = [[7.418_6, 43.734_7], [7.421_4, 43.735_2], [7.425_9, 43.736_1]];
+
+        let written = line_string(&vertices);
+
+        let expected = [
+            [0x01].as_slice(),
+            &2u32.to_le_bytes(),
+            &3u32.to_le_bytes(),
+            &7.418_6f64.to_le_bytes(),
+            &43.734_7f64.to_le_bytes(),
+            &7.421_4f64.to_le_bytes(),
+            &43.735_2f64.to_le_bytes(),
+            &7.425_9f64.to_le_bytes(),
+            &43.736_1f64.to_le_bytes(),
+        ]
+        .concat();
+        assert_eq!(written, expected);
+        assert_eq!(read_line_string(&written), Ok(vertices.to_vec()));
     }
 }
