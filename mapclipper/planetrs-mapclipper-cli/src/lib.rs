@@ -4,6 +4,8 @@
 //! The binary parses the command line and hands it to [`run`]: maps and harvests go to the
 //! files asked for, or to stdout for `-`, and everything said about them goes to stderr.
 
+#![warn(missing_docs)]
+
 pub mod cli;
 pub mod commands;
 pub mod report;

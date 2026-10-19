@@ -14,16 +14,21 @@ use std::path::{Path, PathBuf};
 use crate::error::ClipError;
 use crate::scene::{Category, LabelClass};
 
+/// The themes that ship with the tool, by name, with the text of each.
 pub const BUILT_IN: [(&str, &str); 3] = [
     ("atlas", include_str!("../themes/atlas.toml")),
     ("tonal", include_str!("../themes/tonal.toml")),
     ("linework", include_str!("../themes/linework.toml")),
 ];
 
+/// How a category is drawn: what fills it, what outlines it, and how thick the outline is.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Ink {
+    /// The colour inside an area, none for a line.
     pub fill: Option<String>,
+    /// The colour of the outline or of the line itself.
     pub stroke: Option<String>,
+    /// The stroke's width in pixels of the canvas.
     pub width: f64,
 }
 
@@ -32,6 +37,7 @@ pub struct Ink {
 pub struct LabelInk {
     /// Type size in pixels of the canvas.
     pub size: f64,
+    /// The colour of the glyphs, the theme's own ink when unstated.
     pub colour: Option<String>,
     /// What goes behind the glyphs so they stay readable over whatever they fall on.
     pub halo: Option<String>,
@@ -51,15 +57,22 @@ impl LabelInk {
     }
 }
 
+/// What a map looks like: its background, the ink of each category and the order they are drawn in.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Theme {
+    /// The theme's name, as `--theme` takes it.
     pub name: String,
+    /// What the theme is for, in a sentence.
     pub description: String,
+    /// The colour of the ground under everything.
     pub background: String,
+    /// The colour of text the theme does not style otherwise.
     pub ink: String,
     /// Back to front. A category left out of this is not drawn, whatever colour it was given.
     pub order: Vec<Category>,
+    /// How each category is drawn.
     pub inks: BTreeMap<Category, Ink>,
+    /// How each class of name is drawn, where the theme says.
     pub labels: BTreeMap<LabelClass, LabelInk>,
 }
 
@@ -82,6 +95,7 @@ impl Theme {
         })
     }
 
+    /// How a category is drawn, nothing at all when the theme leaves it out.
     pub fn ink_of(&self, category: Category) -> Ink {
         self.inks.get(&category).cloned().unwrap_or_default()
     }
@@ -101,6 +115,7 @@ impl Theme {
         }
     }
 
+    /// The names of the themes built in.
     pub fn built_in_names() -> Vec<&'static str> {
         BUILT_IN.iter().map(|(name, _)| *name).collect()
     }

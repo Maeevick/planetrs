@@ -33,11 +33,13 @@ use planetrs_mapclipper::theme::Theme;
             --width-px 1000 --height-px 570 --svg abidjan.svg\n\n\
         Exit codes: 0 success, 1 failure, 2 bad arguments."
 )]
+/// The whole command line.
 pub struct Cli {
     /// Settings every command shares.
     #[command(flatten)]
     pub global: Global,
 
+    /// What to do.
     #[command(subcommand)]
     pub command: Command,
 }
@@ -50,6 +52,7 @@ pub struct Global {
     pub quiet: bool,
 }
 
+/// What to do.
 #[derive(Subcommand, Debug)]
 pub enum Command {
     /// Read the planet for one area and keep it, so drawing never reads the planet again
@@ -74,6 +77,7 @@ pub struct HarvestArgs {
     /// The planet file, as published at planet.openstreetmap.org/pbf/
     pub planet: PathBuf,
 
+    /// What ground the map is of.
     #[command(flatten)]
     pub framing: Framing,
 
@@ -88,12 +92,15 @@ pub struct RenderArgs {
     /// A harvest, as `planetrs-mapclipper harvest` writes
     pub harvest: PathBuf,
 
+    /// What ground the map is of.
     #[command(flatten)]
     pub framing: Framing,
 
+    /// How the map looks.
     #[command(flatten)]
     pub drawing: Drawing,
 
+    /// Where the map goes.
     #[command(flatten)]
     pub outputs: Outputs,
 }
@@ -104,12 +111,15 @@ pub struct ClipArgs {
     /// The planet file, as published at planet.openstreetmap.org/pbf/
     pub planet: PathBuf,
 
+    /// What ground the map is of.
     #[command(flatten)]
     pub framing: Framing,
 
+    /// How the map looks.
     #[command(flatten)]
     pub drawing: Drawing,
 
+    /// Where the map goes.
     #[command(flatten)]
     pub outputs: Outputs,
 
@@ -124,6 +134,7 @@ pub struct InspectArgs {
     /// A planet file or a harvest; which one is read from the file itself
     pub file: PathBuf,
 
+    /// How the report is written: text for a person, JSON for a program
     #[arg(long, short = 'O', value_enum, default_value_t = Shape::Text)]
     pub output: Shape,
 }
@@ -131,13 +142,17 @@ pub struct InspectArgs {
 /// How `themes` lists them.
 #[derive(Args, Debug)]
 pub struct ThemesArgs {
+    /// How the report is written: text for a person, JSON for a program
     #[arg(long, short = 'O', value_enum, default_value_t = Shape::Text)]
     pub output: Shape,
 }
 
+/// How a report is written.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, ValueEnum)]
 pub enum Shape {
+    /// Lines of label and value, for a person
     Text,
+    /// One JSON value, for a program
     Json,
 }
 
@@ -191,6 +206,7 @@ pub struct Drawing {
     #[arg(long, allow_negative_numbers = true, value_name = "LAT")]
     pub poi_lat: Option<f64>,
 
+    /// Where the marker goes, if not the middle of the frame
     #[arg(long, allow_negative_numbers = true, value_name = "LON")]
     pub poi_lon: Option<f64>,
 
@@ -231,8 +247,10 @@ pub struct Drawing {
     pub labels: Vec<LabelKind>,
 }
 
+/// Which names the picture carries.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, ValueEnum)]
 pub enum LabelKind {
+    /// No name at all
     None,
     /// Towns, villages and hamlets
     Settlements,
@@ -240,6 +258,7 @@ pub enum LabelKind {
     Water,
     /// Woods, parks and industrial estates
     Areas,
+    /// Every name above
     All,
 }
 
@@ -263,16 +282,21 @@ pub struct Outputs {
     pub scale: f64,
 }
 
+/// What is drawn at the point of interest.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, ValueEnum)]
 pub enum MarkKind {
+    /// Nothing
     None,
+    /// A dot, or the icon given with --icon
     Dot,
     /// The coordinates themselves, which are what a contract states
     LatLon,
+    /// The words of --label, else the place's name, else its coordinates
     Name,
 }
 
 impl Framing {
+    /// The area this framing collects, refused when it is not one.
     pub fn area(&self) -> Result<planetrs_geo::Area, ClipError> {
         Ok(planetrs_geo::Area::around(
             self.lat,
@@ -285,10 +309,12 @@ impl Framing {
 }
 
 impl Drawing {
+    /// The canvas these sizes describe, refused when it has no pixel.
     pub fn canvas(&self) -> Result<Canvas, ClipError> {
         Canvas::new(self.width_px, self.height_px)
     }
 
+    /// The theme named, built in or read from a file.
     pub fn theme(&self) -> Result<Theme, ClipError> {
         Theme::named_or_at(&self.theme)
     }
@@ -313,6 +339,7 @@ impl Drawing {
         classes
     }
 
+    /// The rules the scene follows beyond the frame and the canvas.
     pub fn rules(&self) -> Rules {
         Rules {
             urban_density: self.urban_density,
@@ -342,6 +369,7 @@ impl Drawing {
 }
 
 impl Outputs {
+    /// Whether any output was asked for.
     pub fn any(&self) -> bool {
         self.geojson.is_some() || self.svg.is_some() || self.png.is_some()
     }

@@ -24,14 +24,18 @@ const HALO: f64 = 0.22;
 /// overlapping one, which is the right way to be wrong.
 const WIDTH_PER_CHARACTER: f64 = 0.55;
 
+/// What is drawn at the point of interest.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub enum Mark {
+    /// Nothing.
     #[default]
     None,
+    /// A dot, or the icon when one is given.
     Dot,
     /// The coordinates themselves, which are what a contract states and the only thing true about
     /// a point without anyone having to name it.
     Coordinates,
+    /// These words.
     Named(String),
 }
 
@@ -43,10 +47,13 @@ pub enum Mark {
 /// any palette.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Icon {
+    /// The drawing's own coordinates: x, y, width and height, as its `viewBox` states them.
     pub view_box: (f64, f64, f64, f64),
+    /// The elements inside the `<svg>`, as written.
     pub body: String,
 }
 
+/// The icon an SVG file's text draws, or nothing when it holds no drawing.
 pub fn icon_from_svg(text: &str) -> Option<Icon> {
     let opened = text.find("<svg")?;
     let after = text[opened..].find('>')? + opened + 1;
@@ -76,6 +83,7 @@ pub fn icon_from_svg(text: &str) -> Option<Icon> {
     (!body.is_empty()).then_some(Icon { view_box, body })
 }
 
+/// The icon the SVG file at `path` draws.
 pub fn icon_at(path: &std::path::Path) -> Result<Icon, ClipError> {
     let text = std::fs::read_to_string(path).map_err(|error| ClipError::reading(path, error))?;
 
@@ -84,16 +92,21 @@ pub fn icon_at(path: &std::path::Path) -> Result<Icon, ClipError> {
     })
 }
 
+/// The point of interest and how it is marked.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Marker {
+    /// What is drawn there.
     pub mark: Mark,
     /// Latitude and longitude of the point, which need not be the middle of the frame.
     pub at: (f64, f64),
+    /// An icon drawn in place of the dot.
     pub icon: Option<Icon>,
     /// Pixels. `None` scales from the canvas, so one command works for a 570 pixel hero and a
     /// 208 pixel band.
     pub icon_size: Option<f64>,
+    /// The dot's radius in pixels, scaled from the canvas when `None`.
     pub dot_size: Option<f64>,
+    /// The type size of the mark's words in pixels, scaled from the canvas when `None`.
     pub label_size: Option<f64>,
 }
 
@@ -149,6 +162,7 @@ fn decimal(value: f64) -> String {
     }
 }
 
+/// The words a coordinates mark carries, `lat 5.269 : lon -4.012`.
 pub fn coordinates_label(latitude: f64, longitude: f64) -> String {
     format!("lat {} : lon {}", decimal(latitude), decimal(longitude))
 }
@@ -183,6 +197,8 @@ fn path_of(projection: &Projection, shape: &Shape) -> String {
     out
 }
 
+/// The scene drawn in the theme, with its marker and the names of the classes asked for that fit,
+/// the same text for the same scene every time.
 pub fn write(scene: &Scene, theme: &Theme, marker: &Marker, labels: &[LabelClass]) -> String {
     let projection = Projection::of(scene.canvas, scene.frame);
     let (width, height) = (scene.canvas.width, scene.canvas.height);

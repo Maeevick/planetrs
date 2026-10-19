@@ -94,6 +94,7 @@ fn named(labels: &[Label]) -> String {
         .join(",")
 }
 
+/// The scene as a GeoJSON feature collection, the same text for the same scene every time.
 pub fn write(scene: &Scene) -> String {
     let frame = &scene.frame;
     let mut out = String::with_capacity(scene.features.len() * 256);

@@ -146,6 +146,7 @@ impl StringTable {
     }
 }
 
+/// The harvest as the bytes of a harvest file, the same bytes for the same harvest every time.
 pub fn to_bytes(harvest: &Harvest) -> Vec<u8> {
     let table = StringTable::of(harvest);
     let mut out = Bytes::default();
@@ -229,6 +230,7 @@ fn read_tags(cursor: &mut Cursor<'_>, table: &StringTable) -> Result<Tags, ClipE
         .collect()
 }
 
+/// The harvest these bytes hold, refused when they are not a harvest of the version this build reads.
 pub fn from_bytes(bytes: &[u8]) -> Result<Harvest, ClipError> {
     let mut cursor = Cursor { bytes, at: 0 };
 
@@ -333,6 +335,7 @@ pub fn from_bytes(bytes: &[u8]) -> Result<Harvest, ClipError> {
     })
 }
 
+/// Writes the harvest to `path`, replacing whatever is there, and says how many bytes it took.
 pub fn write(path: &Path, harvest: &Harvest) -> Result<u64, ClipError> {
     if let Some(parent) = path.parent().filter(|parent| !parent.as_os_str().is_empty()) {
         std::fs::create_dir_all(parent).map_err(|error| ClipError::writing(path, error))?;
@@ -342,6 +345,7 @@ pub fn write(path: &Path, harvest: &Harvest) -> Result<u64, ClipError> {
     Ok(bytes.len() as u64)
 }
 
+/// The harvest in the file at `path`.
 pub fn read(path: &Path) -> Result<Harvest, ClipError> {
     let bytes = std::fs::read(path).map_err(|error| ClipError::reading(path, error))?;
     from_bytes(&bytes)

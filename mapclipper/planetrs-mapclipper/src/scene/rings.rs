@@ -6,11 +6,14 @@ use crate::harvest::{Member, Node, Way};
 
 use super::plane::{Point, bounds};
 
+/// A run of coordinates, closed into a ring or left open as a line, with any holes it encloses.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Shape {
+    /// The points in order.
     pub points: Vec<Point>,
     /// Inner rings: the islands in a lagoon, the courtyard in a block. Empty for everything else.
     pub holes: Vec<Vec<Point>>,
+    /// Whether the last point joins the first.
     pub closed: bool,
 }
 

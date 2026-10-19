@@ -22,6 +22,7 @@ pub enum LabelClass {
 }
 
 impl LabelClass {
+    /// The class's name, as a theme file writes it.
     pub fn name(self) -> &'static str {
         match self {
             Self::Settlement => "settlement",
@@ -30,6 +31,7 @@ impl LabelClass {
         }
     }
 
+    /// The class of this name, if one has it.
     pub fn named(name: &str) -> Option<Self> {
         [Self::Settlement, Self::Water, Self::Area]
             .into_iter()
@@ -40,9 +42,11 @@ impl LabelClass {
 /// A name, where it belongs, and how hard it should fight for the space.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Label {
+    /// The name itself.
     pub text: String,
     /// Longitude and latitude, as everything else in a scene.
     pub at: Point,
+    /// What kind of thing it names.
     pub class: LabelClass,
     /// Higher wins when two labels want the same pixels. A city beats a hamlet beats a brook.
     pub rank: u32,

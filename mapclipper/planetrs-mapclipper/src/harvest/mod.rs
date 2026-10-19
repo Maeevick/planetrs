@@ -19,11 +19,14 @@ use planetrs_geo::BoundingBox;
 /// Tags in the order the file stated them, which is stable across runs and carries no meaning.
 pub type Tags = Vec<(String, String)>;
 
+/// A node kept for its position alone, as a vertex of a way.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Node {
+    /// The node's OpenStreetMap id.
     pub id: i64,
     /// Nanodegrees, exact and independent of the block the node was read from.
     pub latitude: i64,
+    /// Nanodegrees, as the latitude.
     pub longitude: i64,
 }
 
@@ -34,29 +37,44 @@ pub struct Node {
 /// are a few hundred of them in a frame rather than a few million, so they can afford their tags.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NamedNode {
+    /// The node's OpenStreetMap id.
     pub id: i64,
+    /// Nanodegrees, as a [`Node`]'s.
     pub latitude: i64,
+    /// Nanodegrees, as a [`Node`]'s.
     pub longitude: i64,
+    /// Every tag the node carries, `name` among them.
     pub tags: Tags,
 }
 
+/// A way, with every node it runs through, whether or not the harvest holds that node's position.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Way {
+    /// The way's OpenStreetMap id.
     pub id: i64,
+    /// Its tags, in the order the file stated them.
     pub tags: Tags,
+    /// The ids of its nodes, in order, the first repeated at the end when the way is closed.
     pub refs: Vec<i64>,
 }
 
+/// A multipolygon relation: the only kind a harvest keeps, as the only kind a map draws.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Relation {
+    /// The relation's OpenStreetMap id.
     pub id: i64,
+    /// Its tags, in the order the file stated them.
     pub tags: Tags,
+    /// Its way members, in order; node and relation members draw nothing and are left out.
     pub members: Vec<Member>,
 }
 
+/// One way of a multipolygon and the part it plays.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Member {
+    /// The member way's id.
     pub way: i64,
+    /// Its role, `outer`, `inner` or whatever the relation states.
     pub role: String,
 }
 
@@ -66,24 +84,35 @@ pub struct Member {
 /// every harvest states the file it was cut from precisely enough to cut it again.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Provenance {
+    /// The planet file's name, `planet-260907.osm.pbf`.
     pub source_name: String,
+    /// Its size in bytes.
     pub file_size: u64,
+    /// How many blobs it holds.
     pub blob_count: u64,
+    /// The minute of OpenStreetMap history it is a snapshot of, in seconds since 1970.
     pub replication_timestamp: i64,
+    /// The replication sequence number of that minute.
     pub replication_sequence: i64,
+    /// The program that wrote it, as its header says.
     pub writing_program: String,
 }
 
+/// Everything one area needs from the planet: the nodes, ways and multipolygons a map of it draws.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Harvest {
+    /// The planet file it was cut from.
     pub provenance: Provenance,
     /// The ground actually read, which is a frame plus its margin. A harvest answers for any frame
     /// whose own collected box this one covers, and for no other.
     pub collected: BoundingBox,
+    /// Every node in the collected box, and every node of the multipolygons' member ways.
     pub nodes: Vec<Node>,
     /// Every node in the collected box that carries a `name`, with its tags.
     pub named_nodes: Vec<NamedNode>,
+    /// Every way with a node in the collected box, and every member way of the multipolygons.
     pub ways: Vec<Way>,
+    /// Every multipolygon with a member among those ways.
     pub relations: Vec<Relation>,
 }
 
@@ -114,6 +143,7 @@ impl Harvest {
         self.collected.covers(collected)
     }
 
+    /// The node with this id, in a sorted harvest.
     pub fn node(&self, id: i64) -> Option<&Node> {
         self.nodes
             .binary_search_by_key(&id, |node| node.id)
@@ -121,6 +151,7 @@ impl Harvest {
             .map(|at| &self.nodes[at])
     }
 
+    /// The way with this id, in a sorted harvest.
     pub fn way(&self, id: i64) -> Option<&Way> {
         self.ways
             .binary_search_by_key(&id, |way| way.id)
@@ -129,6 +160,7 @@ impl Harvest {
     }
 }
 
+/// The value of the first tag with this key.
 pub fn tag<'a>(tags: &'a [(String, String)], key: &str) -> Option<&'a str> {
     tags.iter()
         .find(|(name, _)| name == key)

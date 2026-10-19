@@ -10,6 +10,8 @@
 //!
 //! Data read through this crate is © OpenStreetMap contributors, ODbL 1.0.
 
+#![warn(missing_docs)]
+
 pub mod credit;
 pub mod error;
 pub mod harvest;

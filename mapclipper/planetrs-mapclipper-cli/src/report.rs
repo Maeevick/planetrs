@@ -3,6 +3,7 @@
 use std::fmt::Write as _;
 use std::io::Write as _;
 
+/// A count with its digits grouped in threes, `94 746 421 723`.
 pub fn thousands(value: u64) -> String {
     let digits = value.to_string();
     let mut out = String::with_capacity(digits.len() + digits.len() / 3);
@@ -15,10 +16,12 @@ pub fn thousands(value: u64) -> String {
     out
 }
 
+/// A duration in seconds to a tenth, `58.3s`.
 pub fn seconds(elapsed: std::time::Duration) -> String {
     format!("{:.1}s", elapsed.as_secs_f64())
 }
 
+/// A size in the decimal unit that keeps it under five digits, `135 MB`.
 pub fn bytes(count: u64) -> String {
     match count {
         0..=9_999 => format!("{count} B"),
@@ -36,6 +39,7 @@ pub struct Report {
 }
 
 impl Report {
+    /// An empty report, held back from stderr when the run is quiet.
     pub fn new(quiet: bool) -> Self {
         Self {
             lines: String::new(),
@@ -43,27 +47,32 @@ impl Report {
         }
     }
 
+    /// Adds a line of a label and its value, the values aligned.
     pub fn line(&mut self, label: &str, value: impl AsRef<str>) -> &mut Self {
         let _ = writeln!(self.lines, "{label:<16}{}", value.as_ref());
         self
     }
 
+    /// Adds a line of free text.
     pub fn note(&mut self, text: impl AsRef<str>) -> &mut Self {
         let _ = writeln!(self.lines, "{}", text.as_ref());
         self
     }
 
+    /// Adds an empty line.
     pub fn blank(&mut self) -> &mut Self {
         self.lines.push('\n');
         self
     }
 
+    /// Writes the lines on stderr, unless the run is quiet.
     pub fn to_stderr(&self) {
         if !self.quiet && !self.lines.is_empty() {
             let _ = std::io::stderr().write_all(self.lines.as_bytes());
         }
     }
 
+    /// The lines as written so far.
     pub fn text(&self) -> &str {
         &self.lines
     }

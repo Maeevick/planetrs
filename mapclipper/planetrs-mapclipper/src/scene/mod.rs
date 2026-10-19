@@ -40,13 +40,17 @@ const VISIBLE_MARGIN: f64 = 0.02;
 /// Built-up share is measured on a grid this coarse, which is a city block.
 const DENSITY_CELL_METRES: f64 = 250.0;
 
+/// The picture's size in pixels, which decides what detail is worth keeping.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Canvas {
+    /// Pixels across.
     pub width: f64,
+    /// Pixels down.
     pub height: f64,
 }
 
 impl Canvas {
+    /// A canvas of at least one pixel each way, refused otherwise.
     pub fn new(width: f64, height: f64) -> Result<Self, ClipError> {
         if !width.is_finite() || !height.is_finite() || width < 1.0 || height < 1.0 {
             return Err(ClipError::CanvasNotPositive);
@@ -84,10 +88,12 @@ pub struct Place {
 }
 
 impl Place {
+    /// One of its names, the first by language tag, when it has any.
     pub fn any_name(&self) -> Option<&str> {
         self.names.values().next().map(String::as_str)
     }
 
+    /// Its name in this language, `en` or `fr`, when it has one.
     pub fn named(&self, language: &str) -> Option<&str> {
         self.names.get(language).map(String::as_str)
     }
@@ -105,42 +111,64 @@ pub struct Rules {
     pub urban_density: Option<f64>,
 }
 
+/// One thing drawn on the map: a way or a multipolygon, classified, clipped and simplified.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Feature {
+    /// The OpenStreetMap id of the way or relation it came from.
     pub id: i64,
+    /// What it is drawn as.
     pub category: Category,
+    /// Its name, when it has one.
     pub name: Option<String>,
+    /// Its coordinates, as longitude and latitude.
     pub shape: Shape,
 }
 
+/// What building a scene kept, dropped and simplified, so a run can say where the detail went.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct SceneReport {
+    /// Features drawn.
     pub kept: u64,
+    /// Features left out as off the frame or under a pixel.
     pub dropped: u64,
+    /// Vertices before simplification.
     pub vertices_before: u64,
+    /// Vertices after it.
     pub vertices_after: u64,
+    /// Multipolygon rings closed from their member ways.
     pub rings_closed: u64,
+    /// The multipolygons whose members never closed into a ring.
     pub relations_left_open: Vec<i64>,
+    /// How many features of each category were drawn.
     pub by_category: Vec<(Category, u64)>,
+    /// Names worth drawing.
     pub labels: u64,
     /// p50, p75, p90, p99 of the built-up share, over the cells holding anything.
     pub built_up: Option<[f64; 4]>,
 }
 
+/// Everything a map of one frame shows, ready to be written as GeoJSON or drawn as SVG.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Scene {
+    /// The ground the picture shows.
     pub frame: BoundingBox,
+    /// The picture's size.
     pub canvas: Canvas,
+    /// What the map is of.
     pub place: Place,
+    /// What is drawn, back to front as the scene found it.
     pub features: Vec<Feature>,
     /// Every name worth drawing, ranked. Which of them fit is settled at drawing time, because
     /// that is the only place pixels exist, so this list is always complete rather than filtered.
     pub labels: Vec<Label>,
+    /// The planet file the harvest was cut from.
     pub provenance: Provenance,
+    /// What building the scene kept and dropped.
     pub report: SceneReport,
 }
 
 impl Scene {
+    /// The features drawn as this category.
     pub fn of_category(&self, category: Category) -> impl Iterator<Item = &Feature> {
         self.features
             .iter()

@@ -11,23 +11,39 @@ use crate::harvest::{Tags, tag};
 /// then two themes could disagree about what a quay is rather than about what colour it should be.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Category {
+    /// The open sea, filled from the coastline.
     Sea,
+    /// Where land meets the sea, as `natural=coastline` draws it.
     Coastline,
+    /// Lakes, ponds, reservoirs, docks and marinas.
     Water,
+    /// Rivers, streams, canals and ditches, drawn as lines.
     Waterway,
+    /// Marshes, swamps and mangroves.
     Wetland,
+    /// Sand, shingle and shoals.
     Beach,
+    /// Woods, parks, meadows, gardens and pitches.
     Green,
+    /// Built-up land: homes, shops and offices.
     Urban,
+    /// Industrial land, ports and quarries.
     Industrial,
+    /// Buildings.
     Building,
+    /// Piers, quays, jetties, breakwaters and groynes.
     Pier,
+    /// Motorways, trunk and primary roads.
     RoadMajor,
+    /// Secondary and tertiary roads.
     RoadMinor,
+    /// Railway lines.
     Rail,
+    /// Runways and taxiways.
     Runway,
 }
 
+/// Every category, in the order a theme lists them.
 pub const EVERY_CATEGORY: [Category; 15] = [
     Category::Sea,
     Category::Coastline,
@@ -47,6 +63,7 @@ pub const EVERY_CATEGORY: [Category; 15] = [
 ];
 
 impl Category {
+    /// The category's name, as a theme file and the GeoJSON write it.
     pub fn name(self) -> &'static str {
         match self {
             Self::Sea => "sea",
@@ -67,6 +84,7 @@ impl Category {
         }
     }
 
+    /// The category of this name, if one has it.
     pub fn named(name: &str) -> Option<Self> {
         EVERY_CATEGORY
             .into_iter()

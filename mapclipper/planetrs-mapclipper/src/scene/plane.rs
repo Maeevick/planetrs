@@ -5,6 +5,7 @@
 //! which it has. In map space x is longitude and y is latitude, in that order, because that is how
 //! GeoJSON orders a position and reversing it puts Abidjan in the Indian Ocean.
 
+/// A point, x then y: longitude then latitude on the ground, across then down on a canvas.
 pub type Point = [f64; 2];
 
 /// The corners a shape spans, or nothing when it has no points.

@@ -42,24 +42,35 @@ fn text(bytes: &[u8]) -> String {
 /// What one pass cost, so the report says where the time went rather than that it went.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct PassCost {
+    /// How long the pass took.
     pub elapsed: Duration,
+    /// How many blobs it read.
     pub blobs: u64,
+    /// How many bytes those blobs inflated to.
     pub inflated_bytes: u64,
+    /// How many entities it kept.
     pub kept: u64,
 }
 
+/// What each of the five passes of a harvest cost.
 #[derive(Debug, Clone, Default)]
 pub struct HarvestReport {
+    /// The nodes inside the box.
     pub nodes: PassCost,
+    /// The ways touching those nodes.
     pub ways: PassCost,
+    /// The multipolygons touching those ways.
     pub relations: PassCost,
+    /// Their member ways, fetched by id.
     pub member_ways: PassCost,
+    /// The nodes of those members, fetched by id.
     pub member_nodes: PassCost,
     /// Blobs the last two passes would have read without the id index.
     pub blobs_pruned: u64,
 }
 
 impl HarvestReport {
+    /// How long the five passes took together.
     pub fn elapsed(&self) -> Duration {
         [
             self.nodes,
