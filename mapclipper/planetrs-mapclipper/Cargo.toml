@@ -28,5 +28,8 @@ resvg = { version = "0.48", default-features = false, features = [
 ], optional = true }
 clap.workspace = true
 
+[dev-dependencies]
+planetrs-pbf = { workspace = true, features = ["testing"] }
+
 [lints]
 workspace = true
