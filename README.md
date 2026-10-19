@@ -80,10 +80,11 @@ label;address;postal code;city;country;lat;lon;precision
 Musée océanographique;Avenue Saint-Martin;98000;Monaco;Monaco;43.731809;7.427267;Street
 ```
 
-The map above came out of the same file:
+The map above came out of the same file, indexed once and then cut from the dataset:
 
 ```sh
-planetrs-mapclipper clip ~/.local/share/planetrs/planets/monaco-latest.osm.pbf \
+planetrs-mapclipper index --planet ~/.local/share/planetrs/planets/monaco-latest.osm.pbf --countries MC
+planetrs-mapclipper clip \
   --lat 43.7375 --lon 7.4210 --width-km 3 --height-km 2 --width-px 900 --height-px 600 \
   --theme atlas --labels settlements --marker name --name "en=Monaco" --png monaco.png
 ```

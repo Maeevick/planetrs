@@ -10,7 +10,7 @@ infrastructure she is now allowed to experiment with, and so far nothing has cau
 ![Monaco, drawn with the atlas theme](https://raw.githubusercontent.com/maeevick/planetrs/main/docs/monaco-atlas.png)
 
 ```sh
-planetrs-mapclipper clip planet-260907.osm.pbf \
+planetrs-mapclipper clip --planet planet-260907.osm.pbf \
   --lat 5.269 --lon -4.012 --width-km 29 --height-km 16.53 \
   --width-px 1000 --height-px 570 --theme linework \
   --marker name --name "en=Port of Abidjan" \
@@ -28,7 +28,7 @@ a full scan of ninety-four gigabytes. It is minutes.
 framing, another canvas, another theme.
 
 ```sh
-planetrs-mapclipper harvest planet.osm.pbf --lat 5.269 --lon -4.012 \
+planetrs-mapclipper harvest --planet planet.osm.pbf --lat 5.269 --lon -4.012 \
   --width-km 40 --height-km 40 --out abidjan.mapclip     # once
 
 planetrs-mapclipper render abidjan.mapclip --lat 5.269 --lon -4.012 \
@@ -40,6 +40,22 @@ Tying them together makes every question about colour or framing cost a full pas
 difference between trying six framings and settling for the first.
 
 `clip` does both in one go, for the first time you look at a place.
+
+## A dataset instead of the planet
+
+A harvest of the planet reads ninety-four gigabytes for a box a few kilometres across. `index` reads
+them once instead, and files every way, named or lone node and multipolygon of the countries asked
+for into each country's map index, in the dataset the geocoder shares:
+
+```sh
+planetrs-mapclipper index --countries FR,MC               # once, from the newest planet
+planetrs-mapclipper clip --lat 43.7375 --lon 7.4210 \
+  --width-km 3 --height-km 2 --png monaco.png              # in a moment, from the dataset
+```
+
+`harvest` and `clip` then cut their box from the dataset, reading only the row groups around it,
+locally or over HTTP with `--dataset URL`. For any box inside the countries indexed, the harvest is
+the planet's own to the byte; `--planet PATH` reads the planet instead, for anywhere else.
 
 ## A harvest is a thing you can give away
 

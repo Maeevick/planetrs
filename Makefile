@@ -53,7 +53,7 @@ index: release ## build the geocoder's index from PLANET into the data directory
 
 map: release ## cut the demo map out of PLANET, harvest kept for re-rendering
 	mkdir -p $(WORK)
-	./target/release/planetrs-mapclipper clip $(PLANET) \
+	./target/release/planetrs-mapclipper clip --planet $(PLANET) \
 	  --lat 5.269 --lon -4.012 --width-km 29 --height-km 16.53 --margin 0.10 \
 	  --width-px 1000 --height-px 570 --theme linework \
 	  --marker name --name "en=Port of Abidjan" --poi-lat 5.27 --poi-lon -4.01 \
