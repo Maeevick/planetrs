@@ -1,12 +1,13 @@
 //! Where things are, what is there, and what to do next.
 
-use std::io::{BufRead, BufReader, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, UNIX_EPOCH};
 
 use anyhow::Result;
 
-use planetrs_dataset::Manifest;
+use planetrs_dataset::directory::MANIFEST;
+use planetrs_dataset::{Manifest, Part};
 
 use super::Context;
 use crate::data_dir::planet_date;
@@ -28,34 +29,24 @@ pub fn size_text(bytes: u64) -> String {
     }
 }
 
-/// What an index file's first line says about how the index was built.
-pub fn provenance(header: &str) -> String {
-    let after = |marker: &str| header.split_once(marker).map(|(_, rest)| rest);
-    let replicated = after("replication timestamp ")
-        .and_then(|rest| rest.split(|c: char| !c.is_ascii_digit()).next())
-        .and_then(|digits| digits.parse::<u64>().ok())
-        .map(|seconds| Day::of(UNIX_EPOCH + Duration::from_secs(seconds)).to_string());
-    let countries = after(", countries ").map(str::trim);
-    let planet = match replicated {
-        Some(day) => format!("from the planet of {day}"),
-        None => "from an unknown planet".to_string(),
-    };
-    match countries {
-        Some(countries) => format!("{planet}, streets of {countries}"),
-        None => format!("{planet}, communes only"),
-    }
-}
-
 /// What a dataset's manifest says about how it was built: from which planet, and for which
 /// countries its streets were indexed.
 pub fn built_from(manifest: &Manifest) -> String {
-    let _ = manifest;
-    String::new()
-}
-
-fn first_line(path: &Path) -> Option<String> {
-    let file = std::fs::File::open(path).ok()?;
-    BufReader::new(file).lines().next()?.ok()
+    let seconds = u64::try_from(manifest.planet.replication_timestamp).unwrap_or_default();
+    let day = Day::of(UNIX_EPOCH + Duration::from_secs(seconds));
+    let countries: Vec<&str> = manifest
+        .files
+        .iter()
+        .filter_map(|entry| match &entry.part {
+            Part::GeocoderIndex { country } => Some(country.as_str()),
+            _ => None,
+        })
+        .collect();
+    if countries.is_empty() {
+        format!("from the planet of {day}, communes only")
+    } else {
+        format!("from the planet of {day}, streets of {}", countries.join(","))
+    }
 }
 
 /// Every OpenStreetMap file among `paths`: dated planets first, newest first, then the others by
@@ -120,13 +111,15 @@ pub fn run(context: &Context) -> Result<()> {
     }
 
     let index = context.index_directory();
-    let header = first_line(&index.join("streets.tsv")).or_else(|| first_line(&index.join("communes.tsv")));
-    match header {
-        Some(header) => writeln!(
+    let manifest = std::fs::read_to_string(index.join(MANIFEST))
+        .ok()
+        .and_then(|text| Manifest::from_json(&text).ok());
+    match manifest {
+        Some(manifest) => writeln!(
             stdout,
             "index           {}\n                built {}",
             index.display(),
-            provenance(&header)
+            built_from(&manifest)
         )?,
         None if planets.is_empty() => writeln!(
             stdout,
@@ -145,7 +138,7 @@ pub fn run(context: &Context) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use planetrs_dataset::{Entry, Part, Provenance};
+    use planetrs_dataset::{Entry, Provenance};
 
     use super::*;
 
