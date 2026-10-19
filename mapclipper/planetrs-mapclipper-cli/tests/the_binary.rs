@@ -3,7 +3,9 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
-use planetrs_pbf::testing::{Node, PlanetFile, Way};
+use planetrs_dataset::directory::MANIFEST;
+use planetrs_dataset::{Manifest, Part};
+use planetrs_pbf::testing::{MemberKind, Node, PlanetFile, Relation, Way};
 
 const ATTRIBUTION: &str =
     "Data © OpenStreetMap contributors, ODbL 1.0: https://www.openstreetmap.org/copyright";
@@ -38,6 +40,56 @@ fn monaco() -> PlanetFile {
                 .tagged("place", "square"),
         )
         .with_way(Way::through(10, [1, 2]).tagged("man_made", "quay"))
+}
+
+/// The same Monaco with the principality's border around it, so that a map index can be built of it.
+fn monaco_with_its_border() -> PlanetFile {
+    let corners = [(43.70, 7.39), (43.70, 7.45), (43.76, 7.45), (43.76, 7.39)];
+    corners
+        .iter()
+        .zip(1001..)
+        .fold(monaco(), |planet, ((latitude, longitude), id)| {
+            planet.with_node(Node::at(id, *latitude, *longitude))
+        })
+        .with_way(Way::through(2001, [1001, 1002, 1003, 1004, 1001]))
+        .with_relation(
+            Relation::of(3001)
+                .tagged("type", "boundary")
+                .tagged("boundary", "administrative")
+                .tagged("admin_level", "2")
+                .tagged("ISO3166-1", "MC")
+                .with_member(MemberKind::Way, 2001, "outer"),
+        )
+}
+
+fn manifest_of(dataset: &Path) -> Manifest {
+    Manifest::from_json(&std::fs::read_to_string(dataset.join(MANIFEST)).unwrap()).unwrap()
+}
+
+fn parts_of(dataset: &Path) -> Vec<Part> {
+    manifest_of(dataset)
+        .files
+        .into_iter()
+        .map(|entry| entry.part)
+        .collect()
+}
+
+/// The binary indexing Monaco, border included, into the dataset `dataset`.
+fn indexing(directory: &Path, dataset: &str) -> Output {
+    let planet = directory.join("monaco.osm.pbf");
+    monaco_with_its_border().write(&planet).unwrap();
+    run(
+        directory,
+        &[
+            "--dataset",
+            dataset,
+            "index",
+            "--planet",
+            &planet.display().to_string(),
+            "--countries",
+            "mc",
+        ],
+    )
 }
 
 fn mapclipper(directory: &Path) -> Command {
@@ -223,4 +275,19 @@ fn given_a_harvest_when_inspected_as_json_then_stdout_names_the_planet_it_was_cu
         "{}",
         text(&output.stdout)
     );
+}
+
+#[test]
+fn given_a_planet_when_indexed_then_the_dataset_holds_its_countrys_map_index_and_stderr_ends_with_the_attribution()
+ {
+    let directory = scratch("index");
+
+    let indexed = indexing(&directory, "dataset");
+
+    assert!(indexed.status.success(), "{}", text(&indexed.stderr));
+    assert_eq!(
+        parts_of(&directory.join("dataset")),
+        vec![Part::MapIndex { country: "MC".into() }]
+    );
+    assert_eq!(text(&indexed.stderr).lines().last(), Some(ATTRIBUTION));
 }

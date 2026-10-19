@@ -936,6 +936,7 @@ dependencies = [
  "anyhow",
  "clap",
  "planetrs-cli",
+ "planetrs-dataset",
  "planetrs-geo",
  "planetrs-mapclipper",
  "planetrs-pbf",
