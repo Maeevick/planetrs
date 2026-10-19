@@ -9,9 +9,10 @@ const ABOUT: &str = "A coordinate for a place or a postal address, from OpenStre
 const LONG_ABOUT: &str = "\
 A coordinate for a place or a postal address, from OpenStreetMap data alone.
 
-Geocodes one site given as a single argument, or a whole semicolon-separated file, against an index
-built from the OpenStreetMap planet: no network, no API and no rate limit once the index is built.
-Every answer says how precise it is, from the door to the commune's centre.";
+Geocodes one site given as a single argument, or a whole semicolon-separated file, against a dataset
+built from the OpenStreetMap planet, read from a directory or over HTTP: no API, no rate limit, and no
+network once the dataset is on disk. Every answer says how precise it is, from the door to the
+commune's centre.";
 
 const SHORT_FOOTER: &str = "\
 Examples:
@@ -90,8 +91,9 @@ Examples:
 Data © OpenStreetMap contributors, ODbL 1.0: https://www.openstreetmap.org/copyright";
 
 const INDEX_FOOTER: &str = "\
-The planet is read several times; France and Monaco take about four minutes and 20 GB of memory.
-The index is built beside the old one and replaces it only once complete.
+The planet is read several times; France and Monaco take about four minutes and 24 GB of memory.
+The dataset is rebuilt beside the old one, keeping the map indexes built from the same planet, and
+replaces it only once complete.
 
 Examples:
   planetrs-geocoder index
@@ -142,7 +144,7 @@ pub struct Cli {
 /// Settings every command shares.
 #[derive(Debug, Args)]
 pub struct Global {
-    /// Where planets and the index are kept [env: PLANETRS_DATA_DIR]
+    /// Where planets, the dataset and the cache are kept [env: PLANETRS_DATA_DIR]
     #[arg(long, global = true, value_name = "DIR")]
     pub data_dir: Option<PathBuf>,
 
@@ -162,13 +164,13 @@ pub enum Command {
     /// Download the latest planet into the data directory, resuming a broken download
     #[command(after_help = DOWNLOAD_FOOTER)]
     Download(DownloadArgs),
-    /// Build the index from a planet file
+    /// Build the gazetteer and each country's geocoder index from a planet file, into the dataset
     #[command(after_help = INDEX_FOOTER)]
     Index(IndexArgs),
     /// Print every decision the lookup takes, for one site or each site of a file
     #[command(after_help = TRACE_FOOTER)]
     Trace(TraceArgs),
-    /// Show the data directory, the planets in it and the index
+    /// Show the data directory, the planets in it and the dataset
     Status,
 }
 
