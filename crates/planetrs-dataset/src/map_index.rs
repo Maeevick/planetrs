@@ -107,6 +107,17 @@ pub fn to_parquet(
     grid: Grid,
     planet: &Provenance,
 ) -> Result<Vec<u8>, TableError> {
+    cut_at(country, elements, grid, planet, ROWS_PER_ROW_GROUP)
+}
+
+/// [`to_parquet`], with row groups of about `rows_per_row_group` rows.
+pub(crate) fn cut_at(
+    country: &str,
+    elements: &[Element],
+    grid: Grid,
+    planet: &Provenance,
+    rows_per_row_group: usize,
+) -> Result<Vec<u8>, TableError> {
     let mut placed: Vec<(u64, (u8, i64), Vec<Row>)> = elements
         .iter()
         .map(|element| {
@@ -119,7 +130,7 @@ pub fn to_parquet(
     let mut group: Vec<Row> = Vec::new();
     for (_, _, rows) in placed {
         group.extend(rows);
-        if group.len() >= ROWS_PER_ROW_GROUP {
+        if group.len() >= rows_per_row_group {
             row_groups.push(columns_of(std::mem::take(&mut group)));
         }
     }
@@ -574,6 +585,84 @@ mod tests {
 
         assert_eq!(read_grid, grid());
         assert_eq!(by_id(read), by_id(harbour()));
+        Ok(())
+    }
+
+    #[test]
+    fn given_positions_at_the_ends_of_the_earth_when_written_then_they_come_back_to_the_nanodegree()
+    -> Result<(), TableError> {
+        let corners = [
+            at(90_000_000_000, 180_000_000_000),
+            at(-90_000_000_000, -180_000_000_000),
+            at(89_999_999_900, -179_999_999_900),
+            at(-1, 1),
+            at(43_738_412_300, 7_424_615_700),
+        ];
+        let nodes: Vec<Element> = corners
+            .iter()
+            .enumerate()
+            .map(|(id, at)| Element::Node {
+                id: id as i64,
+                at: *at,
+                tags: Tags::new(),
+            })
+            .collect();
+
+        let (_, read) = from_parquet(&to_parquet("MC", &nodes, grid(), &planet())?)?;
+
+        assert_eq!(by_id(read), nodes);
+        Ok(())
+    }
+
+    #[test]
+    fn given_the_same_elements_in_another_order_when_written_then_the_bytes_are_identical()
+    -> Result<(), TableError> {
+        let mut reversed = harbour();
+        reversed.reverse();
+
+        let once = to_parquet("MC", &harbour(), grid(), &planet())?;
+        let again = to_parquet("MC", &reversed, grid(), &planet())?;
+
+        assert_eq!(once, again);
+        Ok(())
+    }
+
+    #[test]
+    fn given_more_rows_than_a_row_group_holds_when_written_then_no_multipolygon_is_parted_from_its_members()
+    -> Result<(), TableError> {
+        let written = cut_at("MC", &harbour(), grid(), &planet(), 1)?;
+
+        let Tail::Footer(footer) = tables::footer_from_tail(&written, written.len() as u64)? else {
+            return Err(unexpected("footer"));
+        };
+        let groups = footer.row_groups("id");
+        let first_kinds = groups
+            .iter()
+            .map(|group| {
+                let range = group.bytes.start as usize..group.bytes.end as usize;
+                let columns = footer.read_row_group(group, written[range].to_vec())?;
+                Ok(texts(&columns, "kind")?.first().cloned().unwrap_or_default())
+            })
+            .collect::<Result<Vec<String>, TableError>>()?;
+        assert_eq!(groups.len(), 4, "one row group per element");
+        assert!(
+            !first_kinds.iter().any(|kind| kind == "member"),
+            "{first_kinds:?}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn given_a_map_index_when_its_footer_is_read_then_the_box_alone_carries_statistics()
+    -> Result<(), TableError> {
+        let written = to_parquet("MC", &harbour(), grid(), &planet())?;
+
+        let with_statistics = tables::columns_with_statistics(&written)?;
+
+        assert_eq!(
+            with_statistics,
+            vec!["bbox.xmin", "bbox.ymin", "bbox.xmax", "bbox.ymax"]
+        );
         Ok(())
     }
 }
