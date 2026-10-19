@@ -81,6 +81,7 @@ mod index_file;
 mod index_streets;
 mod locate;
 mod loose;
+mod parts;
 mod rarity;
 mod rings;
 mod shops;

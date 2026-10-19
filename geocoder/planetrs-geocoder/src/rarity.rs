@@ -42,6 +42,22 @@ impl WordRarity {
         }
     }
 
+    /// How many street names were counted.
+    pub(crate) fn names(&self) -> u64 {
+        self.names as u64
+    }
+
+    /// Every word counted, with how many names hold it, in alphabetical order.
+    pub(crate) fn words(&self) -> Vec<(&str, u32)> {
+        let mut words: Vec<(&str, u32)> = self
+            .names_with
+            .iter()
+            .map(|(word, count)| (word.as_str(), *count))
+            .collect();
+        words.sort_unstable();
+        words
+    }
+
     /// Street names per street name carrying the word, as a logarithm: 0 for a word in every name,
     /// about 7 for one in a thousand, most for a word never seen.
     pub fn of_word(&self, word: &str) -> f64 {

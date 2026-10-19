@@ -1,9 +1,12 @@
 //! Building the index from a planet file: every pass over the planet, in the order they depend on
 //! each other.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+use planetrs_dataset::directory::{RecordError, record};
+use planetrs_dataset::{Part, Provenance, TableError, gazetteer, geocoder_index};
 use planetrs_pbf::{PbfError, Planet};
 use thiserror::Error;
 
@@ -11,6 +14,7 @@ use crate::assemble::assemble;
 use crate::harvest::{harvest_boundaries, nodes_by_id, ways_by_id};
 use crate::index_file::{IndexError, write_areas, write_index, write_parents, write_shops, write_streets};
 use crate::index_streets::index_streets;
+use crate::parts::{gazetteer_of, geocoder_index_of};
 
 /// The countries an index covers when none are named: France and Monaco, whose addresses the
 /// reading and matching rules were written for.
@@ -57,6 +61,18 @@ pub enum BuildError {
         /// What failed.
         #[source]
         source: IndexError,
+    },
+    /// A part of the dataset could not be encoded as GeoParquet.
+    #[error("encoding a part of the dataset failed")]
+    Encoding(#[source] TableError),
+    /// A part of the dataset could not be recorded in its directory.
+    #[error("recording a part of the dataset in {} failed", directory.display())]
+    Recording {
+        /// The dataset's directory.
+        directory: PathBuf,
+        /// What failed.
+        #[source]
+        source: RecordError,
     },
 }
 
@@ -159,6 +175,30 @@ pub fn build_index(
         "planet {} bytes, {} blobs, replication timestamp {}",
         fingerprint.file_size, fingerprint.blob_count, fingerprint.replication_timestamp
     );
+    let source = Provenance {
+        source_name: planet
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_default(),
+        file_size: fingerprint.file_size,
+        blob_count: fingerprint.blob_count,
+        replication_timestamp: fingerprint.replication_timestamp,
+        replication_sequence: opened.header.replication_sequence.unwrap_or_default(),
+        writing_program: opened.header.writing_program.clone().unwrap_or_default(),
+    };
+    let mut country_relations: HashMap<String, i64> = HashMap::new();
+    for harvested in &harvest.countries {
+        let lowest = country_relations
+            .entry(harvested.country.code.clone())
+            .or_insert(harvested.relation);
+        *lowest = (*lowest).min(harvested.relation);
+    }
+    let recording = |part: Part, name: &str, bytes: Vec<u8>, rows: usize| {
+        record(directory, &source, part, name, &bytes, rows as u64).map_err(|source| BuildError::Recording {
+            directory: directory.to_path_buf(),
+            source,
+        })
+    };
     write_index(directory, &assembled.communes, &assembled.countries, &provenance).map_err(writing)?;
 
     if !countries.is_empty() {
@@ -201,6 +241,38 @@ pub fn build_index(
         summary.hamlets = filing.places_filed;
         summary.shops = report.shops_filed;
         summary.unreadable_blobs += report.unreadable_blobs;
+        let areas = gazetteer_of(
+            &assembled.communes,
+            &assembled.countries,
+            &country_relations,
+            &indexed.parents,
+            &indexed.areas,
+        );
+        let bytes = gazetteer::to_parquet(&areas, &source).map_err(BuildError::Encoding)?;
+        recording(Part::Gazetteer, "gazetteer.parquet", bytes, areas.len())?;
+        for country in countries {
+            let entries = geocoder_index_of(country, &assembled.communes, &indexed.streets, &indexed.shops);
+            let bytes =
+                geocoder_index::to_parquet(country, &entries, &source).map_err(BuildError::Encoding)?;
+            recording(
+                Part::GeocoderIndex {
+                    country: country.to_string(),
+                },
+                &format!("geocoder-{country}.parquet"),
+                bytes,
+                entries.len(),
+            )?;
+        }
+    } else {
+        let areas = gazetteer_of(
+            &assembled.communes,
+            &assembled.countries,
+            &country_relations,
+            &HashMap::new(),
+            &HashMap::new(),
+        );
+        let bytes = gazetteer::to_parquet(&areas, &source).map_err(BuildError::Encoding)?;
+        recording(Part::Gazetteer, "gazetteer.parquet", bytes, areas.len())?;
     }
     progress(&format!("written        the index in {:.1}s", elapsed()));
     Ok(summary)
