@@ -399,6 +399,30 @@ mod tests {
         );
     }
 
+    /// The 49th parallel, between the United States and Canada, runs along the sides of cells, where
+    /// rounding decides which side of it a point on it falls.
+    #[test]
+    fn given_a_border_along_the_sides_of_cells_when_covered_then_the_cells_along_it_inside_are_left_out() {
+        let south_of_the_49th = Outline::of(vec![vec![
+            [-1.00, 48.50],
+            [1.00, 48.50],
+            [1.00, 49.00],
+            [-1.00, 49.00],
+            [-1.00, 48.50],
+        ]]);
+
+        let coverages = Coverage::of_each(&[&south_of_the_49th]);
+
+        assert!(
+            Coverage::cover(&coverages, &box_(-0.10, 48.90, 0.10, 48.95)),
+            "a cell further south"
+        );
+        assert!(
+            !Coverage::cover(&coverages, &box_(-0.10, 48.991, 0.10, 48.999)),
+            "the cells along the border"
+        );
+    }
+
     #[test]
     fn given_a_coverage_when_written_as_text_and_read_back_then_it_is_the_same_coverage() {
         let (france, monaco) = riviera();
