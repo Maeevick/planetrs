@@ -19,6 +19,8 @@ allow = [
     "ISC",
     "Unicode-3.0",
     "CDLA-Permissive-2.0",
+    # tiny-keccak, through arrow's ahash: a public domain dedication, without conditions.
+    "CC0-1.0",
 ]
 
 [bans]

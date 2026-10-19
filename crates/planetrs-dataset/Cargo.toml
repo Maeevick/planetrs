@@ -19,6 +19,11 @@ remote = ["dep:ureq"]
 testing = []
 
 [dependencies]
+arrow-array.workspace = true
+arrow-schema.workspace = true
+bytes.workspace = true
+parquet.workspace = true
+planetrs-geo.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 ureq = { workspace = true, optional = true }

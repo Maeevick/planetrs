@@ -32,6 +32,10 @@ md-5 = "0.11"
 fs4 = "1.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+parquet = { version = "60", default-features = false, features = ["arrow", "flate2-zlib-rs"] }
+arrow-array = "60"
+arrow-schema = "60"
+bytes = "1"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
