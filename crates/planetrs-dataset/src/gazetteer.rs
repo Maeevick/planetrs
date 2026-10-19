@@ -5,8 +5,10 @@
 //! against, each area's centre, and, for the communes of the countries indexed, their area and the
 //! commune that absorbed them when they are former towns.
 
+use planetrs_geo::wkb;
+
 use crate::manifest::Provenance;
-use crate::tables::TableError;
+use crate::tables::{self, Column, TableError, Values};
 
 /// One administrative area: a country at level 2, a commune at level 8, anything between or below.
 #[derive(Debug, Clone, PartialEq)]
@@ -29,16 +31,157 @@ pub struct Area {
     pub centre: Option<[f64; 2]>,
 }
 
+/// How many areas a row group holds. The gazetteer is read whole, so this only bounds the memory
+/// a writer and a reader need at once.
+const AREAS_PER_ROW_GROUP: usize = 100_000;
+
 /// The gazetteer as a GeoParquet file, one row per area in the order given.
 pub fn to_parquet(areas: &[Area], planet: &Provenance) -> Result<Vec<u8>, TableError> {
-    let _ = (areas, planet);
-    Ok(Vec::new())
+    let _ = planet;
+    let row_groups: Vec<Vec<Column>> = areas.chunks(AREAS_PER_ROW_GROUP).map(columns_of).collect();
+    tables::write(&row_groups, &[])
 }
 
 /// The areas of a gazetteer file, in its order.
 pub fn from_parquet(bytes: &[u8]) -> Result<Vec<Area>, TableError> {
-    let _ = bytes;
-    Ok(Vec::new())
+    let columns = tables::read(bytes)?;
+    let relations = integers(&columns, "relation")?;
+    let levels = small_integers(&columns, "level")?;
+    let countries = optional_texts(&columns, "country")?;
+    let names = text_lists(&columns, "names")?;
+    let postcodes = text_lists(&columns, "postcodes")?;
+    let areas = optional_reals(&columns, "square_kilometres")?;
+    let absorbed = optional_integers(&columns, "absorbed_by")?;
+    let geometries = optional_bytes(&columns, "geometry")?;
+    (0..relations.len())
+        .map(|row| {
+            Ok(Area {
+                relation: relations[row],
+                level: u8::try_from(levels[row]).map_err(|_| unexpected("level"))?,
+                country: countries[row].clone(),
+                names: names[row].clone(),
+                postcodes: postcodes[row].clone(),
+                square_kilometres: areas[row],
+                absorbed_by: absorbed[row],
+                centre: geometries[row]
+                    .as_deref()
+                    .map(|bytes| {
+                        wkb::read_point(bytes)
+                            .map(|(longitude, latitude)| [longitude, latitude])
+                            .map_err(|_| unexpected("geometry"))
+                    })
+                    .transpose()?,
+            })
+        })
+        .collect()
+}
+
+fn columns_of(areas: &[Area]) -> Vec<Column> {
+    vec![
+        Column::of(
+            "relation",
+            Values::Integers(areas.iter().map(|area| area.relation).collect()),
+        ),
+        Column::of(
+            "level",
+            Values::SmallIntegers(areas.iter().map(|area| i32::from(area.level)).collect()),
+        ),
+        Column::of(
+            "country",
+            Values::OptionalTexts(areas.iter().map(|area| area.country.clone()).collect()),
+        ),
+        Column::of(
+            "names",
+            Values::TextLists(areas.iter().map(|area| area.names.clone()).collect()),
+        ),
+        Column::of(
+            "postcodes",
+            Values::TextLists(areas.iter().map(|area| area.postcodes.clone()).collect()),
+        ),
+        Column::of(
+            "square_kilometres",
+            Values::OptionalReals(areas.iter().map(|area| area.square_kilometres).collect()),
+        ),
+        Column::of(
+            "absorbed_by",
+            Values::OptionalIntegers(areas.iter().map(|area| area.absorbed_by).collect()),
+        ),
+        Column::of(
+            "geometry",
+            Values::OptionalBytes(
+                areas
+                    .iter()
+                    .map(|area| {
+                        area.centre
+                            .map(|[longitude, latitude]| wkb::point(longitude, latitude))
+                    })
+                    .collect(),
+            ),
+        ),
+    ]
+}
+
+fn unexpected(name: &str) -> TableError {
+    TableError::Unreadable {
+        detail: format!("the gazetteer's column {name} is missing or of another kind"),
+    }
+}
+
+fn named<'a>(columns: &'a [Column], name: &str) -> Result<&'a Values, TableError> {
+    columns
+        .iter()
+        .find(|column| column.name == name)
+        .map(|column| &column.values)
+        .ok_or_else(|| unexpected(name))
+}
+
+fn integers<'a>(columns: &'a [Column], name: &str) -> Result<&'a [i64], TableError> {
+    match named(columns, name)? {
+        Values::Integers(values) => Ok(values),
+        _ => Err(unexpected(name)),
+    }
+}
+
+fn small_integers<'a>(columns: &'a [Column], name: &str) -> Result<&'a [i32], TableError> {
+    match named(columns, name)? {
+        Values::SmallIntegers(values) => Ok(values),
+        _ => Err(unexpected(name)),
+    }
+}
+
+fn optional_integers<'a>(columns: &'a [Column], name: &str) -> Result<&'a [Option<i64>], TableError> {
+    match named(columns, name)? {
+        Values::OptionalIntegers(values) => Ok(values),
+        _ => Err(unexpected(name)),
+    }
+}
+
+fn optional_reals<'a>(columns: &'a [Column], name: &str) -> Result<&'a [Option<f64>], TableError> {
+    match named(columns, name)? {
+        Values::OptionalReals(values) => Ok(values),
+        _ => Err(unexpected(name)),
+    }
+}
+
+fn optional_texts<'a>(columns: &'a [Column], name: &str) -> Result<&'a [Option<String>], TableError> {
+    match named(columns, name)? {
+        Values::OptionalTexts(values) => Ok(values),
+        _ => Err(unexpected(name)),
+    }
+}
+
+fn text_lists<'a>(columns: &'a [Column], name: &str) -> Result<&'a [Vec<String>], TableError> {
+    match named(columns, name)? {
+        Values::TextLists(values) => Ok(values),
+        _ => Err(unexpected(name)),
+    }
+}
+
+fn optional_bytes<'a>(columns: &'a [Column], name: &str) -> Result<&'a [Option<Vec<u8>>], TableError> {
+    match named(columns, name)? {
+        Values::OptionalBytes(values) => Ok(values),
+        _ => Err(unexpected(name)),
+    }
 }
 
 #[cfg(test)]
