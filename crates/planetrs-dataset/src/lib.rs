@@ -18,6 +18,7 @@ pub mod geocoder_index;
 mod geoparquet;
 #[cfg(feature = "remote")]
 pub mod http;
+pub mod location;
 pub mod manifest;
 mod tables;
 #[cfg(any(test, feature = "testing"))]
@@ -27,5 +28,6 @@ pub use dataset::{CommunesRead, CountryIndex, Dataset, DatasetError};
 pub use files::{DirectoryFiles, ForReadingFiles, Unreachable};
 #[cfg(feature = "remote")]
 pub use http::HttpFiles;
+pub use location::Location;
 pub use manifest::{Entry, Manifest, ManifestError, Part, Provenance};
 pub use tables::TableError;
