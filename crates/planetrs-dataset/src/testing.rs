@@ -7,7 +7,7 @@
 use std::collections::BTreeMap;
 use std::ops::Range;
 
-use crate::files::{ForReadingFiles, Unreachable};
+use crate::files::{ForReadingFiles, Unreachable, within};
 
 /// A dataset's files held in memory, by name.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -41,14 +41,7 @@ impl ForReadingFiles for FilesInMemory {
 
     fn read(&self, file: &str, range: Range<u64>) -> Result<Vec<u8>, Unreachable> {
         let bytes = self.bytes_of(file)?;
-        let length = bytes.len() as u64;
-        if range.end > length || range.start > range.end {
-            return Err(Unreachable::PastTheEnd {
-                file: file.to_string(),
-                range,
-                length,
-            });
-        }
+        within(file, &range, bytes.len() as u64)?;
         Ok(bytes[range.start as usize..range.end as usize].to_vec())
     }
 }

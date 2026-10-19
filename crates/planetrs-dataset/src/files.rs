@@ -82,14 +82,7 @@ impl ForReadingFiles for DirectoryFiles {
     }
 
     fn read(&self, file: &str, range: Range<u64>) -> Result<Vec<u8>, Unreachable> {
-        let length = self.length(file)?;
-        if range.end > length || range.start > range.end {
-            return Err(Unreachable::PastTheEnd {
-                file: file.to_string(),
-                range,
-                length,
-            });
-        }
+        within(file, &range, self.length(file)?)?;
         let mut bytes = vec![0; (range.end - range.start) as usize];
         File::open(self.root.join(file))
             .and_then(|mut opened| {
@@ -99,6 +92,18 @@ impl ForReadingFiles for DirectoryFiles {
             .map_err(|error| unreachable_because(file, &error))?;
         Ok(bytes)
     }
+}
+
+/// Refuses a range that does not lie inside a file of `length` bytes, rather than shortening it.
+pub(crate) fn within(file: &str, range: &Range<u64>, length: u64) -> Result<(), Unreachable> {
+    if range.end > length || range.start > range.end {
+        return Err(Unreachable::PastTheEnd {
+            file: file.to_string(),
+            range: range.clone(),
+            length,
+        });
+    }
+    Ok(())
 }
 
 fn unreachable_because(file: &str, error: &io::Error) -> Unreachable {
