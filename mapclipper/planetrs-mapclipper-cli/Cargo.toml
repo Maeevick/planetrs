@@ -33,5 +33,8 @@ planetrs-geo.workspace = true
 planetrs-pbf.workspace = true
 clap.workspace = true
 
+[dev-dependencies]
+planetrs-pbf = { workspace = true, features = ["testing"] }
+
 [lints]
 workspace = true
