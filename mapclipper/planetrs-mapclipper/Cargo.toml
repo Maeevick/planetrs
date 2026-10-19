@@ -22,6 +22,7 @@ png = ["dep:resvg"]
 planetrs-pbf.workspace = true
 planetrs-geo.workspace = true
 rayon.workspace = true
+thiserror.workspace = true
 resvg = { version = "0.48", default-features = false, features = [
   "text",
   "system-fonts",

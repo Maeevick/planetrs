@@ -923,6 +923,7 @@ dependencies = [
  "planetrs-pbf",
  "rayon",
  "resvg",
+ "thiserror",
 ]
 
 [[package]]

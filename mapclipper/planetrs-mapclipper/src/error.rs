@@ -1,53 +1,97 @@
 //! What can go wrong cutting a map, and what to do about each.
 
-use std::fmt;
 use std::io;
 use std::path::{Path, PathBuf};
 
 use planetrs_geo::GeoError;
 use planetrs_pbf::PbfError;
 
-#[derive(Debug)]
+/// Why a map could not be cut. Each message says its own part and leaves the cause to `source`, so
+/// a chain of causes reads without repeating itself.
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum ClipError {
+    /// A file could not be read.
+    #[error("reading {}", path.display())]
     Reading {
+        /// The file.
         path: PathBuf,
+        /// Why it could not be read.
         source: io::Error,
     },
+    /// A file could not be written.
+    #[error("writing {}", path.display())]
     Writing {
+        /// The file.
         path: PathBuf,
+        /// Why it could not be written.
         source: io::Error,
     },
-    Planet(PbfError),
-    Area(GeoError),
+    /// The planet file could not be read as one.
+    #[error(transparent)]
+    Planet(#[from] PbfError),
+    /// The area asked for is not one this tool can collect.
+    #[error(transparent)]
+    Area(#[from] GeoError),
+    /// The file is not a harvest at all.
+    #[error("this file is not a harvest")]
     NotAHarvest,
+    /// The harvest was written by a build that wrote another version of the format.
+    #[error("this harvest is version {found} and this build reads version {expected}")]
     HarvestVersion {
+        /// The version the file states.
         found: u32,
+        /// The version this build reads.
         expected: u32,
     },
+    /// The harvest stops part way through.
+    #[error("this harvest ends part way through")]
     HarvestTruncated,
+    /// The harvest does not cover the ground the frame collects.
+    #[error("the harvest covers {collected} and the area asked for collects {wanted}")]
     HarvestTooSmall {
+        /// The ground the harvest covers, as a reader reads it.
         collected: String,
+        /// The ground the frame collects.
         wanted: String,
     },
+    /// A theme file holds a line it cannot be read from.
+    #[error("{}:{line}: {detail}", path.display())]
     Theme {
+        /// The theme file.
         path: PathBuf,
+        /// The line, from 1.
         line: usize,
+        /// What is wrong with it.
         detail: String,
     },
+    /// No built-in theme has that name, and no file is at that path.
+    #[error("no theme called {named}")]
     UnknownTheme {
+        /// The name asked for.
         named: String,
+        /// The themes built in.
         known: Vec<String>,
     },
+    /// The icon file holds no drawing.
+    #[error("{}: no <svg> element with a drawing in it", path.display())]
     NotAnIcon {
+        /// The icon file.
         path: PathBuf,
     },
+    /// The canvas has no pixel one way or the other.
+    #[error("the canvas must be at least one pixel each way")]
     CanvasNotPositive,
+    /// The picture could not be rasterised.
+    #[error("the svg did not rasterise: {detail}")]
     Raster {
+        /// What the rasteriser said.
         detail: String,
     },
 }
 
 impl ClipError {
+    /// A file that could not be read, and why.
     pub fn reading(path: &Path, source: io::Error) -> Self {
         Self::Reading {
             path: path.to_path_buf(),
@@ -55,6 +99,7 @@ impl ClipError {
         }
     }
 
+    /// A file that could not be written, and why.
     pub fn writing(path: &Path, source: io::Error) -> Self {
         Self::Writing {
             path: path.to_path_buf(),
@@ -82,61 +127,6 @@ impl ClipError {
             ),
             _ => None,
         }
-    }
-}
-
-impl fmt::Display for ClipError {
-    fn fmt(&self, out: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Reading { path, source } => write!(out, "reading {}: {source}", path.display()),
-            Self::Writing { path, source } => write!(out, "writing {}: {source}", path.display()),
-            Self::Planet(error) => write!(out, "{error}"),
-            Self::Area(error) => write!(out, "{error}"),
-            Self::NotAHarvest => write!(out, "this file is not a harvest"),
-            Self::HarvestVersion { found, expected } => {
-                write!(
-                    out,
-                    "this harvest is version {found} and this build reads version {expected}"
-                )
-            }
-            Self::HarvestTruncated => write!(out, "this harvest ends part way through"),
-            Self::HarvestTooSmall { collected, wanted } => write!(
-                out,
-                "the harvest covers {collected} and the area asked for collects {wanted}"
-            ),
-            Self::Theme { path, line, detail } => {
-                write!(out, "{}:{line}: {detail}", path.display())
-            }
-            Self::UnknownTheme { named, .. } => write!(out, "no theme called {named}"),
-            Self::NotAnIcon { path } => {
-                write!(out, "{}: no <svg> element with a drawing in it", path.display())
-            }
-            Self::CanvasNotPositive => write!(out, "the canvas must be at least one pixel each way"),
-            Self::Raster { detail } => write!(out, "the svg did not rasterise: {detail}"),
-        }
-    }
-}
-
-impl std::error::Error for ClipError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::Reading { source, .. } | Self::Writing { source, .. } => Some(source),
-            Self::Planet(error) => Some(error),
-            Self::Area(error) => Some(error),
-            _ => None,
-        }
-    }
-}
-
-impl From<PbfError> for ClipError {
-    fn from(error: PbfError) -> Self {
-        Self::Planet(error)
-    }
-}
-
-impl From<GeoError> for ClipError {
-    fn from(error: GeoError) -> Self {
-        Self::Area(error)
     }
 }
 
