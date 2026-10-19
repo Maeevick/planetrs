@@ -70,6 +70,25 @@ pub fn record(
     rows: u64,
 ) -> Result<Manifest, RecordError> {
     std::fs::create_dir_all(directory).map_err(io_at(directory))?;
+    let recorded = of_the_same_planet(directory, planet)?;
+    write_whole(&directory.join(name), bytes)?;
+    listed(
+        directory,
+        recorded,
+        Entry {
+            part,
+            file: name.to_string(),
+            url: None,
+            bytes: bytes.len() as u64,
+            sha256: sha256_of(bytes),
+            rows,
+        },
+    )
+}
+
+/// The manifest already in `directory`, or an empty one for `planet`, refused when the dataset
+/// answers for another planet.
+fn of_the_same_planet(directory: &Path, planet: &Provenance) -> Result<Manifest, RecordError> {
     let recorded = recorded_in(directory)?.unwrap_or_else(|| Manifest {
         planet: planet.clone(),
         files: Vec::new(),
@@ -80,20 +99,17 @@ pub fn record(
             offered: Box::new(planet.clone()),
         });
     }
-    write_whole(&directory.join(name), bytes)?;
+    Ok(recorded)
+}
+
+/// The manifest with `entry` in place of any entry of the same part, written whole.
+fn listed(directory: &Path, recorded: Manifest, entry: Entry) -> Result<Manifest, RecordError> {
     let mut files: Vec<Entry> = recorded
         .files
         .into_iter()
-        .filter(|entry| entry.part != part)
+        .filter(|listed| listed.part != entry.part)
         .collect();
-    files.push(Entry {
-        part,
-        file: name.to_string(),
-        url: None,
-        bytes: bytes.len() as u64,
-        sha256: sha256_of(bytes),
-        rows,
-    });
+    files.push(entry);
     files.sort_by(|left, right| left.part.cmp(&right.part));
     let manifest = Manifest {
         planet: recorded.planet,
@@ -118,11 +134,51 @@ pub fn record_written(
     name: &str,
     rows: u64,
 ) -> Result<Manifest, RecordError> {
-    let _ = (directory, planet, part, name, rows);
-    Err(RecordError::Io {
-        path: directory.to_path_buf(),
-        source: std::io::Error::other("not yet"),
-    })
+    let written = written_beside(directory, name);
+    let recorded = match of_the_same_planet(directory, planet) {
+        Ok(recorded) => recorded,
+        Err(refused) => {
+            let _ = std::fs::remove_file(&written);
+            return Err(refused);
+        }
+    };
+    let (bytes, sha256) = measured(&written)?;
+    std::fs::rename(&written, directory.join(name)).map_err(io_at(&written))?;
+    listed(
+        directory,
+        recorded,
+        Entry {
+            part,
+            file: name.to_string(),
+            url: None,
+            bytes,
+            sha256,
+            rows,
+        },
+    )
+}
+
+/// The length and the SHA-256 of a file, read a megabyte at a time.
+fn measured(path: &Path) -> Result<(u64, String), RecordError> {
+    use std::io::Read;
+    let mut file = std::fs::File::open(path).map_err(io_at(path))?;
+    let mut hasher = Sha256::new();
+    let mut buffer = vec![0u8; 1 << 20];
+    let mut length = 0u64;
+    loop {
+        let read = file.read(&mut buffer).map_err(io_at(path))?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+        length += read as u64;
+    }
+    let sha256 = hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    Ok((length, sha256))
 }
 
 /// What carrying a dataset's parts into a rebuild brought in and left behind.
