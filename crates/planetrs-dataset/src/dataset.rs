@@ -309,15 +309,45 @@ impl MapIndex {
 impl<F: ForReadingFiles> Dataset<F> {
     /// The map index of every country the dataset holds one of, each with only its footer read.
     pub fn map_indexes(&self) -> Result<Vec<MapIndex>, DatasetError> {
-        Ok(Vec::new())
+        self.manifest
+            .files
+            .iter()
+            .filter_map(|entry| match &entry.part {
+                Part::MapIndex { country } => Some((country, entry)),
+                _ => None,
+            })
+            .map(|(country, entry)| {
+                self.footer_of(entry).map(|footer| MapIndex {
+                    country: country.clone(),
+                    entry: entry.clone(),
+                    footer,
+                })
+            })
+            .collect()
     }
 
     /// The elements of every row group of `index` whose rows' boxes may touch `bounds`, as west,
-    /// south, east and north in degrees.
+    /// south, east and north in degrees. A row group whose footer states no bounds is read, since it
+    /// cannot be ruled out.
     pub fn elements_near(&self, index: &MapIndex, bounds: [f64; 4]) -> Result<Vec<Element>, DatasetError> {
-        let _ = (&index.entry, bounds);
-        Ok(Vec::new())
+        let mut elements = Vec::new();
+        for (group, around) in index.footer.row_group_bounds("bbox") {
+            if around.is_some_and(|around| !touch(around, bounds)) {
+                continue;
+            }
+            let columns = self.row_group_of(&index.entry, &index.footer, &group)?;
+            elements.extend(
+                crate::map_index::elements_in(&columns)
+                    .map_err(|source| table_error(&index.entry, source))?,
+            );
+        }
+        Ok(elements)
     }
+}
+
+/// Whether two boxes, each west, south, east and north, share any point.
+fn touch(one: [f64; 4], other: [f64; 4]) -> bool {
+    one[0] <= other[2] && other[0] <= one[2] && one[1] <= other[3] && other[1] <= one[3]
 }
 
 fn table_error(entry: &Entry, source: TableError) -> DatasetError {

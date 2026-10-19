@@ -241,7 +241,7 @@ pub fn from_parquet(bytes: &[u8]) -> Result<(Grid, Vec<Element>), TableError> {
         return Err(unexpected("footer"));
     };
     let grid = grid_in(&footer).ok_or_else(|| unexpected(GRID))?;
-    Ok((grid, elements_of(&tables::read(bytes)?)?))
+    Ok((grid, elements_in(&tables::read(bytes)?)?))
 }
 
 /// One row of the file: an element, or one member way of a multipolygon.
@@ -456,7 +456,7 @@ fn columns_of(rows: Vec<Row>) -> Vec<Column> {
 }
 
 /// The elements a file's rows stand for, each multipolygon gathered with the member rows after it.
-fn elements_of(columns: &[Column]) -> Result<Vec<Element>, TableError> {
+pub(crate) fn elements_in(columns: &[Column]) -> Result<Vec<Element>, TableError> {
     let kinds = texts(columns, "kind")?;
     let ids = integers(columns, "id")?;
     let relations = optional_integers(columns, "relation")?;

@@ -426,6 +426,34 @@ impl Footer {
             .collect()
     }
 
+    /// Every row group, with the box around the boxes of its rows in the struct column `name`, when
+    /// the footer carries their statistics: the lowest `xmin` and `ymin` and the highest `xmax` and
+    /// `ymax`, which is what a reader picks the row groups near a box by.
+    pub(crate) fn row_group_bounds(&self, name: &str) -> Vec<(RowGroupBytes, Option<[f64; 4]>)> {
+        let columns = self.metadata.file_metadata().schema_descr().columns();
+        let leaves: Vec<Option<usize>> = BOX_FIELDS
+            .iter()
+            .map(|field| {
+                columns
+                    .iter()
+                    .position(|column| column.path().parts() == [name.to_string(), field.to_string()])
+            })
+            .collect();
+        self.row_groups(name)
+            .into_iter()
+            .map(|group| {
+                let row_group = self.metadata.row_group(group.index);
+                let edge = |at: usize, lowest: bool| match row_group.column(leaves[at]?).statistics() {
+                    Some(Statistics::Double(span)) if lowest => span.min_opt().copied(),
+                    Some(Statistics::Double(span)) => span.max_opt().copied(),
+                    _ => None,
+                };
+                let bounds = (|| Some([edge(0, true)?, edge(1, true)?, edge(2, false)?, edge(3, false)?]))();
+                (group, bounds)
+            })
+            .collect()
+    }
+
     /// The columns of one row group, decoded from the bytes of its range alone.
     pub(crate) fn read_row_group(
         &self,
