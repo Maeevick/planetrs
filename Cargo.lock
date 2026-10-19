@@ -885,6 +885,7 @@ version = "0.1.0"
 name = "planetrs-geocoder"
 version = "0.1.0"
 dependencies = [
+ "planetrs-dataset",
  "planetrs-pbf",
  "rayon",
  "thiserror",

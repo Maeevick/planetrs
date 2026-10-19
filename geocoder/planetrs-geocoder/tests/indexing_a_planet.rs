@@ -6,6 +6,7 @@
 
 use std::path::PathBuf;
 
+use planetrs_dataset::{Manifest, Part};
 use planetrs_geocoder::{Geocoder, Precision, Site, build_index};
 use planetrs_pbf::testing::{MemberKind, Node, PlanetFile, Relation, Way};
 
@@ -160,5 +161,29 @@ fn given_the_only_shop_of_a_label_when_its_site_has_no_address_then_the_shop_ans
     assert_eq!(answer.precision, Precision::Shop);
     assert!(reads_about(answer.latitude(), SHOP.0), "{}", answer.latitude());
     assert!(reads_about(answer.longitude(), SHOP.1), "{}", answer.longitude());
+    Ok(())
+}
+
+#[test]
+fn given_a_planet_indexed_for_france_when_its_directory_is_read_then_a_manifest_lists_the_gazetteer_and_frances_index()
+-> Outcome {
+    let directory = scratch("manifest");
+    std::fs::create_dir_all(&directory)?;
+    let planet = directory.join("yonne.osm.pbf");
+    yonne().write(&planet)?;
+    let index = directory.join("index");
+
+    build_index(&planet, &index, &["FR"], &|_| {})?;
+
+    let manifest = Manifest::from_json(&std::fs::read_to_string(index.join("manifest.json"))?)?;
+    assert_eq!(
+        manifest
+            .files
+            .iter()
+            .map(|entry| entry.part.clone())
+            .collect::<Vec<_>>(),
+        vec![Part::Gazetteer, Part::GeocoderIndex { country: "FR".into() }]
+    );
+    assert_eq!(manifest.planet.source_name, "yonne.osm.pbf");
     Ok(())
 }
