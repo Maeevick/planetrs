@@ -169,6 +169,19 @@ impl Coverage {
         })
     }
 
+    /// The coverage as text, as a map index's footer keeps it: the cell size, then each row with
+    /// its runs of columns, `0.01;4372:740-743,750-751;4373:740-743`.
+    pub fn to_text(&self) -> String {
+        let _ = self;
+        String::new()
+    }
+
+    /// The coverage text stands for, or nothing when it is not one, or one of another cell size.
+    pub fn from_text(text: &str) -> Option<Coverage> {
+        let _ = text;
+        None
+    }
+
     fn holds(&self, row: i32, column: i32) -> bool {
         self.rows.get(&row).is_some_and(|runs| {
             let after = runs.partition_point(|(first, _)| *first <= column);
@@ -360,5 +373,19 @@ mod tests {
             !Coverage::cover(&coverages, &box_(7.42, 43.70, 7.47, 43.75)),
             "across Monaco's outer border"
         );
+    }
+
+    #[test]
+    fn given_a_coverage_when_written_as_text_and_read_back_then_it_is_the_same_coverage() {
+        let (france, monaco) = riviera();
+        let coverages = Coverage::of_each(&[&france, &monaco]);
+
+        let read: Vec<Option<Coverage>> = coverages
+            .iter()
+            .map(|coverage| Coverage::from_text(&coverage.to_text()))
+            .collect();
+
+        assert_eq!(read, coverages.into_iter().map(Some).collect::<Vec<_>>());
+        assert_eq!(Coverage::from_text("0.05;1:1-2"), None, "another cell size");
     }
 }
