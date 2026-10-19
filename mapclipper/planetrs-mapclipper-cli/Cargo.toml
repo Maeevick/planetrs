@@ -28,7 +28,7 @@ png = ["planetrs-mapclipper/png"]
 
 [dependencies]
 planetrs-cli.workspace = true
-planetrs-dataset.workspace = true
+planetrs-dataset = { workspace = true, features = ["remote"] }
 planetrs-mapclipper.workspace = true
 planetrs-geo.workspace = true
 planetrs-pbf.workspace = true
