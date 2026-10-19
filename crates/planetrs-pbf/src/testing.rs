@@ -146,6 +146,7 @@ const GRANULARITY: i64 = 100;
 pub struct PlanetFile {
     writing_program: String,
     replication: Option<(i64, i64)>,
+    entities_per_blob: usize,
     nodes: Vec<Node>,
     ways: Vec<Way>,
     relations: Vec<Relation>,
@@ -157,6 +158,7 @@ impl PlanetFile {
         Self {
             writing_program: FIXTURE_PROGRAM.to_string(),
             replication: None,
+            entities_per_blob: usize::MAX,
             nodes: Vec::new(),
             ways: Vec::new(),
             relations: Vec::new(),
@@ -166,6 +168,13 @@ impl PlanetFile {
     /// The same planet stamped with the minute of OSM history it would be a snapshot of.
     pub fn replicated_at(mut self, timestamp: i64, sequence: i64) -> Self {
         self.replication = Some((timestamp, sequence));
+        self
+    }
+
+    /// The same planet cut into blobs of at most `entities` nodes, ways or relations each, so that a
+    /// section spans several blobs as it does in a real planet, where a blob holds 8 000.
+    pub fn in_blobs_of(mut self, entities: usize) -> Self {
+        self.entities_per_blob = entities.max(1);
         self
     }
 
@@ -432,7 +441,7 @@ mod tests {
     use crate::block::block;
     use crate::entity::{dense_group, visit_relations, visit_ways};
     use crate::error::PbfError;
-    use crate::planet::Planet;
+    use crate::planet::{Planet, Sections};
 
     fn text(bytes: &[u8]) -> String {
         String::from_utf8_lossy(bytes).into_owned()
@@ -675,6 +684,37 @@ mod tests {
         assert_eq!(opened.header.replication_timestamp, Some(1_788_739_204));
         assert_eq!(opened.header.replication_sequence, Some(4_321));
         assert_eq!(opened.fingerprint().replication_timestamp, 1_788_739_204);
+        Ok(())
+    }
+
+    #[test]
+    fn given_a_fixture_in_small_blobs_when_opened_then_each_section_spans_its_own_blobs_in_order()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let fixture = (1..=5)
+            .fold(PlanetFile::sorted().in_blobs_of(2), |planet, id| {
+                planet.with_node(Node::at(id, 43.73, 7.42))
+            })
+            .with_way(Way::through(10, [1, 2]))
+            .with_way(Way::through(11, [2, 3]))
+            .with_way(Way::through(12, [3, 4]))
+            .with_relation(Relation::of(100).with_member(MemberKind::Way, 10, "outer"))
+            .with_relation(Relation::of(101).with_member(MemberKind::Way, 11, "outer"));
+        let path = written(&fixture, "blobs")?;
+
+        let opened = Planet::open(&path)?;
+
+        assert_eq!(
+            opened.sections()?,
+            Sections {
+                nodes: 0..3,
+                ways: 3..5,
+                relations: 5..6,
+            }
+        );
+        assert_eq!(
+            nodes_of(&opened)?.iter().map(|node| node.id).collect::<Vec<_>>(),
+            vec![1, 2, 3, 4, 5]
+        );
         Ok(())
     }
 }
