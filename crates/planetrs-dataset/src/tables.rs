@@ -629,3 +629,55 @@ pub(crate) fn optional_bytes<'a>(
         _ => Err(kind_mismatch(name)),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn a_small_table() -> Result<Vec<u8>, TableError> {
+        write(
+            &[vec![Column::of(
+                "relation",
+                Values::Integers(vec![946_433, 1_402_847]),
+            )]],
+            &[],
+            &["relation"],
+        )
+    }
+
+    #[test]
+    fn given_a_tail_shorter_than_the_footer_when_read_then_it_says_how_many_bytes_from_the_end_are_needed()
+    -> Result<(), TableError> {
+        let file = a_small_table()?;
+        let length = file.len() as u64;
+
+        let read = footer_from_tail(&file[file.len() - 12..], length)?;
+
+        assert!(
+            matches!(read, Tail::Short { needed } if needed > 12 && needed <= length),
+            "{read:?}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn given_a_tail_holding_the_whole_footer_when_read_then_its_row_groups_come_with_their_spans()
+    -> Result<(), TableError> {
+        let file = a_small_table()?;
+
+        let read = footer_from_tail(&file, file.len() as u64)?;
+
+        let Tail::Footer(footer) = read else {
+            return Err(unreadable("the footer was not found"));
+        };
+        let groups = footer.row_groups("relation");
+        assert_eq!(
+            groups
+                .iter()
+                .map(|group| (group.index, group.lowest, group.highest))
+                .collect::<Vec<_>>(),
+            vec![(0, Some(946_433), Some(1_402_847))]
+        );
+        Ok(())
+    }
+}
