@@ -34,6 +34,12 @@ pub fn line_string(vertices: &[[f64; 2]]) -> Vec<u8> {
     bytes
 }
 
+/// A collection of no geometry as WKB, which a multipolygon's own row carries while its members'
+/// rows carry its shape.
+pub fn empty_collection() -> Vec<u8> {
+    Vec::new()
+}
+
 /// Why bytes could not be read as the geometry asked for.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WkbError {
@@ -150,5 +156,16 @@ mod tests {
         .concat();
         assert_eq!(written, expected);
         assert_eq!(read_line_string(&written), Ok(vertices.to_vec()));
+    }
+
+    #[test]
+    fn given_no_geometry_when_written_as_a_wkb_collection_then_it_is_a_byte_order_a_type_and_a_count_of_none()
+    {
+        let written = empty_collection();
+
+        assert_eq!(
+            written,
+            [[0x01].as_slice(), &7u32.to_le_bytes(), &0u32.to_le_bytes()].concat()
+        );
     }
 }
