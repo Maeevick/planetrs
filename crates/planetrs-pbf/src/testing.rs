@@ -434,7 +434,7 @@ mod tests {
     use std::path::PathBuf;
 
     use super::*;
-    use crate::block::block;
+    use crate::block::{Block, block};
     use crate::entity::{dense_group, visit_relations, visit_ways};
     use crate::error::PbfError;
     use crate::planet::{Planet, Sections};
@@ -443,94 +443,92 @@ mod tests {
         String::from_utf8_lossy(bytes).into_owned()
     }
 
-    fn nodes_of(planet: &Planet) -> Result<Vec<Node>, PbfError> {
-        let mut found = Vec::new();
+    fn texts(pairs: Vec<(&[u8], &[u8])>) -> Tags {
+        pairs
+            .into_iter()
+            .map(|(key, value)| (text(key), text(value)))
+            .collect()
+    }
+
+    /// Hands every group of every blob to `on`, with the block it belongs to.
+    fn each_group(
+        planet: &Planet,
+        mut on: impl FnMut(&Block<'_>, &[u8]) -> Result<(), PbfError>,
+    ) -> Result<(), PbfError> {
         let (mut payload, mut inflated) = (Vec::new(), Vec::new());
         for at in 0..planet.blobs.len() {
             planet.inflate_blob(at, &mut payload, &mut inflated)?;
             let decoded = block(&inflated)?;
             for group in &decoded.groups {
-                let Some(dense) = dense_group(group)? else {
-                    continue;
-                };
-                dense.visit_tagged(&mut |id, latitude, longitude, tags| {
-                    found.push(Node {
-                        id,
-                        latitude: decoded.nanodegrees_latitude(latitude),
-                        longitude: decoded.nanodegrees_longitude(longitude),
-                        tags: tags
-                            .iter()
-                            .map(|(key, value)| {
-                                (
-                                    text(decoded.string(*key as usize)),
-                                    text(decoded.string(*value as usize)),
-                                )
-                            })
-                            .collect(),
-                    })
-                })?;
+                on(&decoded, group)?;
             }
         }
+        Ok(())
+    }
+
+    fn nodes_of(planet: &Planet) -> Result<Vec<Node>, PbfError> {
+        let mut found = Vec::new();
+        each_group(planet, |decoded, group| {
+            let Some(dense) = dense_group(group)? else {
+                return Ok(());
+            };
+            dense.visit_tagged(&mut |id, latitude, longitude, tags| {
+                found.push(Node {
+                    id,
+                    latitude: decoded.nanodegrees_latitude(latitude),
+                    longitude: decoded.nanodegrees_longitude(longitude),
+                    tags: texts(
+                        tags.iter()
+                            .map(|(key, value)| {
+                                (decoded.string(*key as usize), decoded.string(*value as usize))
+                            })
+                            .collect(),
+                    ),
+                })
+            })
+        })?;
         Ok(found)
     }
 
     fn ways_of(planet: &Planet) -> Result<Vec<Way>, PbfError> {
         let mut found = Vec::new();
-        let (mut payload, mut inflated) = (Vec::new(), Vec::new());
-        for at in 0..planet.blobs.len() {
-            planet.inflate_blob(at, &mut payload, &mut inflated)?;
-            let decoded = block(&inflated)?;
-            for group in &decoded.groups {
-                visit_ways(group, &mut |way| {
-                    found.push(Way {
-                        id: way.id,
-                        tags: way
-                            .tags(&decoded)
-                            .iter()
-                            .map(|(key, value)| (text(key), text(value)))
-                            .collect(),
-                        refs: way.refs().collect::<Result<_, _>>()?,
-                    });
-                    Ok(())
-                })?;
-            }
-        }
+        each_group(planet, |decoded, group| {
+            visit_ways(group, &mut |way| {
+                found.push(Way {
+                    id: way.id,
+                    tags: texts(way.tags(decoded)),
+                    refs: way.refs().collect::<Result<_, _>>()?,
+                });
+                Ok(())
+            })
+        })?;
         Ok(found)
     }
 
     fn relations_of(planet: &Planet) -> Result<Vec<Relation>, PbfError> {
         let mut found = Vec::new();
-        let (mut payload, mut inflated) = (Vec::new(), Vec::new());
-        for at in 0..planet.blobs.len() {
-            planet.inflate_blob(at, &mut payload, &mut inflated)?;
-            let decoded = block(&inflated)?;
-            for group in &decoded.groups {
-                visit_relations(group, &mut |relation| {
-                    found.push(Relation {
-                        id: relation.id,
-                        tags: relation
-                            .tags(&decoded)
-                            .iter()
-                            .map(|(key, value)| (text(key), text(value)))
-                            .collect(),
-                        members: relation
-                            .members(&decoded)
-                            .iter()
-                            .map(|(id, kind, role)| Member {
-                                kind: match *kind {
-                                    MEMBER_NODE => MemberKind::Node,
-                                    MEMBER_WAY => MemberKind::Way,
-                                    _ => MemberKind::Relation,
-                                },
-                                id: *id,
-                                role: text(role),
-                            })
-                            .collect(),
-                    });
-                    Ok(())
-                })?;
-            }
-        }
+        each_group(planet, |decoded, group| {
+            visit_relations(group, &mut |relation| {
+                found.push(Relation {
+                    id: relation.id,
+                    tags: texts(relation.tags(decoded)),
+                    members: relation
+                        .members(decoded)
+                        .iter()
+                        .map(|(id, kind, role)| Member {
+                            kind: match *kind {
+                                MEMBER_NODE => MemberKind::Node,
+                                MEMBER_WAY => MemberKind::Way,
+                                _ => MemberKind::Relation,
+                            },
+                            id: *id,
+                            role: text(role),
+                        })
+                        .collect(),
+                });
+                Ok(())
+            })
+        })?;
         Ok(found)
     }
 
