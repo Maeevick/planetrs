@@ -191,4 +191,27 @@ mod tests {
         assert!(error.to_string().contains("/tmp/absent.mapclip"));
         assert!(std::error::Error::source(&error).is_some());
     }
+
+    /// The failure and its causes, joined as a command line prints them.
+    fn joined(error: &dyn std::error::Error) -> String {
+        let mut text = error.to_string();
+        let mut cause = error.source();
+        while let Some(source) = cause {
+            text.push_str(&format!(": {source}"));
+            cause = source.source();
+        }
+        text
+    }
+
+    #[test]
+    fn given_failures_with_causes_when_joined_with_them_then_each_cause_is_said_once() {
+        let unread = ClipError::reading(Path::new("/tmp/absent.mapclip"), io::Error::other("no such file"));
+        let unsorted = ClipError::from(PbfError::UnsortedSections);
+
+        assert_eq!(joined(&unread), "reading /tmp/absent.mapclip: no such file");
+        assert_eq!(
+            joined(&unsorted),
+            "the file does not declare Sort.Type_then_ID, so its sections cannot be bisected"
+        );
+    }
 }
