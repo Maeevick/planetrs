@@ -17,6 +17,8 @@ pub mod error;
 pub mod header;
 pub mod planet;
 pub mod proto;
+#[cfg(any(test, feature = "testing"))]
+pub mod testing;
 
 pub use blob::{BlobKind, Framing, Location};
 pub use block::{Block, Contents, IdSpan, Section, block, block_contents, contents, id_span, inflate};

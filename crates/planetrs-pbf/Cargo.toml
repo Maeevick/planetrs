@@ -12,6 +12,10 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 
+[features]
+# Writing small planet files, for the tests of whatever reads them.
+testing = []
+
 [dependencies]
 flate2.workspace = true
 
