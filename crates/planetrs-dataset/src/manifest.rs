@@ -123,11 +123,13 @@ impl Manifest {
 
     /// A manifest read from its JSON file.
     pub fn from_json(text: &str) -> Result<Self, ManifestError> {
-        serde_json::from_str::<Read>(text)
-            .map(|read| read.manifest)
-            .map_err(|error| ManifestError::NotAManifest {
-                detail: error.to_string(),
-            })
+        let read: Read = serde_json::from_str(text).map_err(|error| ManifestError::NotAManifest {
+            detail: error.to_string(),
+        })?;
+        if read.format != FORMAT {
+            return Err(ManifestError::UnknownFormat { found: read.format });
+        }
+        Ok(read.manifest)
     }
 }
 
@@ -144,6 +146,7 @@ struct Written<'a> {
 /// The manifest as read: the licence and the credit are the format's, so only the format is kept.
 #[derive(Deserialize)]
 struct Read {
+    format: String,
     #[serde(flatten)]
     manifest: Manifest,
 }
