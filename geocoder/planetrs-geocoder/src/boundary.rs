@@ -8,6 +8,8 @@
 //! other countries, so the level is recorded rather than assumed. What a given level means locally
 //! is a question for whoever queries the gazetteer, not for whoever builds it.
 
+use planetrs_dataset::territory::country_code;
+
 use crate::text::{FRENCH, comparison_key};
 
 /// The levels worth indexing for geocoding: below a region and no finer than a neighbourhood.
@@ -131,7 +133,6 @@ pub struct Country {
     pub names: Vec<String>,
 }
 
-const COUNTRY_LEVEL: &str = "2";
 const COUNTRY_NAME_KEYS: [&str; 6] = [
     "name",
     "name:en",
@@ -141,24 +142,16 @@ const COUNTRY_NAME_KEYS: [&str; 6] = [
     "short_name",
 ];
 
-/// Reads a country out of a relation's tags, or nothing when they describe something else.
-///
-/// A level-2 boundary with no ISO code is left out on purpose. Disputed and historical areas are
-/// mapped at that level too, and treating one as a country would let it claim communes.
+/// Reads a country out of a relation's tags, or nothing when they describe something else, by the
+/// rule every part of the dataset follows, [`country_code`].
 pub fn country_of(tags: &[(String, String)]) -> Option<Country> {
+    let code = country_code(tags)?;
     let value_of = |wanted: &str| {
         tags.iter()
             .find(|(key, _)| key == wanted)
             .map(|(_, value)| value.as_str())
             .filter(|value| !value.is_empty())
     };
-
-    if value_of("boundary") != Some("administrative") || value_of("admin_level") != Some(COUNTRY_LEVEL) {
-        return None;
-    }
-    let code = value_of("ISO3166-1")
-        .or_else(|| value_of("ISO3166-1:alpha2"))?
-        .to_string();
 
     let mut names: Vec<String> = Vec::new();
     for key in COUNTRY_NAME_KEYS {

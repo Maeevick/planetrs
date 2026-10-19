@@ -21,6 +21,7 @@ pub mod http;
 pub mod location;
 pub mod manifest;
 mod tables;
+pub mod territory;
 #[cfg(any(test, feature = "testing"))]
 pub mod testing;
 

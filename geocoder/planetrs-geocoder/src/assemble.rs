@@ -10,7 +10,8 @@ use rayon::prelude::*;
 use crate::boundary::Country;
 use crate::gazetteer::Commune;
 use crate::harvest::Harvest;
-use planetrs_geo::outline::{Outline, join_into_rings};
+use planetrs_dataset::territory::outline_of;
+use planetrs_geo::Outline;
 
 /// Each way's node identifiers, as the ways pass read them.
 pub type WayNodes = HashMap<i64, Vec<i64>>;
@@ -63,17 +64,10 @@ pub fn assemble(harvest: &Harvest, ways: &WayNodes, nodes: &NodePositions) -> As
 
     let mut outlines: Vec<(String, Outline)> = Vec::new();
     for (code, country_ways) in &ways_of_country {
-        let joined = join_into_rings(country_ways);
-        report.broken_chains += joined.broken_chains;
-        let mut rings = Vec::new();
-        for ring in joined.rings {
-            let points: Option<Vec<[f64; 2]>> = ring.iter().map(|id| nodes.get(id).copied()).collect();
-            match points {
-                Some(points) => rings.push(points),
-                None => report.rings_missing_nodes += 1,
-            }
-        }
-        let outline = Outline::of(rings);
+        let outlined = outline_of(country_ways, |id| nodes.get(&id).copied());
+        report.broken_chains += outlined.broken_chains;
+        report.rings_missing_nodes += outlined.rings_missing_nodes;
+        let outline = outlined.outline;
         if outline.is_empty() {
             report.countries_without_outline.push(code.clone());
         } else {
