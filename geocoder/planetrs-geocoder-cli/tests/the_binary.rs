@@ -423,3 +423,48 @@ fn given_a_dataset_holding_a_map_index_of_the_same_planet_when_indexed_again_the
         b"a map of France"
     );
 }
+
+#[test]
+fn given_a_dataset_holding_a_map_index_of_another_planet_when_indexed_from_a_newer_one_then_the_map_index_is_left_out_and_named()
+ {
+    let directory = scratch("leaves-old-maps");
+    let dataset = index_in(&directory);
+    let map_of_france = Part::MapIndex { country: "FR".into() };
+    record(
+        &dataset,
+        &manifest_of(&dataset).planet,
+        map_of_france.clone(),
+        "map-FR.parquet",
+        b"a map of France",
+        1,
+    )
+    .unwrap();
+    let newer = directory.join("yonne-newer.osm.pbf");
+    yonne().replicated_at(1_788_739_204, 4_321).write(&newer).unwrap();
+
+    let rebuilt = run(
+        &directory,
+        &[
+            "--dataset",
+            &dataset.display().to_string(),
+            "index",
+            "--planet",
+            &newer.display().to_string(),
+            "--countries",
+            "FR",
+        ],
+    );
+
+    assert!(rebuilt.status.success(), "{}", text(&rebuilt.stderr));
+    assert!(
+        text(&rebuilt.stderr).contains("left out the map index of FR, built from another planet"),
+        "{}",
+        text(&rebuilt.stderr)
+    );
+    assert!(
+        manifest_of(&dataset)
+            .files
+            .iter()
+            .all(|entry| entry.part != map_of_france)
+    );
+}
