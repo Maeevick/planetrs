@@ -3,7 +3,9 @@
 use std::path::PathBuf;
 
 use crate::dataset::DatasetError;
-use crate::files::ForReadingFiles;
+#[cfg(not(feature = "remote"))]
+use crate::files::Unreachable;
+use crate::files::{DirectoryFiles, ForReadingFiles};
 
 /// Where a dataset is.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -18,14 +20,34 @@ impl Location {
     /// The location a command line or a setting names: a web address when it starts with
     /// `http://` or `https://`, a directory otherwise.
     pub fn of(named: &str) -> Self {
-        let _ = named;
-        Self::Directory(PathBuf::new())
+        if named.starts_with("http://") || named.starts_with("https://") {
+            Self::Address(named.to_string())
+        } else {
+            Self::Directory(PathBuf::from(named))
+        }
     }
 
     /// The files of the dataset there, read the way the location calls for.
     pub fn files(&self) -> Result<Box<dyn ForReadingFiles>, DatasetError> {
-        Err(DatasetError::NoGazetteer)
+        match self {
+            Self::Directory(directory) => Ok(Box::new(DirectoryFiles::at(directory))),
+            Self::Address(address) => over_http(address),
+        }
     }
+}
+
+#[cfg(feature = "remote")]
+fn over_http(address: &str) -> Result<Box<dyn ForReadingFiles>, DatasetError> {
+    Ok(Box::new(crate::http::HttpFiles::at(address)))
+}
+
+#[cfg(not(feature = "remote"))]
+fn over_http(address: &str) -> Result<Box<dyn ForReadingFiles>, DatasetError> {
+    Err(DatasetError::Unreachable(Unreachable::Failed {
+        file: address.to_string(),
+        detail: "this build reads datasets from a directory only; its `remote` feature reads them over HTTP"
+            .into(),
+    }))
 }
 
 #[cfg(test)]
