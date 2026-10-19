@@ -73,6 +73,57 @@ impl Way {
     }
 }
 
+/// What a relation member is, with the codes the format gives each kind.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MemberKind {
+    Node,
+    Way,
+    Relation,
+}
+
+/// One member of a fixture relation: its kind, its id and its role, which may be empty.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Member {
+    pub kind: MemberKind,
+    pub id: i64,
+    pub role: String,
+}
+
+/// A relation of a fixture: its tags and its members, in order.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Relation {
+    pub id: i64,
+    pub tags: Tags,
+    pub members: Vec<Member>,
+}
+
+impl Relation {
+    /// A relation with no tags and no members yet.
+    pub fn of(id: i64) -> Self {
+        Self {
+            id,
+            tags: Vec::new(),
+            members: Vec::new(),
+        }
+    }
+
+    /// The same relation with one more tag, after the ones it already has.
+    pub fn tagged(mut self, key: &str, value: &str) -> Self {
+        self.tags.push((key.to_string(), value.to_string()));
+        self
+    }
+
+    /// The same relation with one more member, after the ones it already has.
+    pub fn with_member(mut self, kind: MemberKind, id: i64, role: &str) -> Self {
+        self.members.push(Member {
+            kind,
+            id,
+            role: role.to_string(),
+        });
+        self
+    }
+}
+
 fn on_the_planet_grid(degrees: f64) -> i64 {
     (degrees * 1e7).round() as i64 * GRANULARITY
 }
@@ -86,6 +137,7 @@ pub struct PlanetFile {
     writing_program: String,
     nodes: Vec<Node>,
     ways: Vec<Way>,
+    relations: Vec<Relation>,
 }
 
 impl PlanetFile {
@@ -95,6 +147,7 @@ impl PlanetFile {
             writing_program: FIXTURE_PROGRAM.to_string(),
             nodes: Vec::new(),
             ways: Vec::new(),
+            relations: Vec::new(),
         }
     }
 
@@ -107,6 +160,12 @@ impl PlanetFile {
     /// The same planet with one more way.
     pub fn with_way(mut self, way: Way) -> Self {
         self.ways.push(way);
+        self
+    }
+
+    /// The same planet with one more relation.
+    pub fn with_relation(mut self, relation: Relation) -> Self {
+        self.relations.push(relation);
         self
     }
 
@@ -310,7 +369,7 @@ mod tests {
 
     use super::*;
     use crate::block::block;
-    use crate::entity::{dense_group, visit_ways};
+    use crate::entity::{MEMBER_NODE, MEMBER_WAY, dense_group, visit_relations, visit_ways};
     use crate::error::PbfError;
     use crate::planet::Planet;
 
@@ -365,6 +424,42 @@ mod tests {
                             .map(|(key, value)| (text(key), text(value)))
                             .collect(),
                         refs: way.refs().collect::<Result<_, _>>()?,
+                    });
+                    Ok(())
+                })?;
+            }
+        }
+        Ok(found)
+    }
+
+    fn relations_of(planet: &Planet) -> Result<Vec<Relation>, PbfError> {
+        let mut found = Vec::new();
+        let (mut payload, mut inflated) = (Vec::new(), Vec::new());
+        for at in 0..planet.blobs.len() {
+            planet.inflate_blob(at, &mut payload, &mut inflated)?;
+            let decoded = block(&inflated)?;
+            for group in &decoded.groups {
+                visit_relations(group, &mut |relation| {
+                    found.push(Relation {
+                        id: relation.id,
+                        tags: relation
+                            .tags(&decoded)
+                            .iter()
+                            .map(|(key, value)| (text(key), text(value)))
+                            .collect(),
+                        members: relation
+                            .members(&decoded)
+                            .iter()
+                            .map(|(id, kind, role)| Member {
+                                kind: match *kind {
+                                    MEMBER_NODE => MemberKind::Node,
+                                    MEMBER_WAY => MemberKind::Way,
+                                    _ => MemberKind::Relation,
+                                },
+                                id: *id,
+                                role: text(role),
+                            })
+                            .collect(),
                     });
                     Ok(())
                 })?;
@@ -461,6 +556,46 @@ mod tests {
                     ],
                     refs: vec![1, 2],
                 },
+            ]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn given_relations_when_their_blob_is_read_then_each_keeps_its_members_kinds_and_roles_in_order()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let fixture = PlanetFile::sorted()
+            .with_node(Node::at(1, 43.7384, 7.4246))
+            .with_way(Way::through(10, [1]))
+            .with_relation(
+                Relation::of(100)
+                    .tagged("type", "multipolygon")
+                    .with_member(MemberKind::Way, 10, "outer")
+                    .with_member(MemberKind::Way, 11, "inner"),
+            )
+            .with_relation(
+                Relation::of(50)
+                    .tagged("boundary", "administrative")
+                    .with_member(MemberKind::Node, 1, "admin_centre")
+                    .with_member(MemberKind::Way, 10, "")
+                    .with_member(MemberKind::Relation, 100, "subarea"),
+            );
+        let path = written(&fixture, "relations")?;
+
+        let relations = relations_of(&Planet::open(&path)?)?;
+
+        assert_eq!(
+            relations,
+            vec![
+                Relation::of(50)
+                    .tagged("boundary", "administrative")
+                    .with_member(MemberKind::Node, 1, "admin_centre")
+                    .with_member(MemberKind::Way, 10, "")
+                    .with_member(MemberKind::Relation, 100, "subarea"),
+                Relation::of(100)
+                    .tagged("type", "multipolygon")
+                    .with_member(MemberKind::Way, 10, "outer")
+                    .with_member(MemberKind::Way, 11, "inner"),
             ]
         );
         Ok(())
