@@ -160,8 +160,8 @@ pub fn build_map_index(
     };
     let line_of = |way: &WayKept| Line {
         id: way.id,
-        tags: way.tags.clone(),
-        refs: way.refs.clone(),
+        tags: way.tags.unpacked(),
+        refs: way.refs.to_vec(),
         positions: way.refs.iter().map(|node| position_of(*node)).collect(),
     };
     codes
@@ -169,66 +169,65 @@ pub fn build_map_index(
         .enumerate()
         .map(|(country, code)| {
             let bit = 1u64 << country;
-            let mut elements: Vec<Element> = named
+            let named_here: Vec<&Named> = named.iter().filter(|node| node.country == country).collect();
+            let named_ids = sorted_distinct(named_here.iter().map(|node| node.id));
+            let lone: Vec<&Stored> = positions
                 .iter()
-                .filter(|node| node.country == country)
-                .map(|node| Element::Node {
-                    id: node.id,
-                    at: position_on(grid, node.latitude, node.longitude),
-                    tags: node.tags.clone(),
+                .filter(|(id, _, _)| {
+                    members[country].contains(*id)
+                        && !referenced.contains(*id)
+                        && named_ids.binary_search(id).is_err()
                 })
                 .collect();
-            let named_here = sorted_distinct(
-                named
-                    .iter()
-                    .filter(|node| node.country == country)
-                    .map(|node| node.id),
-            );
-            elements.extend(
-                positions
-                    .iter()
-                    .filter(|(id, _, _)| {
-                        members[country].contains(*id)
-                            && !referenced.contains(*id)
-                            && named_here.binary_search(id).is_err()
-                    })
-                    .map(|(id, latitude, longitude)| Element::Node {
-                        id: *id,
-                        at: position_on(grid, *latitude, *longitude),
+            let ways_here: Vec<&WayKept> = ways.iter().filter(|way| way.countries & bit != 0).collect();
+            let multipolygons_here: Vec<&MultipolygonKept> = multipolygons
+                .iter()
+                .filter(|multipolygon| multipolygon.countries & bit != 0)
+                .collect();
+            let member_ways_of = |multipolygon: &MultipolygonKept| -> Vec<&WayKept> {
+                first_named(multipolygon.members.iter().map(|(way, _)| *way))
+                    .into_iter()
+                    .filter_map(member_way)
+                    .collect()
+            };
+            let (nodes, lone_from) = (named_here.len() + lone.len(), named_here.len());
+            let ways_from = nodes;
+            let multipolygons_from = ways_from + ways_here.len();
+            let count = multipolygons_from + multipolygons_here.len();
+            let element_at = |at: usize| -> Element {
+                if at < lone_from {
+                    let node = named_here[at];
+                    Element::Node {
+                        id: node.id,
+                        at: position_on(grid, node.latitude, node.longitude),
+                        tags: node.tags.clone(),
+                    }
+                } else if at < ways_from {
+                    let (id, latitude, longitude) = *lone[at - lone_from];
+                    Element::Node {
+                        id,
+                        at: position_on(grid, latitude, longitude),
                         tags: Tags::new(),
-                    }),
-            );
-            let nodes = elements.len();
-            elements.extend(
-                ways.iter()
-                    .filter(|way| way.countries & bit != 0)
-                    .map(|way| Element::Way(line_of(way))),
-            );
-            let way_count = elements.len() - nodes;
-            elements.extend(
-                multipolygons
-                    .iter()
-                    .filter(|multipolygon| multipolygon.countries & bit != 0)
-                    .map(|multipolygon| Element::Multipolygon {
+                    }
+                } else if at < multipolygons_from {
+                    Element::Way(line_of(ways_here[at - ways_from]))
+                } else {
+                    let multipolygon = multipolygons_here[at - multipolygons_from];
+                    Element::Multipolygon {
                         id: multipolygon.id,
                         tags: multipolygon.tags.clone(),
                         members: multipolygon.members.clone(),
-                        ways: first_named(multipolygon.members.iter().map(|(way, _)| *way))
-                            .into_iter()
-                            .filter_map(member_way)
-                            .map(line_of)
-                            .collect(),
-                    }),
-            );
-            let multipolygon_count = elements.len() - nodes - way_count;
-            let rows = elements
-                .iter()
-                .map(|element| match element {
-                    Element::Multipolygon { ways, .. } => 1 + ways.len() as u64,
-                    _ => 1,
-                })
-                .sum();
-            let bytes = map_index::to_parquet(code, &elements, grid, &source).map_err(ClipError::Encoding)?;
+                        ways: member_ways_of(multipolygon).into_iter().map(line_of).collect(),
+                    }
+                }
+            };
+            let rows = (count - multipolygons_here.len()) as u64
+                + multipolygons_here
+                    .iter()
+                    .map(|multipolygon| 1 + member_ways_of(multipolygon).len() as u64)
+                    .sum::<u64>();
+            let bytes = map_index::to_parquet_from(code, count, element_at, grid, &source)
+                .map_err(ClipError::Encoding)?;
             record(
                 directory,
                 &source,
@@ -246,8 +245,8 @@ pub fn build_map_index(
             Ok(CountryIndexed {
                 country: code.clone(),
                 nodes,
-                ways: way_count,
-                multipolygons: multipolygon_count,
+                ways: ways_here.len(),
+                multipolygons: multipolygons_here.len(),
             })
         })
         .collect()
@@ -289,12 +288,46 @@ impl NodesFound {
     }
 }
 
-/// A way kept whole, with the countries it touches as one bit each.
+/// A way kept whole, with the countries it touches as one bit each, as small as it can be held:
+/// France keeps tens of millions of them at once.
 struct WayKept {
     id: i64,
-    tags: Tags,
-    refs: Vec<i64>,
+    tags: PackedTags,
+    refs: Box<[i64]>,
     countries: u64,
+}
+
+/// Tags as the planet's bytes in one allocation, each key and value as its length on four bytes
+/// then its bytes, read as text only when written.
+struct PackedTags(Box<[u8]>);
+
+impl PackedTags {
+    fn of(tags: &[(&[u8], &[u8])]) -> Self {
+        let mut packed =
+            Vec::with_capacity(tags.iter().map(|(key, value)| 8 + key.len() + value.len()).sum());
+        for text in tags.iter().flat_map(|(key, value)| [key, value]) {
+            packed.extend_from_slice(&(text.len() as u32).to_le_bytes());
+            packed.extend_from_slice(text);
+        }
+        Self(packed.into_boxed_slice())
+    }
+
+    /// The tags as text, invalid UTF-8 replaced as a harvest replaces it.
+    fn unpacked(&self) -> Tags {
+        let mut rest: &[u8] = &self.0;
+        let mut next_text = || {
+            let (length, after) = rest.split_first_chunk::<4>()?;
+            let length = u32::from_le_bytes(*length) as usize;
+            let (bytes, after) = after.split_at(length.min(after.len()));
+            rest = after;
+            Some(text(bytes))
+        };
+        let mut tags = Tags::new();
+        while let (Some(key), Some(value)) = (next_text(), next_text()) {
+            tags.push((key, value));
+        }
+        tags
+    }
 }
 
 /// A multipolygon kept with its way members, and the countries its members touch.
@@ -392,13 +425,13 @@ fn visit_country_ways(
             if countries == 0 {
                 return Ok(());
             }
-            let refs = way.refs().collect::<Result<Vec<_>, _>>()?;
+            let refs = way.refs().collect::<Result<Box<[i64]>, _>>()?;
             for node in &refs {
                 referenced.insert(*node);
             }
             found.push(WayKept {
                 id: way.id,
-                tags: named_tags(way.tags(decoded)),
+                tags: PackedTags::of(&way.tags(decoded)),
                 refs,
                 countries,
             });
@@ -452,8 +485,8 @@ fn visit_ways_with_id(
             if wanted.binary_search(&way.id).is_ok() {
                 found.push(WayKept {
                     id: way.id,
-                    tags: named_tags(way.tags(decoded)),
-                    refs: way.refs().collect::<Result<Vec<_>, _>>()?,
+                    tags: PackedTags::of(&way.tags(decoded)),
+                    refs: way.refs().collect::<Result<Box<[i64]>, _>>()?,
                     countries: 0,
                 });
             }
