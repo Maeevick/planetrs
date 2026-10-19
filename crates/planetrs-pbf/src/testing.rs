@@ -666,7 +666,7 @@ mod tests {
     }
 
     #[test]
-    fn given_a_replicated_fixture_when_opened_then_its_header_and_fingerprint_carry_the_replication()
+    fn given_a_replicated_fixture_when_opened_then_its_header_carries_the_replication()
     -> Result<(), Box<dyn std::error::Error>> {
         let path = written(
             &PlanetFile::sorted().replicated_at(1_788_739_204, 4_321),
@@ -677,7 +677,6 @@ mod tests {
 
         assert_eq!(opened.header.replication_timestamp, Some(1_788_739_204));
         assert_eq!(opened.header.replication_sequence, Some(4_321));
-        assert_eq!(opened.fingerprint().replication_timestamp, 1_788_739_204);
         Ok(())
     }
 

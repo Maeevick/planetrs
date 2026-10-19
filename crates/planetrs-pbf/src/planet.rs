@@ -141,26 +141,6 @@ impl Planet {
     pub fn bytes_in(&self, blobs: Range<usize>) -> u64 {
         self.blobs[blobs].iter().map(|blob| blob.data_size as u64).sum()
     }
-
-    pub fn fingerprint(&self) -> PlanetFingerprint {
-        PlanetFingerprint {
-            file_size: self.file_size,
-            blob_count: self.blobs.len() as u64,
-            replication_timestamp: self.header.replication_timestamp.unwrap_or(0),
-        }
-    }
-}
-
-/// What ties a sidecar index, or a harvest, to the exact file it was built from.
-///
-/// Not a checksum of 94 GB, which no run can afford. The replication timestamp names the minute of
-/// OSM history exactly, and the size and blob count catch a truncated or re-dumped file carrying
-/// the same timestamp.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct PlanetFingerprint {
-    pub file_size: u64,
-    pub blob_count: u64,
-    pub replication_timestamp: i64,
 }
 
 /// Every blob's id span, so a lookup by id reads the blobs that can hold it and no others.
@@ -171,20 +151,15 @@ pub struct PlanetFingerprint {
 /// two more full scans of those same sections for a few thousand entities.
 #[derive(Debug, Clone, PartialEq)]
 pub struct IdIndex {
-    fingerprint: PlanetFingerprint,
     spans: Vec<Option<IdSpan>>,
 }
 
 impl IdIndex {
-    pub fn empty(fingerprint: PlanetFingerprint, blob_count: usize) -> Self {
+    /// An index of `blob_count` blobs, none of them recorded yet.
+    pub fn empty(blob_count: usize) -> Self {
         Self {
-            fingerprint,
             spans: vec![None; blob_count],
         }
-    }
-
-    pub fn fingerprint(&self) -> PlanetFingerprint {
-        self.fingerprint
     }
 
     pub fn record(&mut self, blob: usize, span: IdSpan) {
@@ -195,14 +170,6 @@ impl IdIndex {
 
     pub fn span_of(&self, blob: usize) -> Option<IdSpan> {
         self.spans.get(blob).copied().flatten()
-    }
-
-    pub fn recorded(&self) -> usize {
-        self.spans.iter().filter(|span| span.is_some()).count()
-    }
-
-    pub fn covers(&self, blobs: Range<usize>) -> bool {
-        !blobs.is_empty() && self.spans[blobs].iter().all(Option::is_some)
     }
 
     /// The blobs in `blobs` that could hold any of `wanted`, which must be sorted and deduplicated.
@@ -223,143 +190,12 @@ impl IdIndex {
     }
 }
 
-const INDEX_MAGIC: &[u8; 8] = b"PLANETIX";
-const INDEX_VERSION: u32 = 1;
-const NO_SECTION: u8 = 0;
-const SPANS_AT: usize = 44;
-const SPAN_BYTES: usize = 17;
-
-fn section_tag(section: Section) -> u8 {
-    match section {
-        Section::Empty => NO_SECTION,
-        Section::Nodes => 1,
-        Section::Ways => 2,
-        Section::Relations => 3,
-    }
-}
-
-fn section_of_tag(tag: u8) -> Option<Section> {
-    match tag {
-        1 => Some(Section::Nodes),
-        2 => Some(Section::Ways),
-        3 => Some(Section::Relations),
-        _ => None,
-    }
-}
-
-impl IdIndex {
-    /// The index as bytes: fixed width, little endian, no compression.
-    ///
-    /// Deterministic by construction, so two runs over the same planet file produce the same bytes
-    /// and the sidecar can be checksummed like any other published artefact.
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let mut out = Vec::with_capacity(SPANS_AT + self.spans.len() * SPAN_BYTES);
-        out.extend_from_slice(INDEX_MAGIC);
-        out.extend_from_slice(&INDEX_VERSION.to_le_bytes());
-        out.extend_from_slice(&self.fingerprint.file_size.to_le_bytes());
-        out.extend_from_slice(&self.fingerprint.blob_count.to_le_bytes());
-        out.extend_from_slice(&self.fingerprint.replication_timestamp.to_le_bytes());
-        out.extend_from_slice(&(self.spans.len() as u64).to_le_bytes());
-
-        for span in &self.spans {
-            match span {
-                None => {
-                    out.push(NO_SECTION);
-                    out.extend_from_slice(&0i64.to_le_bytes());
-                    out.extend_from_slice(&0i64.to_le_bytes());
-                }
-                Some(span) => {
-                    out.push(section_tag(span.section));
-                    out.extend_from_slice(&span.first.to_le_bytes());
-                    out.extend_from_slice(&span.last.to_le_bytes());
-                }
-            }
-        }
-
-        out
-    }
-
-    /// Reads an index back, or nothing when the bytes are not one.
-    ///
-    /// The entry count is checked against the buffer before anything is reserved on it, because it
-    /// comes out of a file and `with_capacity` on an unchecked number is an allocation a corrupt
-    /// sidecar gets to choose.
-    pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
-        fn u64_at(bytes: &[u8], at: usize) -> Option<u64> {
-            let slice = bytes.get(at..at + 8)?;
-            Some(u64::from_le_bytes(
-                slice.try_into().expect("a slice of eight bytes"),
-            ))
-        }
-
-        if bytes.get(0..8)? != INDEX_MAGIC {
-            return None;
-        }
-        let version = u32::from_le_bytes(bytes.get(8..12)?.try_into().ok()?);
-        if version != INDEX_VERSION {
-            return None;
-        }
-
-        let fingerprint = PlanetFingerprint {
-            file_size: u64_at(bytes, 12)?,
-            blob_count: u64_at(bytes, 20)?,
-            replication_timestamp: u64_at(bytes, 28)? as i64,
-        };
-
-        let count = u64_at(bytes, 36)? as usize;
-        if bytes.len() < SPANS_AT + count * SPAN_BYTES {
-            return None;
-        }
-
-        let spans = (0..count)
-            .map(|index| {
-                let at = SPANS_AT + index * SPAN_BYTES;
-                let section = section_of_tag(bytes[at])?;
-                Some(IdSpan {
-                    section,
-                    first: u64_at(bytes, at + 1)? as i64,
-                    last: u64_at(bytes, at + 9)? as i64,
-                })
-            })
-            .collect();
-
-        Some(Self { fingerprint, spans })
-    }
-
-    pub fn write(&self, path: &Path) -> Result<u64, PbfError> {
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        let bytes = self.to_bytes();
-        std::fs::write(path, &bytes)?;
-        Ok(bytes.len() as u64)
-    }
-
-    /// Reads a sidecar, or nothing when it is absent, unreadable, or built from another file.
-    ///
-    /// A mismatched index is treated exactly like a missing one. It is an optimisation, and there is
-    /// no reading of it that is better than doing the work again.
-    pub fn read_for(path: &Path, fingerprint: PlanetFingerprint) -> Option<Self> {
-        let bytes = std::fs::read(path).ok()?;
-        let index = Self::from_bytes(&bytes)?;
-        (index.fingerprint == fingerprint).then_some(index)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn fingerprint() -> PlanetFingerprint {
-        PlanetFingerprint {
-            file_size: 94_746_421_723,
-            blob_count: 52_810,
-            replication_timestamp: 1_788_739_204,
-        }
-    }
-
     fn index_over(spans: &[(usize, Section, i64, i64)], blobs: usize) -> IdIndex {
-        let mut index = IdIndex::empty(fingerprint(), blobs);
+        let mut index = IdIndex::empty(blobs);
         for (at, section, first, last) in spans {
             index.record(
                 *at,
@@ -374,40 +210,11 @@ mod tests {
     }
 
     #[test]
-    fn when_an_index_is_written_then_reading_it_back_gives_the_same_thing() {
-        let index = index_over(
-            &[
-                (0, Section::Ways, 37, 3_732_656),
-                (1, Section::Ways, 3_732_700, 4_078_000),
-            ],
-            3,
-        );
-
-        assert_eq!(IdIndex::from_bytes(&index.to_bytes()), Some(index));
-    }
-
-    /// The sidecar is an artefact anyone may re-derive, so two runs over the same file have to
-    /// agree byte for byte or a checksum over it says nothing.
-    #[test]
-    fn when_the_same_index_is_written_twice_then_the_bytes_are_identical() {
-        let index = index_over(&[(1, Section::Nodes, 1, 513_655)], 4);
-
-        assert_eq!(index.to_bytes(), index.to_bytes());
-    }
-
-    #[test]
-    fn when_the_bytes_are_not_an_index_then_nothing_comes_back_rather_than_a_misreading() {
-        assert_eq!(IdIndex::from_bytes(b"this is not an index at all"), None);
-    }
-
-    #[test]
     fn when_only_some_blobs_have_been_seen_then_the_rest_stay_unrecorded() {
         let index = index_over(&[(1, Section::Nodes, 10, 20)], 3);
 
-        assert_eq!(
-            (index.recorded(), index.span_of(0), index.span_of(2)),
-            (1, None, None)
-        );
+        assert_eq!((index.span_of(0), index.span_of(2)), (None, None));
+        assert!(index.span_of(1).is_some());
     }
 
     /// The whole point: a handful of ids should read a handful of blobs, not the section.
@@ -447,36 +254,5 @@ mod tests {
         let index = index_over(&[(0, Section::Ways, 1, 100)], 2);
 
         assert_eq!(index.blobs_holding(0..2, &[900]), vec![1]);
-    }
-
-    #[test]
-    fn when_every_blob_in_a_range_has_a_span_then_the_range_is_covered() {
-        let index = index_over(&[(0, Section::Nodes, 1, 10), (1, Section::Nodes, 11, 20)], 3);
-
-        assert!(index.covers(0..2));
-        assert!(!index.covers(0..3));
-    }
-
-    #[test]
-    fn when_a_sidecar_was_built_from_another_file_then_it_is_refused() {
-        let path = std::env::temp_dir().join("planetrs-index-mismatch.bin");
-        index_over(&[(0, Section::Nodes, 1, 10)], 2).write(&path).unwrap();
-
-        let other = PlanetFingerprint {
-            file_size: 1,
-            blob_count: 2,
-            replication_timestamp: 3,
-        };
-
-        assert!(IdIndex::read_for(&path, other).is_none());
-        assert!(IdIndex::read_for(&path, fingerprint()).is_some());
-        std::fs::remove_file(&path).ok();
-    }
-
-    #[test]
-    fn when_a_sidecar_is_absent_then_nothing_comes_back_rather_than_an_error() {
-        let missing = std::env::temp_dir().join("planetrs-index-that-is-not-there.bin");
-
-        assert!(IdIndex::read_for(&missing, fingerprint()).is_none());
     }
 }

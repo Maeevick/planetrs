@@ -515,7 +515,7 @@ pub fn harvest_area(
 ) -> Result<(Harvest, HarvestReport), ClipError> {
     let sections = planet.sections()?;
     let mut report = HarvestReport::default();
-    let mut index = IdIndex::empty(planet.fingerprint(), planet.blobs.len());
+    let mut index = IdIndex::empty(planet.blobs.len());
 
     let started = Instant::now();
     let found_nodes = nodes_inside(planet, &sections, area, progress)?;

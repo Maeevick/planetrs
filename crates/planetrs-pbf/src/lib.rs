@@ -25,4 +25,4 @@ pub use block::{Block, Contents, IdSpan, Section, block, block_contents, content
 pub use entity::{DenseGroup, RawRelation, RawWay, dense_group, visit_relations, visit_ways};
 pub use error::PbfError;
 pub use header::FileHeader;
-pub use planet::{IdIndex, Planet, PlanetFingerprint, Sections};
+pub use planet::{IdIndex, Planet, Sections};

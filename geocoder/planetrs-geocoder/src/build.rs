@@ -86,7 +86,6 @@ pub fn build_index(
     };
 
     let opened = Planet::open(planet).map_err(reading)?;
-    let fingerprint = opened.fingerprint();
     progress(&format!(
         "framing        {} blobs in {:.1}s",
         opened.blobs.len(),
@@ -162,9 +161,9 @@ pub fn build_index(
             .file_name()
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_default(),
-        file_size: fingerprint.file_size,
-        blob_count: fingerprint.blob_count,
-        replication_timestamp: fingerprint.replication_timestamp,
+        file_size: opened.file_size,
+        blob_count: opened.blobs.len() as u64,
+        replication_timestamp: opened.header.replication_timestamp.unwrap_or_default(),
         replication_sequence: opened.header.replication_sequence.unwrap_or_default(),
         writing_program: opened.header.writing_program.clone().unwrap_or_default(),
     };
