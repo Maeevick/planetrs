@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use planetrs_dataset::directory::{MANIFEST, RecordError, record};
+use planetrs_dataset::directory::{CarriedOver, MANIFEST, RecordError, carry_over, record};
 use planetrs_dataset::testing::FilesInMemory;
 use planetrs_dataset::{Dataset, DirectoryFiles, Entry, Manifest, Part, Provenance, geocoder_index};
 
@@ -186,5 +186,83 @@ fn given_a_dataset_read_once_through_a_cache_when_its_parts_are_gone_then_the_sa
 
     assert_eq!(read_again, read_first);
     assert_eq!(read_first, entries[1..].to_vec());
+    Ok(())
+}
+
+fn parts_listed_in(directory: &std::path::Path) -> Result<Vec<Part>, Box<dyn std::error::Error>> {
+    let manifest = Manifest::from_json(&std::fs::read_to_string(directory.join(MANIFEST))?)?;
+    Ok(manifest.files.into_iter().map(|entry| entry.part).collect())
+}
+
+#[test]
+fn given_both_tools_parts_and_a_rebuild_of_the_geocoders_when_carried_over_then_only_the_map_index_joins_the_rebuild()
+-> Outcome {
+    let (previous, building) = (scratch("carry-previous"), scratch("carry-building"));
+    let planet = planet();
+    let map_of_france = Part::MapIndex { country: "FR".into() };
+    record(
+        &previous,
+        &planet,
+        Part::Gazetteer,
+        "gazetteer.parquet",
+        b"old gazetteer",
+        1,
+    )?;
+    record(
+        &previous,
+        &planet,
+        Part::GeocoderIndex { country: "FR".into() },
+        "geocoder-FR.parquet",
+        b"old france",
+        1,
+    )?;
+    record(
+        &previous,
+        &planet,
+        map_of_france.clone(),
+        "map-FR.parquet",
+        b"map of france",
+        1,
+    )?;
+    record(
+        &building,
+        &planet,
+        Part::Gazetteer,
+        "gazetteer.parquet",
+        b"new gazetteer",
+        1,
+    )?;
+    record(
+        &building,
+        &planet,
+        Part::GeocoderIndex { country: "MC".into() },
+        "geocoder-MC.parquet",
+        b"new monaco",
+        1,
+    )?;
+
+    let carried = carry_over(&previous, &building, |part| matches!(part, Part::MapIndex { .. }))?;
+
+    assert_eq!(
+        parts_listed_in(&building)?,
+        vec![
+            Part::Gazetteer,
+            Part::GeocoderIndex { country: "MC".into() },
+            map_of_france.clone()
+        ]
+    );
+    assert_eq!(std::fs::read(building.join("map-FR.parquet"))?, b"map of france");
+    assert_eq!(
+        std::fs::read(building.join("gazetteer.parquet"))?,
+        b"new gazetteer"
+    );
+    assert!(!building.join("geocoder-FR.parquet").exists());
+    assert_eq!(
+        carried,
+        CarriedOver {
+            kept: vec![map_of_france],
+            left: vec![]
+        }
+    );
     Ok(())
 }

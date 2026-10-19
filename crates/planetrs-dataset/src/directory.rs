@@ -103,6 +103,26 @@ pub fn record(
     Ok(manifest)
 }
 
+/// What carrying a dataset's parts into a rebuild brought in and left behind.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct CarriedOver {
+    /// The parts brought into the rebuild, as the previous dataset held them.
+    pub kept: Vec<Part>,
+    /// The parts left behind, because the previous dataset answers for another planet.
+    pub left: Vec<Part>,
+}
+
+/// Brings into the dataset being built in `building` every part of the dataset in `previous` that
+/// `others` says another tool builds, so that rebuilding one tool's parts never loses the other's.
+pub fn carry_over(
+    previous: &Path,
+    building: &Path,
+    others: impl Fn(&Part) -> bool,
+) -> Result<CarriedOver, RecordError> {
+    let _ = (previous, building, others);
+    Ok(CarriedOver::default())
+}
+
 /// The manifest already in `directory`, if there is one.
 fn recorded_in(directory: &Path) -> Result<Option<Manifest>, RecordError> {
     let path = directory.join(MANIFEST);
