@@ -501,6 +501,9 @@ fill = "#0000ff"
     fn when_a_theme_is_not_known_and_is_not_a_path_then_the_error_lists_the_ones_that_are() {
         let error = Theme::named_or_at("chartreuse").unwrap_err();
 
-        assert!(error.next_step().unwrap().contains("atlas"));
+        assert!(
+            matches!(&error, ClipError::UnknownTheme { known, .. } if known.iter().any(|name| name == "atlas")),
+            "{error}"
+        );
     }
 }
