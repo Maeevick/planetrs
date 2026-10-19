@@ -204,18 +204,14 @@ impl PlanetFile {
         ways.sort_by_key(|way| way.id);
         let mut relations = self.relations.clone();
         relations.sort_by_key(|relation| relation.id);
-        let blocks = [
-            (!nodes.is_empty()).then(|| node_block(&nodes)),
-            (!ways.is_empty()).then(|| way_block(&ways)),
-            (!relations.is_empty()).then(|| relation_block(&relations)),
-        ];
+        let per_blob = self.entities_per_blob;
+        let blocks = nodes
+            .chunks(per_blob)
+            .map(node_block)
+            .chain(ways.chunks(per_blob).map(way_block))
+            .chain(relations.chunks(per_blob).map(relation_block));
         std::iter::once(framed("OSMHeader", &self.header_block()))
-            .chain(
-                blocks
-                    .into_iter()
-                    .flatten()
-                    .map(|block| framed("OSMData", &block)),
-            )
+            .chain(blocks.map(|block| framed("OSMData", &block)))
             .flatten()
             .collect()
     }
