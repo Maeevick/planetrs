@@ -24,6 +24,9 @@ use crate::tables::{
 /// split, so a multipolygon and its members always share a row group.
 const ROWS_PER_ROW_GROUP: usize = 50_000;
 
+/// The leaves of the box column, which row groups carry statistics on and are picked by.
+const BOX_FIELDS: [&str; 4] = ["bbox.xmin", "bbox.ymin", "bbox.xmax", "bbox.ymax"];
+
 /// The footer key holding the planet's grid, as granularity, latitude offset and longitude offset.
 const GRID: &str = "planetrs.grid";
 
@@ -195,8 +198,11 @@ fn written<W: Write + Send>(
                 ),
             ),
         ],
-        &["bbox.xmin", "bbox.ymin", "bbox.xmax", "bbox.ymax"],
-    );
+        &BOX_FIELDS,
+    )
+    .with_close_integers(&["refs.list.item", "unresolved.list.item", "member_ways.list.item"])
+    .with_split_reals(&BOX_FIELDS)
+    .with_unique_values(&["geometry"]);
     let mut group: Vec<usize> = Vec::new();
     let mut rows = 0;
     let mut groups_written = 0;

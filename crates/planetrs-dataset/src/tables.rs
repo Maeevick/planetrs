@@ -22,7 +22,7 @@ use parquet::arrow::arrow_reader::{
     ArrowReaderMetadata, ArrowReaderOptions, ParquetRecordBatchReaderBuilder,
 };
 use parquet::arrow::arrow_writer::ArrowWriterOptions;
-use parquet::basic::{Compression, GzipLevel};
+use parquet::basic::{Compression, Encoding, GzipLevel};
 use parquet::errors::ParquetError;
 use parquet::file::metadata::{KeyValue, ParquetMetaData, ParquetMetaDataReader};
 use parquet::file::properties::{EnabledStatistics, WriterProperties};
@@ -144,6 +144,9 @@ pub(crate) struct TableWriter<W: Write + Send> {
     out: Option<W>,
     metadata: Vec<(String, String)>,
     pruned_by: Vec<String>,
+    close_integers: Vec<String>,
+    split_reals: Vec<String>,
+    unique_values: Vec<String>,
     open: Option<(ArrowWriter<W>, Arc<Schema>)>,
 }
 
@@ -166,8 +169,31 @@ impl<W: Write + Send> TableWriter<W> {
                 .map(|(key, value)| (key.to_string(), value.clone()))
                 .collect(),
             pruned_by: pruned_by.iter().map(|name| name.to_string()).collect(),
+            close_integers: Vec::new(),
+            split_reals: Vec::new(),
+            unique_values: Vec::new(),
             open: None,
         }
+    }
+
+    /// The same file, with the integer columns `columns` stored as the differences between
+    /// neighbours, which lie close in a way's list of nodes.
+    pub(crate) fn with_close_integers(mut self, columns: &[&str]) -> Self {
+        self.close_integers = columns.iter().map(|name| name.to_string()).collect();
+        self
+    }
+
+    /// The same file, with the columns of reals `columns` stored a byte of each value at a time,
+    /// which leaves the compressor the long runs nearby coordinates share.
+    pub(crate) fn with_split_reals(mut self, columns: &[&str]) -> Self {
+        self.split_reals = columns.iter().map(|name| name.to_string()).collect();
+        self
+    }
+
+    /// The same file, with no dictionary for the columns `columns`, whose values are all different.
+    pub(crate) fn with_unique_values(mut self, columns: &[&str]) -> Self {
+        self.unique_values = columns.iter().map(|name| name.to_string()).collect();
+        self
     }
 
     /// Writes one row group. The first fixes the columns every later one has.
@@ -219,12 +245,25 @@ impl<W: Write + Send> TableWriter<W> {
                     .map(|(key, value)| KeyValue::new(key.clone(), value.clone()))
                     .collect(),
             ));
+        let path = |name: &str| ColumnPath::new(name.split('.').map(str::to_string).collect());
+        let properties = self.pruned_by.iter().fold(properties, |properties, name| {
+            properties.set_column_statistics_enabled(path(name), EnabledStatistics::Chunk)
+        });
+        let properties = self.close_integers.iter().fold(properties, |properties, name| {
+            properties
+                .set_column_dictionary_enabled(path(name), false)
+                .set_column_encoding(path(name), Encoding::DELTA_BINARY_PACKED)
+        });
+        let properties = self.split_reals.iter().fold(properties, |properties, name| {
+            properties
+                .set_column_dictionary_enabled(path(name), false)
+                .set_column_encoding(path(name), Encoding::BYTE_STREAM_SPLIT)
+        });
         let properties = self
-            .pruned_by
+            .unique_values
             .iter()
             .fold(properties, |properties, name| {
-                let path = ColumnPath::new(name.split('.').map(str::to_string).collect());
-                properties.set_column_statistics_enabled(path, EnabledStatistics::Chunk)
+                properties.set_column_dictionary_enabled(path(name), false)
             })
             .build();
         let options = ArrowWriterOptions::new()
