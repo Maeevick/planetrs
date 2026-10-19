@@ -2,7 +2,7 @@
 
 use crate::directory::MANIFEST;
 use crate::files::{ForReadingFiles, Unreachable};
-use crate::manifest::{Manifest, ManifestError, Part};
+use crate::manifest::{Entry, Manifest, ManifestError, Part};
 use crate::tables::TableError;
 use crate::{gazetteer, geocoder_index};
 
@@ -60,14 +60,22 @@ impl<F: ForReadingFiles> Dataset<F> {
 
     /// Every area of the gazetteer, read whole.
     pub fn gazetteer(&self) -> Result<Vec<gazetteer::Area>, DatasetError> {
-        let entry = self
-            .manifest
-            .files
-            .iter()
-            .find(|entry| entry.part == Part::Gazetteer)
-            .ok_or(DatasetError::NoGazetteer)?;
+        let entry = self.entry_of(&Part::Gazetteer).ok_or(DatasetError::NoGazetteer)?;
+        self.read_whole(entry, gazetteer::from_parquet)
+    }
+
+    fn entry_of(&self, part: &Part) -> Option<&Entry> {
+        self.manifest.files.iter().find(|entry| entry.part == *part)
+    }
+
+    /// A part read whole, at its published address when it has one, and parsed as what it is.
+    fn read_whole<T>(
+        &self,
+        entry: &Entry,
+        parse: fn(&[u8]) -> Result<T, TableError>,
+    ) -> Result<T, DatasetError> {
         let address = entry.url.as_deref().unwrap_or(&entry.file);
-        gazetteer::from_parquet(&whole(&self.files, address)?).map_err(|source| DatasetError::Table {
+        parse(&whole(&self.files, address)?).map_err(|source| DatasetError::Table {
             file: entry.file.clone(),
             source,
         })
@@ -81,16 +89,9 @@ impl<F: ForReadingFiles> Dataset<F> {
         let wanted = Part::GeocoderIndex {
             country: country.to_string(),
         };
-        let Some(entry) = self.manifest.files.iter().find(|entry| entry.part == wanted) else {
-            return Ok(None);
-        };
-        let address = entry.url.as_deref().unwrap_or(&entry.file);
-        geocoder_index::from_parquet(&whole(&self.files, address)?)
-            .map(Some)
-            .map_err(|source| DatasetError::Table {
-                file: entry.file.clone(),
-                source,
-            })
+        self.entry_of(&wanted)
+            .map(|entry| self.read_whole(entry, geocoder_index::from_parquet))
+            .transpose()
     }
 }
 
@@ -103,7 +104,7 @@ fn whole(files: &impl ForReadingFiles, file: &str) -> Result<Vec<u8>, DatasetErr
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::manifest::{Entry, Part, Provenance};
+    use crate::manifest::Provenance;
     use crate::testing::FilesInMemory;
 
     fn planet() -> Provenance {
