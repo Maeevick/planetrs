@@ -332,7 +332,7 @@ mod tests {
     }
 
     #[test]
-    fn when_a_node_is_resolved_then_longitude_comes_first_as_geojson_orders_it() {
+    fn given_a_node_at_abidjan_when_resolved_then_longitude_comes_first_as_geojson_orders_it() {
         let point = table().at(1).unwrap();
 
         assert!((point[0] - -4.01).abs() < 1e-9, "longitude");
@@ -340,14 +340,14 @@ mod tests {
     }
 
     #[test]
-    fn when_every_ref_resolves_then_one_shape_comes_back() {
+    fn given_a_way_whose_every_node_is_in_hand_when_resolved_then_one_shape_comes_back() {
         assert_eq!(shapes(&[1, 2], &table()).len(), 1);
     }
 
     /// The gap is where the way leaves the collected box. Bridging it would draw a straight line
     /// across ground the road never crossed.
     #[test]
-    fn when_a_way_leaves_the_collected_box_then_its_runs_stay_separate() {
+    fn given_a_way_that_leaves_the_collected_box_and_returns_when_resolved_then_its_runs_stay_separate() {
         let runs = shapes(&[1, 2, 3, 4, 5], &table());
 
         assert_eq!(runs.len(), 2);
@@ -355,7 +355,7 @@ mod tests {
     }
 
     #[test]
-    fn when_a_closed_way_is_missing_a_node_then_it_is_not_reported_as_a_ring() {
+    fn given_a_closed_way_missing_a_node_when_resolved_then_it_is_not_reported_as_a_ring() {
         assert!(
             shapes(&[1, 2, 3, 4, 1], &table())
                 .iter()
@@ -364,7 +364,7 @@ mod tests {
     }
 
     #[test]
-    fn when_a_closed_way_resolves_fully_then_it_is_a_ring() {
+    fn given_a_closed_way_with_every_node_in_hand_when_resolved_then_it_is_a_ring() {
         let mut nodes = vec![
             Node {
                 id: 1,
@@ -396,14 +396,14 @@ mod tests {
     }
 
     #[test]
-    fn when_a_member_has_no_role_then_it_counts_as_outer() {
+    fn given_a_member_with_an_empty_role_when_split_by_role_then_it_counts_as_outer() {
         let split = roles(&members(&[(1, "outer"), (2, ""), (3, "inner"), (4, "label")]));
 
         assert_eq!(split, (vec![1, 2], vec![3]));
     }
 
     #[test]
-    fn when_ways_share_end_nodes_then_they_become_one_chain() {
+    fn given_three_ways_sharing_end_nodes_when_joined_then_they_become_one_chain() {
         let ways = vec![(1, vec![10, 11, 12]), (2, vec![12, 13, 14]), (3, vec![14, 15])];
 
         assert_eq!(join(&ways), vec![vec![10, 11, 12, 13, 14, 15]]);
@@ -411,7 +411,7 @@ mod tests {
 
     /// The file gives no order, so the middle of a shore is as likely to come first as its start.
     #[test]
-    fn when_the_ways_arrive_out_of_order_then_the_chain_is_still_whole() {
+    fn given_ways_arriving_out_of_order_when_joined_then_the_chain_is_still_whole() {
         let ways = vec![(2, vec![12, 13, 14]), (3, vec![14, 15]), (1, vec![10, 11, 12])];
 
         assert_eq!(join(&ways), vec![vec![10, 11, 12, 13, 14, 15]]);
@@ -420,7 +420,7 @@ mod tests {
     /// An island's shore closes on itself. Walking back from any way would loop forever without the
     /// guard, so this is the test that the guard is really there.
     #[test]
-    fn when_a_shore_closes_on_itself_then_the_walk_terminates() {
+    fn given_an_island_shore_closing_on_itself_when_joined_then_the_walk_terminates() {
         let joined = join(&[(1, vec![10, 11, 12]), (2, vec![12, 13, 10])]);
 
         assert_eq!(joined.len(), 1);
@@ -428,14 +428,14 @@ mod tests {
     }
 
     #[test]
-    fn when_two_shores_do_not_meet_then_they_stay_separate() {
+    fn given_two_shores_that_do_not_meet_when_joined_then_they_stay_separate() {
         assert_eq!(join(&[(1, vec![10, 11]), (2, vec![20, 21])]).len(), 2);
     }
 
     /// The case that kept the Ébrié lagoon unfilled with all 166 of its members in hand: one member
     /// runs against the ring, a directed join refuses to turn it round, and the ring never closes.
     #[test]
-    fn when_a_ring_member_runs_backwards_then_it_is_turned_round() {
+    fn given_a_ring_member_running_backwards_when_joined_into_rings_then_it_is_turned_round() {
         let ways = vec![
             (1, vec![10, 11, 12]),
             (2, vec![14, 13, 12]),
@@ -448,14 +448,14 @@ mod tests {
     }
 
     #[test]
-    fn when_ring_members_all_agree_then_the_ring_is_unchanged() {
+    fn given_ring_members_that_all_agree_when_joined_into_rings_then_the_ring_is_unchanged() {
         let ways = vec![(1, vec![10, 11]), (2, vec![11, 12]), (3, vec![12, 10])];
 
         assert_eq!(join_rings(&ways), vec![vec![10, 11, 12, 10]]);
     }
 
     #[test]
-    fn when_members_form_two_separate_rings_then_both_close() {
+    fn given_members_forming_two_separate_rings_when_joined_into_rings_then_both_close() {
         let ways = vec![(1, vec![10, 11, 10]), (2, vec![20, 21]), (3, vec![21, 20])];
 
         let rings = join_rings(&ways);
@@ -466,7 +466,7 @@ mod tests {
 
     /// Reversing is what `join_rings` is for and what `join` must never do.
     #[test]
-    fn when_a_shore_runs_backwards_then_join_leaves_it_alone_rather_than_reversing_it() {
+    fn given_a_shore_running_backwards_when_joined_then_it_is_left_alone_rather_than_reversed() {
         let ways = vec![(1, vec![10, 11, 12]), (2, vec![14, 13, 12])];
 
         assert_eq!(join(&ways).len(), 2, "a directed join keeps them apart");
@@ -474,7 +474,7 @@ mod tests {
     }
 
     #[test]
-    fn when_a_lagoon_holds_an_island_then_the_island_becomes_a_hole_in_it() {
+    fn given_a_lagoon_with_an_island_inside_when_assembled_then_the_island_becomes_a_hole_in_it() {
         let nodes = NodeTable::of(&[
             Node {
                 id: 1,

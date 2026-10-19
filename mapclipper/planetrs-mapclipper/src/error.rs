@@ -113,7 +113,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn when_a_harvest_is_too_small_then_the_error_names_both_boxes() {
+    fn given_a_harvest_smaller_than_the_area_wanted_when_refused_then_the_error_names_both_boxes() {
         let error = ClipError::HarvestTooSmall {
             collected: "29.0 x 16.5 km".into(),
             wanted: "40.0 x 22.8 km".into(),
@@ -124,7 +124,7 @@ mod tests {
     }
 
     #[test]
-    fn when_a_file_cannot_be_read_then_the_error_names_it() {
+    fn given_an_absent_file_when_read_then_the_error_names_it() {
         let error = ClipError::reading(Path::new("/tmp/absent.mapclip"), io::Error::other("no such file"));
 
         assert!(error.to_string().contains("/tmp/absent.mapclip"));

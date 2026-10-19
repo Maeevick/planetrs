@@ -100,14 +100,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn when_a_number_is_long_then_it_is_grouped_in_threes() {
+    fn given_a_long_number_when_reported_then_its_digits_are_grouped_in_threes() {
         assert_eq!(thousands(94_746_421_723), "94 746 421 723");
         assert_eq!(thousands(52_810), "52 810");
         assert_eq!(thousands(7), "7");
     }
 
     #[test]
-    fn when_a_size_is_reported_then_it_is_given_in_units_a_reader_can_hold() {
+    fn given_a_size_in_bytes_when_reported_then_it_is_expressed_in_units_a_reader_can_hold() {
         assert_eq!(bytes(512), "512 B");
         assert_eq!(bytes(135_000_000), "135 MB");
         assert_eq!(bytes(94_746_421_723), "94 GB");
@@ -116,7 +116,7 @@ mod tests {
     /// The report is diagnostics about a side effect, so piping a map into another command has to
     /// carry the map and nothing else.
     #[test]
-    fn when_a_run_is_quiet_then_the_report_is_held_rather_than_written() {
+    fn given_a_quiet_run_when_its_report_goes_to_stderr_then_it_is_held_rather_than_written() {
         let mut report = Report::new(true);
         report.line("frame", "29.0 x 16.5 km");
 
@@ -125,7 +125,7 @@ mod tests {
     }
 
     #[test]
-    fn when_a_name_holds_a_quote_then_the_json_stays_parseable() {
+    fn given_a_name_holding_a_quote_when_written_as_a_json_string_then_the_json_stays_parseable() {
         assert_eq!(quoted("Port of \"Abidjan\""), "\"Port of \\\"Abidjan\\\"\"");
     }
 }

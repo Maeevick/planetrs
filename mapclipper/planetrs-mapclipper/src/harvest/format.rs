@@ -423,12 +423,12 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn when_a_harvest_is_written_then_reading_it_back_gives_the_same_thing() {
+    fn given_a_harvest_holding_every_kind_of_entity_when_written_then_reading_it_back_gives_the_same_thing() {
         assert_eq!(from_bytes(&to_bytes(&abidjan())).unwrap(), abidjan());
     }
 
     #[test]
-    fn when_a_harvest_is_written_then_its_provenance_survives_the_round_trip() {
+    fn given_a_harvest_naming_its_planet_when_written_then_its_provenance_survives_the_round_trip() {
         assert_eq!(
             from_bytes(&to_bytes(&abidjan())).unwrap().provenance,
             provenance()
@@ -438,14 +438,14 @@ pub(crate) mod tests {
     /// The property that makes a harvest publishable: anyone taking the same planet file and the
     /// same area must produce the same bytes, or a checksum over the result proves nothing.
     #[test]
-    fn when_the_same_harvest_is_written_twice_then_the_bytes_are_identical() {
+    fn given_one_harvest_when_written_twice_then_the_bytes_are_identical() {
         assert_eq!(to_bytes(&abidjan()), to_bytes(&abidjan()));
     }
 
     /// The passes fold across threads, so the same area harvested twice arrives in a different
     /// order. Sorting before writing is what makes that invisible in the file.
     #[test]
-    fn when_two_harvests_hold_the_same_thing_in_another_order_then_they_write_the_same_bytes() {
+    fn given_two_harvests_of_the_same_nodes_in_another_order_when_sorted_then_they_write_the_same_bytes() {
         let shuffled = Harvest {
             nodes: abidjan().nodes.into_iter().rev().collect(),
             ..abidjan()
@@ -457,7 +457,7 @@ pub(crate) mod tests {
     /// Names carry accents and apostrophes, and a length-prefixed format has to count bytes rather
     /// than characters or every field after the first accent is read from the wrong offset.
     #[test]
-    fn when_a_name_is_not_ascii_then_the_lengths_still_line_up() {
+    fn given_a_name_with_accents_when_written_and_read_back_then_the_lengths_still_line_up() {
         let read = from_bytes(&to_bytes(&abidjan())).unwrap();
 
         assert_eq!(
@@ -468,7 +468,7 @@ pub(crate) mod tests {
 
     /// Every shed in a port carries `building=yes`, so the table is most of what the format saves.
     #[test]
-    fn when_a_tag_repeats_across_entities_then_its_text_is_stored_once() {
+    fn given_a_tag_repeated_across_two_hundred_ways_when_written_then_its_text_is_stored_once() {
         let repeated = Harvest {
             ways: (0..200)
                 .map(|id| Way {
@@ -489,7 +489,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn when_the_bytes_are_not_a_harvest_then_it_is_refused_rather_than_misread() {
+    fn given_bytes_of_plain_text_when_read_as_a_harvest_then_they_are_refused_rather_than_misread() {
         assert!(matches!(
             from_bytes(b"this is not a harvest at all"),
             Err(ClipError::NotAHarvest)
@@ -497,7 +497,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn when_a_harvest_was_written_by_another_version_then_it_is_refused_by_number() {
+    fn given_a_harvest_stamped_with_another_version_when_read_then_it_is_refused_by_number() {
         let mut bytes = to_bytes(&abidjan());
         bytes[8] = 99;
 
@@ -510,7 +510,7 @@ pub(crate) mod tests {
     /// A count read out of a file decides an allocation. Truncating anywhere has to end in an
     /// error rather than in a reservation the file got to choose.
     #[test]
-    fn when_a_harvest_is_cut_short_anywhere_then_it_fails_rather_than_reserving_on_a_bad_count() {
+    fn given_a_harvest_cut_short_anywhere_when_read_then_it_fails_rather_than_reserving_on_a_bad_count() {
         let whole = to_bytes(&abidjan());
 
         for at in (9..whole.len()).step_by(3) {
@@ -522,7 +522,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn when_a_harvest_holds_nothing_then_it_still_round_trips() {
+    fn given_a_harvest_holding_no_nodes_ways_or_relations_when_written_then_it_still_round_trips() {
         let empty = Harvest {
             nodes: vec![],
             ways: vec![],
@@ -534,7 +534,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn when_a_harvest_is_written_to_disk_then_reading_the_path_back_gives_the_same_thing() {
+    fn given_a_harvest_when_written_to_a_temporary_file_then_reading_the_path_back_gives_the_same_thing() {
         let path = std::env::temp_dir().join("mapclipper-roundtrip.mapclip");
         write(&path, &abidjan()).unwrap();
 
@@ -553,7 +553,7 @@ mod named_node_tests {
     /// A settlement is a `place=*` node, so without tagged nodes a map cannot say what a village is
     /// called even when every building around it is in hand.
     #[test]
-    fn when_a_harvest_holds_a_named_node_then_its_tags_survive_the_round_trip() {
+    fn given_a_named_village_in_a_harvest_when_written_then_its_tags_survive_the_round_trip() {
         let read = from_bytes(&to_bytes(&abidjan())).unwrap();
 
         assert_eq!(read.named_nodes.len(), 1);
@@ -568,7 +568,7 @@ mod named_node_tests {
     }
 
     #[test]
-    fn when_a_named_node_is_read_back_then_it_is_where_it_was() {
+    fn given_a_named_node_written_into_a_harvest_when_read_back_then_it_is_where_it_was() {
         let read = from_bytes(&to_bytes(&abidjan())).unwrap();
 
         assert_eq!(
@@ -580,7 +580,7 @@ mod named_node_tests {
     /// Version 1 harvests held no named nodes, so reading one as the current version would take the
     /// way count for a node count and build nonsense out of it.
     #[test]
-    fn when_a_version_one_harvest_is_read_then_it_is_refused_by_number() {
+    fn given_a_harvest_stamped_as_version_one_when_read_then_it_is_refused_by_number() {
         let mut bytes = to_bytes(&abidjan());
         bytes[8] = 1;
 
@@ -593,7 +593,7 @@ mod named_node_tests {
     /// A harvest is a Derivative Database of OpenStreetMap that can be handed on, so it names its
     /// licence and links to it, as data has to.
     #[test]
-    fn when_a_harvest_is_written_then_it_names_and_links_the_licence_its_data_is_under() {
+    fn given_openstreetmap_data_when_written_as_a_harvest_then_it_names_and_links_the_licence_it_is_under() {
         let bytes = to_bytes(&abidjan());
         let notice = crate::credit::DATA_NOTICE.as_bytes();
 

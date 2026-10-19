@@ -87,14 +87,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn when_points_sit_on_a_straight_line_then_only_the_ends_survive() {
+    fn given_points_on_a_straight_line_when_simplified_then_only_the_ends_survive() {
         let line = [[0.0, 0.0], [1.0, 0.0], [2.0, 0.0], [3.0, 0.0]];
 
         assert_eq!(douglas_peucker(&line, 0.1), vec![[0.0, 0.0], [3.0, 0.0]]);
     }
 
     #[test]
-    fn when_a_vertex_strays_further_than_the_tolerance_then_it_is_kept() {
+    fn given_a_vertex_straying_further_than_the_tolerance_when_simplified_then_it_is_kept() {
         assert_eq!(
             douglas_peucker(&[[0.0, 0.0], [1.0, 0.5], [2.0, 0.0]], 0.1).len(),
             3
@@ -102,7 +102,7 @@ mod tests {
     }
 
     #[test]
-    fn when_a_vertex_stays_within_the_tolerance_then_it_is_dropped() {
+    fn given_a_vertex_staying_within_the_tolerance_when_simplified_then_it_is_dropped() {
         assert_eq!(
             douglas_peucker(&[[0.0, 0.0], [1.0, 0.5], [2.0, 0.0]], 1.0).len(),
             2
@@ -111,7 +111,7 @@ mod tests {
 
     /// The ends anchor the shape: dropping either would move where a quay meets the water.
     #[test]
-    fn when_a_line_is_simplified_then_its_ends_never_move() {
+    fn given_a_wandering_line_when_simplified_then_its_ends_never_move() {
         let wandering: Vec<Point> = (0..200).map(|i| [i as f64, (i as f64 * 0.7).sin()]).collect();
 
         let simplified = douglas_peucker(&wandering, 0.5);
@@ -123,14 +123,14 @@ mod tests {
     /// A chain of tens of thousands of vertices is ordinary for a coastline, and a recursive
     /// implementation overflows the stack on one that degenerates into a straight line.
     #[test]
-    fn when_a_line_is_very_long_then_simplifying_it_does_not_exhaust_the_stack() {
+    fn given_a_line_of_a_hundred_thousand_vertices_when_simplified_then_the_stack_is_not_exhausted() {
         let long: Vec<Point> = (0..100_000).map(|i| [i as f64, 0.0]).collect();
 
         assert_eq!(douglas_peucker(&long, 0.1).len(), 2);
     }
 
     #[test]
-    fn when_a_shape_lies_beyond_the_frame_then_it_is_not_drawn() {
+    fn given_a_shape_lying_beyond_the_frame_when_tested_against_it_then_it_is_not_drawn() {
         let frame = BoundingBox {
             west: 0.0,
             south: 0.0,
@@ -143,7 +143,8 @@ mod tests {
     }
 
     #[test]
-    fn when_a_shape_crosses_the_frame_then_it_is_drawn_even_with_no_vertex_inside_it() {
+    fn given_a_shape_crossing_the_frame_with_no_vertex_inside_it_when_tested_against_it_then_it_is_still_drawn()
+     {
         let frame = BoundingBox {
             west: 0.0,
             south: 0.0,

@@ -59,7 +59,7 @@ mod tests {
     /// A false negative would drop real geometry with nothing to show for it, so this is the one
     /// property that has to hold without exception.
     #[test]
-    fn when_an_id_was_inserted_then_the_filter_always_admits_it() {
+    fn given_ids_including_the_extremes_when_inserted_then_the_filter_always_admits_them() {
         let ids = [1i64, 24_287_041, -5, i64::MAX, i64::MIN, 11_164_468_656, 0];
         let filter = IdFilter::of(ids.iter(), ids.len());
 
@@ -69,7 +69,7 @@ mod tests {
     /// A false positive costs one lookup in the real set and nothing else, so the rate only has to
     /// be low enough that those lookups stay in the noise beside the inflate.
     #[test]
-    fn when_the_filter_is_sized_for_the_set_then_false_positives_stay_rare() {
+    fn given_a_filter_sized_for_its_set_when_asked_about_a_million_others_then_false_positives_stay_rare() {
         let held: Vec<i64> = (0..100_000).map(|id| id * 7919).collect();
         let filter = IdFilter::of(held.iter(), held.len());
 
@@ -85,7 +85,7 @@ mod tests {
     }
 
     #[test]
-    fn when_the_filter_holds_nothing_then_it_admits_nothing() {
+    fn given_an_empty_filter_when_asked_about_an_id_then_it_admits_nothing() {
         let filter = IdFilter::of([].iter(), 0);
 
         assert!(!filter.may_hold(42));

@@ -145,7 +145,7 @@ mod tests {
 
     /// A square of a thousandth of a degree at Abidjan is about 111 m across.
     #[test]
-    fn when_a_ring_is_measured_then_its_area_is_in_square_metres() {
+    fn given_a_square_a_thousandth_of_a_degree_across_when_measured_then_its_area_is_in_square_metres() {
         let square = [[-4.01, 5.27], [-4.009, 5.27], [-4.009, 5.271], [-4.01, 5.271]];
 
         let area = area_sq_m(&square, 5.27);
@@ -154,7 +154,7 @@ mod tests {
     }
 
     #[test]
-    fn when_a_ring_is_wound_the_other_way_then_its_area_is_still_positive() {
+    fn given_a_ring_wound_clockwise_when_measured_then_its_area_is_still_positive() {
         let clockwise = [[-4.01, 5.27], [-4.01, 5.271], [-4.009, 5.271], [-4.009, 5.27]];
         let widdershins = [[-4.01, 5.27], [-4.009, 5.27], [-4.009, 5.271], [-4.01, 5.271]];
 
@@ -162,7 +162,7 @@ mod tests {
     }
 
     #[test]
-    fn when_nothing_is_built_then_every_cell_is_empty() {
+    fn given_no_buildings_in_the_frame_when_density_is_measured_then_every_cell_is_empty() {
         let density = Density::of(std::iter::empty(), &frame(), 250.0);
 
         assert_eq!(density.over([-4.02, 5.26], [-4.0, 5.28]), 0.0);
@@ -171,7 +171,7 @@ mod tests {
 
     /// The point of the measurement: the same land use tag over two places, one dense and one not.
     #[test]
-    fn when_one_area_is_built_up_and_another_is_not_then_their_shares_differ() {
+    fn given_one_area_built_up_and_another_bare_when_density_is_measured_then_their_shares_differ() {
         let dense: Vec<Vec<Point>> = (0..40)
             .map(|index| {
                 let offset = index as f64 * 0.0001;
@@ -194,7 +194,7 @@ mod tests {
     }
 
     #[test]
-    fn when_a_shape_sits_outside_the_frame_then_it_has_no_measurement() {
+    fn given_a_shape_outside_the_frame_when_its_density_is_asked_for_then_it_has_no_measurement() {
         let density = Density::of(std::iter::empty(), &frame(), 250.0);
 
         assert_eq!(density.over([10.0, 10.0], [11.0, 11.0]), 0.0);

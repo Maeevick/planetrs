@@ -576,7 +576,7 @@ mod tests {
     /// implicitly before filling it, so a stream drawn in a category that has a fill comes out as a
     /// long filled wedge following its own course.
     #[test]
-    fn when_a_shape_is_not_closed_then_it_is_never_filled() {
+    fn given_an_open_brook_in_a_category_with_a_fill_when_drawn_then_it_is_never_filled() {
         let drawn = write(
             &scene_of(vec![feature(Category::Water, brook(), false)]),
             &filling_water(),
@@ -593,7 +593,7 @@ mod tests {
     }
 
     #[test]
-    fn when_a_shape_is_closed_then_it_takes_the_fill_its_theme_gives_it() {
+    fn given_a_closed_pond_in_a_category_with_a_fill_when_drawn_then_it_takes_the_fill_its_theme_gives_it() {
         let drawn = write(
             &scene_of(vec![feature(Category::Water, pond(), true)]),
             &filling_water(),
@@ -610,7 +610,7 @@ mod tests {
     /// A land use polygon whose run leaves the collected box comes back open, so this is not only
     /// about water: any area category can arrive as a line and must not be filled when it does.
     #[test]
-    fn when_an_area_feature_arrives_as_an_open_run_then_it_is_not_filled_either() {
+    fn given_a_green_area_arriving_as_an_open_run_when_drawn_then_it_is_not_filled_either() {
         let theme = crate::theme::parse(
             "background = \"#fff\"\norder = [\"green\"]\n\n[green]\nfill = \"#e0e8d0\"\n",
             std::path::Path::new("test.toml"),
@@ -693,7 +693,7 @@ mod label_tests {
     /// picture has to be able to read whose data it shows, and a description hidden in the file is
     /// gone the moment it becomes a PNG.
     #[test]
-    fn when_a_map_is_written_then_the_openstreetmap_attribution_is_drawn_on_it() {
+    fn given_an_empty_map_when_written_then_the_openstreetmap_attribution_is_drawn_on_it() {
         let drawn = write(&scene_of(vec![]), &theme(), &Marker::default(), &[]);
 
         assert!(drawn.contains(">© OpenStreetMap contributors</tspan>"), "{drawn}");
@@ -702,7 +702,7 @@ mod label_tests {
     /// A picture holds no link, so the OpenStreetMap Foundation asks for the copyright page's full
     /// address on it, as on a printed page.
     #[test]
-    fn when_a_map_is_written_then_the_copyright_page_is_written_out_in_full() {
+    fn given_an_empty_map_when_written_then_the_copyright_page_is_written_out_in_full() {
         let drawn = write(&scene_of(vec![]), &theme(), &Marker::default(), &[]);
 
         assert!(
@@ -712,7 +712,7 @@ mod label_tests {
     }
 
     #[test]
-    fn when_a_map_is_written_then_its_credit_links_to_the_copyright_page_where_a_link_works() {
+    fn given_an_empty_map_when_written_then_its_credit_links_to_the_copyright_page_where_a_link_works() {
         let drawn = write(&scene_of(vec![]), &theme(), &Marker::default(), &[]);
 
         assert!(
@@ -722,7 +722,7 @@ mod label_tests {
     }
 
     #[test]
-    fn when_the_canvas_is_narrow_then_the_credit_shrinks_to_stay_on_it() {
+    fn given_a_canvas_two_hundred_pixels_wide_when_credited_then_the_credit_shrinks_to_stay_on_it() {
         let canvas = Canvas::new(200.0, 120.0).unwrap();
 
         let (_, claim) = credited(&canvas, &theme());
@@ -731,7 +731,7 @@ mod label_tests {
     }
 
     #[test]
-    fn when_a_name_would_cover_the_attribution_then_the_name_gives_way() {
+    fn given_a_village_named_where_the_attribution_sits_when_labelled_then_the_name_gives_way() {
         let frame = area().frame();
         let corner = [
             frame.west + (frame.east - frame.west) * 0.95,
@@ -743,14 +743,14 @@ mod label_tests {
     }
 
     #[test]
-    fn when_no_class_is_asked_for_then_no_name_is_drawn() {
+    fn given_a_named_village_when_no_class_is_asked_for_then_no_name_is_drawn() {
         let scene = scene_of(vec![label("Giverny", LabelClass::Settlement, 75, middle())]);
 
         assert!(drawn_names(&scene, &[]).is_empty());
     }
 
     #[test]
-    fn when_a_class_is_asked_for_then_its_names_are_drawn() {
+    fn given_a_named_village_when_its_class_is_asked_for_then_its_name_is_drawn() {
         let scene = scene_of(vec![label("Giverny", LabelClass::Settlement, 75, middle())]);
 
         assert_eq!(drawn_names(&scene, &[LabelClass::Settlement]), vec!["Giverny"]);
@@ -758,7 +758,7 @@ mod label_tests {
 
     /// Asking for settlements and getting brooks would make the flag meaningless.
     #[test]
-    fn when_one_class_is_asked_for_then_the_others_stay_undrawn() {
+    fn given_a_named_village_and_a_named_brook_when_one_class_is_asked_for_then_the_others_stay_undrawn() {
         let scene = scene_of(vec![
             label("Giverny", LabelClass::Settlement, 75, middle()),
             label("Le Ru", LabelClass::Water, 30, middle()),
@@ -769,7 +769,7 @@ mod label_tests {
 
     /// The whole point of ranking: in a crowded corner what survives is the village, not the brook.
     #[test]
-    fn when_two_names_want_the_same_pixels_then_the_stronger_one_keeps_them() {
+    fn given_a_village_and_a_brook_named_on_the_same_pixels_when_labelled_then_the_stronger_one_keeps_them() {
         let scene = scene_of(vec![
             label("Giverny", LabelClass::Settlement, 75, middle()),
             label("Le Ru", LabelClass::Water, 30, middle()),
@@ -782,7 +782,7 @@ mod label_tests {
     }
 
     #[test]
-    fn when_two_names_are_far_apart_then_both_are_drawn() {
+    fn given_two_settlements_named_far_apart_when_labelled_then_both_are_drawn() {
         let frame = area().frame();
         let scene = scene_of(vec![
             label(
@@ -804,7 +804,7 @@ mod label_tests {
 
     /// Half a word at the edge of the picture reads as a mistake rather than as a name.
     #[test]
-    fn when_a_name_would_run_off_the_canvas_then_it_is_dropped_rather_than_clipped() {
+    fn given_a_long_name_against_the_east_edge_when_labelled_then_it_is_dropped_rather_than_clipped() {
         let frame = area().frame();
         let scene = scene_of(vec![label(
             "Sainte-Geneviève-lès-Gasny",
@@ -818,7 +818,7 @@ mod label_tests {
 
     /// A name drawn over the dot hides the thing the dot was put there to mark.
     #[test]
-    fn when_a_marker_sits_at_a_point_then_no_name_is_drawn_on_top_of_it() {
+    fn given_a_marker_on_a_named_brook_when_labelled_then_no_name_is_drawn_on_top_of_it() {
         let scene = scene_of(vec![label("Le Ru", LabelClass::Water, 30, middle())]);
         let marker = Marker {
             mark: Mark::Dot,
@@ -832,7 +832,7 @@ mod label_tests {
     }
 
     #[test]
-    fn when_a_name_holds_markup_then_the_svg_stays_well_formed() {
+    fn given_a_name_holding_markup_when_written_then_the_svg_stays_well_formed() {
         let scene = scene_of(vec![label(
             "Saint-Louis & <Nord>",
             LabelClass::Settlement,

@@ -205,7 +205,8 @@ mod tests {
 
     /// The passes fold across threads, so two runs disagree on order unless this puts them right.
     #[test]
-    fn when_a_harvest_is_sorted_then_every_list_runs_in_ascending_id_order() {
+    fn given_entities_in_the_order_the_threads_found_them_when_the_harvest_is_sorted_then_every_list_runs_in_ascending_id_order()
+     {
         let sorted = harvest(vec![node(9), node(2), node(5)], vec![way(30), way(10)]).sorted();
 
         assert_eq!(
@@ -218,7 +219,7 @@ mod tests {
     /// A member way fetched by the relation pass can already be in hand from the bbox pass, and
     /// writing it twice would put the same geometry on the map twice.
     #[test]
-    fn when_the_same_entity_arrives_twice_then_only_one_of_it_survives() {
+    fn given_a_way_found_by_two_passes_when_the_harvest_is_sorted_then_only_one_of_it_survives() {
         let sorted = harvest(vec![node(2), node(2)], vec![way(10), way(10)]).sorted();
 
         assert_eq!(sorted.nodes.len(), 1);
@@ -226,7 +227,7 @@ mod tests {
     }
 
     #[test]
-    fn when_a_node_is_looked_up_then_the_sorted_list_finds_it() {
+    fn given_a_harvest_sorted_by_id_when_a_node_is_looked_up_then_the_sorted_list_finds_it() {
         let sorted = harvest(vec![node(9), node(2), node(5)], vec![]).sorted();
 
         assert_eq!(sorted.node(5).map(|n| n.id), Some(5));
@@ -234,7 +235,7 @@ mod tests {
     }
 
     #[test]
-    fn when_an_area_sits_inside_the_harvested_ground_then_the_harvest_answers_for_it() {
+    fn given_an_area_inside_the_harvested_ground_when_checked_then_the_harvest_answers_for_it() {
         let held = harvest(vec![], vec![]);
 
         assert!(held.answers_for(&BoundingBox {
@@ -248,7 +249,7 @@ mod tests {
     /// The failure that cost seven full rescans: a frame that still fits but a margin that no
     /// longer does needs ways the passes never looked for.
     #[test]
-    fn when_an_area_reaches_past_the_harvested_ground_then_the_harvest_cannot_answer_for_it() {
+    fn given_an_area_reaching_past_the_harvested_ground_when_checked_then_the_harvest_cannot_answer_for_it() {
         let held = harvest(vec![], vec![]);
 
         assert!(!held.answers_for(&BoundingBox {
@@ -260,7 +261,7 @@ mod tests {
     }
 
     #[test]
-    fn when_a_tag_is_asked_for_then_its_own_value_comes_back() {
+    fn given_the_tags_of_a_named_dock_when_one_is_asked_for_then_its_own_value_comes_back() {
         let tags = vec![
             ("waterway".into(), "dock".into()),
             ("name".into(), "Bassin".into()),

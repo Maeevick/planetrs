@@ -381,7 +381,7 @@ mod tests {
     use clap::CommandFactory;
 
     #[test]
-    fn when_the_command_line_is_defined_then_clap_finds_no_fault_in_it() {
+    fn given_the_command_line_definition_when_checked_then_clap_finds_no_fault_in_it() {
         Cli::command().debug_assert();
     }
 
@@ -392,7 +392,7 @@ mod tests {
     /// A longitude west of Greenwich starts with a minus, and an argument parser that reads that as
     /// a flag makes half the planet unreachable.
     #[test]
-    fn when_a_longitude_is_negative_then_it_is_a_number_and_not_a_flag() {
+    fn given_a_negative_longitude_when_parsed_then_it_is_a_number_and_not_a_flag() {
         let cli = parsed(&[
             "planetrs-mapclipper",
             "harvest",
@@ -417,7 +417,7 @@ mod tests {
 
     /// Both spellings have to work; punishing a reader for the one they tried is hostile.
     #[test]
-    fn when_a_flag_is_written_with_an_equals_then_it_means_the_same_as_with_a_space() {
+    fn given_a_flag_written_with_an_equals_when_parsed_then_it_means_the_same_as_with_a_space() {
         let with_space = parsed(&[
             "planetrs-mapclipper",
             "harvest",
@@ -448,7 +448,7 @@ mod tests {
     }
 
     #[test]
-    fn when_a_place_is_named_in_several_languages_then_each_is_kept_under_its_own_tag() {
+    fn given_a_place_named_in_english_and_in_french_when_parsed_then_each_name_is_kept_under_its_own_tag() {
         let cli = parsed(&[
             "planetrs-mapclipper",
             "render",
@@ -480,7 +480,7 @@ mod tests {
 
     /// Somebody with one language will write this, and refusing it would be pedantry.
     #[test]
-    fn when_a_name_states_no_language_then_it_is_still_a_name() {
+    fn given_a_name_without_a_language_when_parsed_then_it_is_still_a_name() {
         let cli = parsed(&[
             "planetrs-mapclipper",
             "render",
@@ -509,7 +509,7 @@ mod tests {
     /// The frame is centred for how it looks; the point belongs on the thing being described, and
     /// those are only the same by coincidence.
     #[test]
-    fn when_a_point_of_interest_is_given_then_the_marker_leaves_the_middle_of_the_frame() {
+    fn given_a_point_of_interest_when_parsed_then_the_marker_leaves_the_middle_of_the_frame() {
         let cli = parsed(&[
             "planetrs-mapclipper",
             "render",
@@ -538,7 +538,7 @@ mod tests {
     }
 
     #[test]
-    fn when_no_point_of_interest_is_given_then_the_marker_sits_in_the_middle_of_the_frame() {
+    fn given_no_point_of_interest_when_parsed_then_the_marker_sits_in_the_middle_of_the_frame() {
         let cli = parsed(&[
             "planetrs-mapclipper",
             "render",
@@ -563,7 +563,7 @@ mod tests {
     }
 
     #[test]
-    fn when_a_required_argument_is_missing_then_it_is_refused_rather_than_guessed() {
+    fn given_a_harvest_command_naming_only_its_planet_when_parsed_then_it_is_refused_rather_than_guessed() {
         let missing = Cli::try_parse_from(["planetrs-mapclipper", "harvest", "planet.osm.pbf"]);
 
         assert!(missing.is_err());
@@ -571,14 +571,14 @@ mod tests {
 
     /// Guessing at a near miss is the cheapest kindness an argument parser offers.
     #[test]
-    fn when_a_subcommand_is_mistyped_then_the_nearest_one_is_suggested() {
+    fn given_a_mistyped_subcommand_when_parsed_then_the_nearest_one_is_suggested() {
         let error = Cli::try_parse_from(["planetrs-mapclipper", "harvset"]).unwrap_err();
 
         assert!(error.to_string().contains("harvest"), "got {error}");
     }
 
     #[test]
-    fn when_no_output_is_asked_for_then_the_run_would_produce_nothing() {
+    fn given_a_render_command_without_an_output_when_parsed_then_the_run_would_produce_nothing() {
         let cli = parsed(&[
             "planetrs-mapclipper",
             "render",

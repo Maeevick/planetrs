@@ -47,18 +47,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn when_a_shape_is_measured_then_its_extent_is_its_bounding_box() {
+    fn given_a_triangle_when_measured_then_its_extent_is_its_bounding_box() {
         assert_eq!(extent(&[[0.0, 0.0], [3.0, 0.0], [3.0, 2.0]]), (3.0, 2.0));
     }
 
     #[test]
-    fn when_a_shape_has_no_points_then_it_has_no_extent() {
+    fn given_a_shape_with_no_points_when_measured_then_it_has_no_extent() {
         assert_eq!(extent(&[]), (0.0, 0.0));
         assert_eq!(bounds(&[]), None);
     }
 
     #[test]
-    fn when_a_ring_is_measured_then_its_area_does_not_depend_on_which_way_it_was_wound() {
+    fn given_a_square_wound_each_way_when_measured_then_its_area_does_not_depend_on_which_way_it_was_wound() {
         let anticlockwise = [[0.0, 0.0], [2.0, 0.0], [2.0, 2.0], [0.0, 2.0]];
         let clockwise = [[0.0, 0.0], [0.0, 2.0], [2.0, 2.0], [2.0, 0.0]];
 
@@ -66,7 +66,7 @@ mod tests {
     }
 
     #[test]
-    fn when_a_ring_is_wound_anticlockwise_then_its_signed_area_is_positive() {
+    fn given_a_square_wound_anticlockwise_when_measured_then_its_signed_area_is_positive() {
         assert!(signed_area(&[[0.0, 0.0], [2.0, 0.0], [2.0, 2.0], [0.0, 2.0]]) > 0.0);
     }
 }

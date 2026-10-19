@@ -55,7 +55,7 @@ mod tests {
                           fill=\"#ff0000\"/></svg>";
 
     #[test]
-    fn when_an_svg_is_rasterised_then_the_bytes_are_a_png() {
+    fn given_an_svg_of_a_red_square_when_rasterised_then_the_bytes_are_a_png() {
         let bytes = render(SQUARE, 1.0).unwrap();
 
         assert_eq!(&bytes[..8], b"\x89PNG\r\n\x1a\n");
@@ -63,7 +63,7 @@ mod tests {
 
     /// A hero image is drawn at twice its stated size so it stays sharp on a dense display.
     #[test]
-    fn when_a_scale_is_given_then_the_raster_is_that_much_larger() {
+    fn given_an_svg_of_a_red_square_when_rasterised_at_twice_its_size_then_the_raster_is_that_much_larger() {
         let once = render(SQUARE, 1.0).unwrap();
         let twice = render(SQUARE, 2.0).unwrap();
 
@@ -71,7 +71,7 @@ mod tests {
     }
 
     #[test]
-    fn when_the_svg_is_not_an_svg_then_it_is_refused_rather_than_drawn_blank() {
+    fn given_plain_text_in_place_of_an_svg_when_rasterised_then_it_is_refused_rather_than_drawn_blank() {
         assert!(render("a map, but described in words", 1.0).is_err());
     }
 }

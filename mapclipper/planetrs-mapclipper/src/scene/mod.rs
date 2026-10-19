@@ -502,7 +502,7 @@ mod tests {
     }
 
     #[test]
-    fn when_a_harvest_holds_a_dock_then_the_scene_draws_it_as_water() {
+    fn given_a_harvest_holding_a_dock_when_the_scene_is_built_then_the_dock_is_drawn_as_water() {
         let harvest = harvest_of(
             square(1, 2000.0),
             vec![Way {
@@ -520,7 +520,7 @@ mod tests {
     }
 
     #[test]
-    fn when_a_dock_is_a_closed_way_then_it_is_a_surface_rather_than_a_line() {
+    fn given_a_dock_mapped_as_a_closed_way_when_the_scene_is_built_then_it_is_a_surface_rather_than_a_line() {
         let harvest = harvest_of(
             square(1, 2000.0),
             vec![Way {
@@ -537,7 +537,7 @@ mod tests {
     /// At ten kilometres on a thousand pixels a pixel is ten metres, so a two metre shed is a dot
     /// wherever it is put and drawing it only makes the file bigger.
     #[test]
-    fn when_a_building_is_smaller_than_a_pixel_then_it_is_not_drawn() {
+    fn given_a_building_smaller_than_a_pixel_when_the_scene_is_built_then_it_is_not_drawn() {
         let harvest = harvest_of(
             square(1, 2.0),
             vec![Way {
@@ -555,7 +555,7 @@ mod tests {
     }
 
     #[test]
-    fn when_a_building_is_larger_than_a_pixel_then_it_is_drawn() {
+    fn given_a_building_larger_than_a_pixel_when_the_scene_is_built_then_it_is_drawn() {
         let harvest = harvest_of(
             square(1, 200.0),
             vec![Way {
@@ -570,7 +570,7 @@ mod tests {
     }
 
     #[test]
-    fn when_a_way_lies_beyond_the_frame_then_it_is_not_drawn() {
+    fn given_a_road_far_beyond_the_frame_when_the_scene_is_built_then_it_is_not_drawn() {
         let far = vec![
             Node {
                 id: 1,
@@ -599,7 +599,7 @@ mod tests {
     /// The scene feeds both the GeoJSON and the SVG, so its order is part of the output and two
     /// runs over the same harvest have to agree on it.
     #[test]
-    fn when_the_same_harvest_is_built_twice_then_the_features_come_out_in_the_same_order() {
+    fn given_a_dock_and_a_forest_when_the_scene_is_built_twice_then_both_come_out_in_the_same_order() {
         let harvest = harvest_of(
             [square(1, 2000.0), square(10, 1500.0)].concat(),
             vec![
@@ -624,7 +624,7 @@ mod tests {
     }
 
     #[test]
-    fn when_a_relation_closes_into_a_ring_then_the_scene_draws_the_lagoon() {
+    fn given_a_lagoon_whose_two_ways_close_into_a_ring_when_the_scene_is_built_then_the_lagoon_is_drawn() {
         let harvest = harvest_of(
             square(1, 4000.0),
             vec![
@@ -664,7 +664,7 @@ mod tests {
     /// A relation whose members never close is worth naming rather than dropping quietly: it is how
     /// the Ébrié lagoon stayed dry with every one of its 166 members in hand.
     #[test]
-    fn when_a_relations_members_do_not_close_then_it_is_reported_rather_than_dropped_quietly() {
+    fn given_an_open_multipolygon_when_the_scene_is_built_then_it_is_reported_rather_than_dropped_quietly() {
         let harvest = harvest_of(
             square(1, 4000.0),
             vec![Way {
@@ -689,7 +689,7 @@ mod tests {
     }
 
     #[test]
-    fn when_a_shore_crosses_the_frame_then_the_scene_fills_the_water_behind_it() {
+    fn given_a_shore_crossing_the_frame_when_the_scene_is_built_then_the_water_behind_it_is_filled() {
         let west = area().frame().west - 0.01;
         let east = area().frame().east + 0.01;
         let nodes = vec![
@@ -720,7 +720,7 @@ mod tests {
     }
 
     #[test]
-    fn when_there_is_no_shore_then_no_sea_is_invented() {
+    fn given_a_building_and_no_shore_when_the_scene_is_built_then_no_sea_is_invented() {
         let harvest = harvest_of(
             square(1, 2000.0),
             vec![Way {
@@ -740,7 +740,7 @@ mod tests {
     }
 
     #[test]
-    fn when_urban_land_is_not_built_up_and_a_threshold_is_set_then_it_is_not_coloured() {
+    fn given_urban_land_with_nothing_built_on_it_when_a_density_threshold_is_set_then_it_is_not_coloured() {
         let harvest = harvest_of(
             square(1, 2000.0),
             vec![Way {
@@ -766,7 +766,7 @@ mod tests {
     /// 29 km on 1000 px wants 16.53 km on 570, not 17.1, and the difference is visible long before
     /// it is obvious.
     #[test]
-    fn when_the_frame_and_the_canvas_disagree_in_shape_then_the_stretch_is_measurable() {
+    fn given_a_wide_frame_and_a_square_canvas_when_fitted_together_then_the_stretch_is_measurable() {
         let wide = Area::around(AT.0, AT.1, 29.0, 16.53, 0.1).unwrap();
 
         let matched = Canvas::new(1000.0, 570.0).unwrap().stretch(&wide.frame());
@@ -780,7 +780,7 @@ mod tests {
     }
 
     #[test]
-    fn when_a_canvas_has_no_pixels_then_it_is_refused() {
+    fn given_a_width_of_zero_or_not_a_number_when_a_canvas_is_made_then_it_is_refused() {
         assert!(matches!(
             Canvas::new(0.0, 570.0),
             Err(ClipError::CanvasNotPositive)
@@ -792,7 +792,7 @@ mod tests {
     }
 
     #[test]
-    fn when_a_place_has_a_name_in_several_languages_then_each_can_be_asked_for() {
+    fn given_a_place_named_in_english_and_in_french_when_asked_by_language_then_each_name_comes_back() {
         let place = Place {
             names: [
                 ("en".to_string(), "Port of Abidjan".to_string()),

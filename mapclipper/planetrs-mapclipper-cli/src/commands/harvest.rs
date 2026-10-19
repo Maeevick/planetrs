@@ -98,7 +98,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn when_a_planet_is_named_then_its_file_name_is_what_the_harvest_records() {
+    fn given_a_planet_at_a_full_path_when_named_then_its_file_name_is_what_the_harvest_records() {
         assert_eq!(
             source_name(Path::new("/data/planet-260907.osm.pbf")),
             "planet-260907.osm.pbf"

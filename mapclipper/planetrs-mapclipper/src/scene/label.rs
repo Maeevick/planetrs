@@ -166,7 +166,7 @@ mod tests {
     }
 
     #[test]
-    fn when_a_node_is_a_village_then_it_becomes_a_settlement_label() {
+    fn given_a_node_tagged_as_a_village_when_labelled_then_it_becomes_a_settlement_label() {
         let found = from_named_node(&node("village", "Giverny")).expect("a label");
 
         assert_eq!(found.text, "Giverny");
@@ -174,7 +174,7 @@ mod tests {
     }
 
     #[test]
-    fn when_a_node_names_no_place_then_it_is_not_a_settlement() {
+    fn given_a_node_naming_a_bakery_when_labelled_then_it_is_not_a_settlement() {
         let shop = NamedNode {
             id: 1,
             latitude: 0,
@@ -190,7 +190,7 @@ mod tests {
 
     /// A city has to win the space over a hamlet, or a dense frame labels the wrong things.
     #[test]
-    fn when_two_settlements_compete_then_the_larger_kind_outranks_the_smaller() {
+    fn given_a_city_and_a_hamlet_when_ranked_then_the_larger_kind_outranks_the_smaller() {
         let city = from_named_node(&node("city", "Rouen")).unwrap();
         let hamlet = from_named_node(&node("hamlet", "Le Colombier")).unwrap();
 
@@ -199,7 +199,7 @@ mod tests {
 
     /// In rural France a hamlet is usually a named `landuse=residential` way, not a `place` node.
     #[test]
-    fn when_built_ground_carries_a_name_then_it_reads_as_a_settlement() {
+    fn given_built_ground_with_a_name_when_classed_then_it_reads_as_a_settlement() {
         assert_eq!(
             class_of(Category::Urban).map(|(class, _)| class),
             Some(LabelClass::Settlement)
@@ -207,7 +207,7 @@ mod tests {
     }
 
     #[test]
-    fn when_a_brook_carries_a_name_then_it_reads_as_water() {
+    fn given_a_brook_with_a_name_when_classed_then_it_reads_as_water() {
         assert_eq!(
             class_of(Category::Waterway).map(|(class, _)| class),
             Some(LabelClass::Water)
@@ -215,13 +215,13 @@ mod tests {
     }
 
     #[test]
-    fn when_a_road_carries_a_name_then_it_is_not_labelled_at_this_scope() {
+    fn given_a_road_with_a_name_when_classed_then_it_is_not_labelled_at_this_scope() {
         assert_eq!(class_of(Category::RoadMinor), None);
         assert_eq!(class_of(Category::Building), None);
     }
 
     #[test]
-    fn when_a_surface_is_named_then_the_name_sits_in_the_middle_of_it() {
+    fn given_a_square_surface_when_named_then_the_name_sits_in_the_middle_of_it() {
         let ring = [[0.0, 0.0], [2.0, 0.0], [2.0, 2.0], [0.0, 2.0], [0.0, 0.0]];
 
         assert_eq!(anchor(&ring, true), Some([1.0, 1.0]));
@@ -230,21 +230,21 @@ mod tests {
     /// A brook's name belongs on the brook, not at the centre of the rectangle it spans, which for
     /// a curving watercourse is usually dry land.
     #[test]
-    fn when_a_line_is_named_then_the_name_sits_on_the_line_rather_than_in_its_bounding_box() {
+    fn given_a_bending_line_when_named_then_the_name_sits_on_the_line_rather_than_in_its_bounding_box() {
         let bend = [[0.0, 0.0], [0.0, 2.0], [2.0, 2.0]];
 
         assert_eq!(anchor(&bend, false), Some([0.0, 2.0]));
     }
 
     #[test]
-    fn when_a_shape_has_no_points_then_it_has_nowhere_to_put_a_name() {
+    fn given_a_shape_with_no_points_when_named_then_it_has_nowhere_to_put_a_name() {
         assert_eq!(anchor(&[], true), None);
     }
 
     /// OSM splits a watercourse wherever anything about it changes, so `Le Ru` arrives as
     /// a dozen ways. Drawing each would stack the same word down the length of the brook.
     #[test]
-    fn when_one_name_arrives_many_times_then_only_the_strongest_claim_to_it_survives() {
+    fn given_one_name_on_three_ways_when_gathered_then_only_the_strongest_claim_to_it_survives() {
         let kept = strongest(vec![
             label("Le Ru", LabelClass::Water, 30, 101),
             label("Le Ru", LabelClass::Water, 30, 102),
@@ -257,7 +257,7 @@ mod tests {
     }
 
     #[test]
-    fn when_the_same_name_belongs_to_a_pond_and_a_brook_then_both_survive_as_one_each() {
+    fn given_the_same_name_on_water_and_on_an_area_when_gathered_then_both_survive_as_one_each() {
         let kept = strongest(vec![
             label("Les Nymphéas", LabelClass::Water, 40, 1),
             label("Les Nymphéas", LabelClass::Area, 25, 2),
@@ -267,7 +267,7 @@ mod tests {
     }
 
     #[test]
-    fn when_labels_are_gathered_then_the_strongest_comes_first() {
+    fn given_a_brook_listed_before_a_village_when_gathered_then_the_strongest_comes_first() {
         let kept = strongest(vec![
             label("Le Ru", LabelClass::Water, 30, 2),
             label("Giverny", LabelClass::Settlement, 75, 1),
@@ -278,7 +278,7 @@ mod tests {
 
     /// The order feeds both outputs, so two runs over the same scene have to agree on it.
     #[test]
-    fn when_the_same_candidates_are_gathered_twice_then_the_order_is_the_same() {
+    fn given_candidates_tied_on_rank_when_gathered_twice_then_the_order_is_the_same() {
         let candidates = || {
             vec![
                 label("B", LabelClass::Water, 30, 5),

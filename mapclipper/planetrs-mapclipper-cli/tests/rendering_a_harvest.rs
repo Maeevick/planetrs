@@ -166,7 +166,7 @@ fn harvest_at(named: &str) -> PathBuf {
 }
 
 #[test]
-fn when_a_harvest_is_rendered_then_the_geojson_says_what_it_is_of() {
+fn given_a_harvest_of_a_named_place_when_rendered_then_the_geojson_says_what_it_is_of() {
     let harvest = harvest_at("says.mapclip");
     let geojson = scratch("says.geojson");
 
@@ -189,7 +189,7 @@ fn when_a_harvest_is_rendered_then_the_geojson_says_what_it_is_of() {
 /// and a build that drops it from either is one nobody may publish the output of: the GeoJSON names
 /// the licence and links to it, as data has to, and the picture spells out the copyright page.
 #[test]
-fn when_anything_is_written_then_it_carries_the_openstreetmap_attribution() {
+fn given_both_outputs_asked_for_when_rendered_then_each_carries_the_openstreetmap_attribution() {
     let harvest = harvest_at("licence.mapclip");
     let geojson = scratch("licence.geojson");
     let svg = scratch("licence.svg");
@@ -225,7 +225,7 @@ fn when_anything_is_written_then_it_carries_the_openstreetmap_attribution() {
 /// The reproducible pair. A harvest plus a framing plus a theme has to give the same bytes every
 /// time, or a checksum over a published map says nothing about what produced it.
 #[test]
-fn when_the_same_harvest_is_rendered_twice_then_both_outputs_are_byte_identical() {
+fn given_one_harvest_framing_and_theme_when_rendered_twice_then_both_outputs_are_byte_identical() {
     let harvest = harvest_at("twice.mapclip");
 
     let render_to = |suffix: &str| {
@@ -247,7 +247,7 @@ fn when_the_same_harvest_is_rendered_twice_then_both_outputs_are_byte_identical(
 /// The failure that cost seven full rescans in the spike: a frame that still fits, asked for with a
 /// margin the harvest never collected.
 #[test]
-fn when_a_frame_reaches_past_the_harvest_then_it_is_refused_with_both_extents_named() {
+fn given_a_frame_reaching_past_the_harvest_when_rendered_then_it_is_refused_with_both_extents_named() {
     let harvest = harvest_at("small.mapclip");
 
     let refused = run(quietly(Command::Render(RenderArgs {
@@ -267,7 +267,7 @@ fn when_a_frame_reaches_past_the_harvest_then_it_is_refused_with_both_extents_na
 }
 
 #[test]
-fn when_a_theme_is_not_known_then_the_render_is_refused_rather_than_drawn_plain() {
+fn given_a_theme_that_is_not_known_when_asked_for_then_the_render_is_refused_rather_than_drawn_plain() {
     let harvest = harvest_at("theme.mapclip");
 
     let refused = run(quietly(Command::Render(RenderArgs {
@@ -285,7 +285,7 @@ fn when_a_theme_is_not_known_then_the_render_is_refused_rather_than_drawn_plain(
 }
 
 #[test]
-fn when_a_file_is_not_a_harvest_then_the_render_says_so_rather_than_misreading_it() {
+fn given_a_file_that_is_not_a_harvest_when_rendered_then_the_render_says_so_rather_than_misreading_it() {
     let not_a_harvest = scratch("foreign.mapclip");
     std::fs::write(&not_a_harvest, b"a map, but described in words").unwrap();
 
@@ -306,7 +306,7 @@ fn when_a_file_is_not_a_harvest_then_the_render_says_so_rather_than_misreading_i
 /// A theme decides only what things look like, so the same harvest under two themes has to draw the
 /// same ground and differ in ink alone.
 #[test]
-fn when_the_theme_changes_then_the_geojson_does_not() {
+fn given_one_harvest_and_frame_when_the_theme_changes_then_the_geojson_does_not() {
     let harvest = harvest_at("themed.mapclip");
 
     let geojson_under = |theme: &str| {
@@ -325,7 +325,7 @@ fn when_the_theme_changes_then_the_geojson_does_not() {
 }
 
 #[test]
-fn when_a_relation_closes_then_the_lagoon_is_in_the_output() {
+fn given_a_lagoon_relation_whose_members_close_when_rendered_then_the_lagoon_is_in_the_output() {
     let harvest = harvest_at("lagoon.mapclip");
     let geojson = scratch("lagoon.geojson");
 
@@ -344,7 +344,7 @@ fn when_a_relation_closes_then_the_lagoon_is_in_the_output() {
 }
 
 #[test]
-fn when_a_harvest_is_inspected_then_it_reports_the_planet_it_came_from() {
+fn given_a_harvest_on_disk_when_inspected_then_it_reports_the_planet_it_came_from() {
     let harvest = harvest_at("inspect.mapclip");
 
     run(quietly(Command::Inspect(InspectArgs {
@@ -357,7 +357,7 @@ fn when_a_harvest_is_inspected_then_it_reports_the_planet_it_came_from() {
 /// Names belong in the data whatever the picture was asked to carry, because a reader drawing its
 /// own map places them its own way.
 #[test]
-fn when_no_labels_are_asked_for_then_the_names_are_still_in_the_geojson() {
+fn given_names_in_the_harvest_when_no_labels_are_asked_for_then_they_are_still_in_the_geojson() {
     let harvest = harvest_at("names.mapclip");
     let geojson = scratch("names.geojson");
 
@@ -376,7 +376,7 @@ fn when_no_labels_are_asked_for_then_the_names_are_still_in_the_geojson() {
 }
 
 #[test]
-fn when_no_labels_are_asked_for_then_the_picture_carries_none() {
+fn given_a_named_village_when_no_labels_are_asked_for_then_the_picture_carries_none() {
     let harvest = harvest_at("bare.mapclip");
     let svg = scratch("bare.svg");
 
@@ -392,7 +392,7 @@ fn when_no_labels_are_asked_for_then_the_picture_carries_none() {
 }
 
 #[test]
-fn when_settlements_are_asked_for_then_the_village_is_named_on_the_picture() {
+fn given_a_named_village_when_settlements_are_asked_for_then_it_is_named_on_the_picture() {
     let harvest = harvest_at("village.mapclip");
     let svg = scratch("village.svg");
 
@@ -408,7 +408,7 @@ fn when_settlements_are_asked_for_then_the_village_is_named_on_the_picture() {
 }
 
 #[test]
-fn when_only_settlements_are_asked_for_then_the_water_stays_unnamed() {
+fn given_a_named_village_and_named_water_when_only_settlements_are_asked_for_then_the_water_stays_unnamed() {
     let harvest = harvest_at("only-village.mapclip");
     let svg = scratch("only-village.svg");
 
@@ -427,7 +427,7 @@ fn when_only_settlements_are_asked_for_then_the_water_stays_unnamed() {
 }
 
 #[test]
-fn when_everything_is_asked_for_then_the_water_is_named_too() {
+fn given_a_named_village_and_named_water_when_everything_is_asked_for_then_the_water_is_named_too() {
     let harvest = harvest_at("all-names.mapclip");
     let svg = scratch("all-names.svg");
 
@@ -447,7 +447,7 @@ fn when_everything_is_asked_for_then_the_water_is_named_too() {
 
 /// Labels are placed greedily in rank order, so the same scene has to place them the same way twice.
 #[test]
-fn when_a_labelled_map_is_drawn_twice_then_both_pictures_are_byte_identical() {
+fn given_a_map_with_every_label_asked_for_when_drawn_twice_then_both_pictures_are_byte_identical() {
     let harvest = harvest_at("stable-names.mapclip");
 
     let draw = |suffix: &str| {

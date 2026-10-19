@@ -57,7 +57,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn when_the_themes_are_listed_as_json_then_every_built_in_is_there() {
+    fn given_the_built_in_themes_when_listed_as_json_then_every_one_is_there() {
         let listed = themes_as_json().unwrap();
 
         assert!(
@@ -68,7 +68,7 @@ mod tests {
     }
 
     #[test]
-    fn when_the_themes_are_listed_as_text_then_each_carries_its_description() {
+    fn given_the_built_in_themes_when_listed_as_text_then_each_carries_its_description() {
         let listed = themes_as_text().unwrap();
 
         assert!(listed.contains("linework"));

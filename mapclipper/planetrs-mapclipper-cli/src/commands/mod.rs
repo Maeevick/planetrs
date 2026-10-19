@@ -113,7 +113,7 @@ mod tests {
     /// An error without a next step is an obstacle rather than information, and the two failures a
     /// reader meets most are both recoverable in one command.
     #[test]
-    fn when_a_harvest_is_from_an_older_build_then_the_error_says_how_to_replace_it() {
+    fn given_a_harvest_from_an_older_build_when_refused_then_the_error_says_how_to_replace_it() {
         let error = ClipError::HarvestVersion {
             found: 0,
             expected: 1,
@@ -123,7 +123,7 @@ mod tests {
     }
 
     #[test]
-    fn when_a_theme_is_not_known_then_the_error_lists_the_ones_that_are() {
+    fn given_a_theme_that_is_not_known_when_refused_then_the_error_lists_the_ones_that_are() {
         let error = ClipError::UnknownTheme {
             named: "chartreuse".into(),
             known: vec!["plain".into(), "clean".into()],
@@ -133,7 +133,7 @@ mod tests {
     }
 
     #[test]
-    fn when_a_planet_file_is_not_sorted_then_the_error_says_which_files_are() {
+    fn given_a_planet_file_that_is_not_sorted_when_refused_then_the_error_says_which_files_are() {
         let error = ClipError::Planet(PbfError::UnsortedSections);
 
         assert!(next_step(&error).unwrap().contains("Sort.Type_then_ID"));

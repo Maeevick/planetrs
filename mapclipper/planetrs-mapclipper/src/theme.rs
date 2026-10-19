@@ -393,14 +393,14 @@ fill = "#0000ff"
 "##;
 
     #[test]
-    fn when_a_theme_names_a_colour_for_a_category_then_that_is_what_it_is_drawn_with() {
+    fn given_a_theme_naming_a_colour_for_a_category_when_read_then_that_is_what_it_is_drawn_with() {
         let theme = read(MINIMAL).unwrap();
 
         assert_eq!(theme.ink_of(Category::Water).fill.as_deref(), Some("#0000ff"));
     }
 
     #[test]
-    fn when_a_theme_states_an_order_then_it_is_read_back_as_categories() {
+    fn given_a_theme_stating_an_order_when_read_then_the_order_comes_back_as_categories() {
         let theme = read(MINIMAL).unwrap();
 
         assert_eq!(theme.order, vec![Category::Water]);
@@ -409,7 +409,7 @@ fill = "#0000ff"
     /// A category with a colour but no place in the order is not drawn, which is how a theme turns
     /// something off without deleting its colours.
     #[test]
-    fn when_a_category_has_a_colour_but_no_place_in_the_order_then_it_is_still_not_drawn() {
+    fn given_a_category_with_a_colour_but_no_place_in_the_order_when_read_then_it_is_still_not_drawn() {
         let theme =
             read("background = \"#fff\"\norder = [\"water\"]\n\n[building]\nfill = \"#111\"\n").unwrap();
 
@@ -420,14 +420,14 @@ fill = "#0000ff"
     /// Every colour in a theme is written with a leading hash, so a reader that cuts at the first
     /// hash anywhere loads a theme that paints nothing and says so nowhere.
     #[test]
-    fn when_a_colour_holds_a_hash_then_it_is_a_colour_and_not_a_comment() {
+    fn given_a_colour_written_with_a_leading_hash_when_read_then_it_is_a_colour_and_not_a_comment() {
         let theme = read(MINIMAL).unwrap();
 
         assert_eq!(theme.background, "#ffffff");
     }
 
     #[test]
-    fn when_a_line_is_a_comment_then_it_is_ignored() {
+    fn given_comments_on_their_own_line_and_after_a_value_when_read_then_they_are_ignored() {
         let theme = read("# a theme\nbackground = \"#fff\" # the paper\norder = [\"water\"]\n").unwrap();
 
         assert_eq!(theme.background, "#fff");
@@ -436,7 +436,7 @@ fill = "#0000ff"
     /// A theme is the one file a reader writes by hand, so a typo has to name its own line rather
     /// than produce a map with something quietly missing.
     #[test]
-    fn when_a_setting_is_misspelled_then_the_error_names_the_line_it_is_on() {
+    fn given_a_misspelled_setting_on_the_third_line_when_read_then_the_error_names_the_line_it_is_on() {
         let error = read("background = \"#fff\"\norder = [\"water\"]\nbackgrond = \"#000\"\n").unwrap_err();
 
         assert!(error.to_string().contains("a-theme.toml:3"), "got {error}");
@@ -444,7 +444,7 @@ fill = "#0000ff"
     }
 
     #[test]
-    fn when_a_table_names_no_category_we_know_then_it_is_refused() {
+    fn given_a_table_naming_no_category_we_know_when_read_then_it_is_refused() {
         let error =
             read("background = \"#fff\"\norder = [\"water\"]\n[chartreuse]\nfill = \"#0f0\"\n").unwrap_err();
 
@@ -452,14 +452,14 @@ fill = "#0000ff"
     }
 
     #[test]
-    fn when_the_order_names_no_category_we_know_then_it_is_refused() {
+    fn given_an_order_naming_no_category_we_know_when_read_then_it_is_refused() {
         let error = read("background = \"#fff\"\norder = [\"water\", \"chartreuse\"]\n").unwrap_err();
 
         assert!(error.to_string().contains("no category called chartreuse"));
     }
 
     #[test]
-    fn when_a_category_is_given_a_setting_it_cannot_have_then_it_is_refused() {
+    fn given_a_category_with_a_setting_it_cannot_have_when_read_then_it_is_refused() {
         let error = read("background = \"#fff\"\norder = [\"water\"]\n[water]\nopacity = 0.5\n").unwrap_err();
 
         assert!(error.to_string().contains("opacity"));
@@ -467,33 +467,33 @@ fill = "#0000ff"
     }
 
     #[test]
-    fn when_a_theme_states_no_background_then_it_is_refused_rather_than_drawn_on_nothing() {
+    fn given_a_theme_stating_no_background_when_read_then_it_is_refused_rather_than_drawn_on_nothing() {
         assert!(read("order = [\"water\"]\n").is_err());
     }
 
     #[test]
-    fn when_a_theme_states_no_order_then_it_is_refused_rather_than_drawing_nothing() {
+    fn given_a_theme_stating_no_order_when_read_then_it_is_refused_rather_than_drawing_nothing() {
         assert!(read("background = \"#fff\"\n").is_err());
     }
 
     /// A draw order names up to fourteen categories, which is more than fits comfortably on one
     /// line, and TOML lets it spread over several.
     #[test]
-    fn when_a_list_is_spread_over_several_lines_then_it_is_read_as_one() {
+    fn given_a_list_spread_over_several_lines_when_read_then_it_is_taken_as_one() {
         let theme = read("background = \"#fff\"\norder = [\n  \"water\",\n  \"green\",\n]\n").unwrap();
 
         assert_eq!(theme.order, vec![Category::Water, Category::Green]);
     }
 
     #[test]
-    fn when_a_list_spread_over_lines_holds_a_comment_then_the_comment_is_still_ignored() {
+    fn given_a_list_spread_over_lines_holding_a_comment_when_read_then_the_comment_is_still_ignored() {
         let theme = read("background = \"#fff\"\norder = [\n  \"water\", # the wet bits\n]\n").unwrap();
 
         assert_eq!(theme.order, vec![Category::Water]);
     }
 
     #[test]
-    fn when_a_width_is_given_then_it_is_read_as_a_number() {
+    fn given_a_width_for_major_roads_when_read_then_it_comes_back_as_a_number() {
         let theme = read(
             "background = \"#fff\"\norder = [\"road-major\"]\n[road-major]\nstroke = \"#fff\"\nwidth = 2.2\n",
         )
@@ -504,7 +504,7 @@ fill = "#0000ff"
 
     /// Every theme that ships has to load, or the tool is broken out of the box.
     #[test]
-    fn when_a_built_in_theme_is_asked_for_then_it_loads() {
+    fn given_a_built_in_theme_name_when_asked_for_then_the_theme_loads() {
         for (name, _) in BUILT_IN {
             let theme = Theme::named_or_at(name).unwrap_or_else(|error| panic!("{name}: {error}"));
             assert_eq!(theme.name, name);
@@ -513,7 +513,7 @@ fill = "#0000ff"
     }
 
     #[test]
-    fn when_a_theme_is_not_known_and_is_not_a_path_then_the_error_lists_the_ones_that_are() {
+    fn given_a_name_neither_built_in_nor_a_path_when_asked_for_then_the_error_lists_the_ones_that_are() {
         let error = Theme::named_or_at("chartreuse").unwrap_err();
 
         assert!(

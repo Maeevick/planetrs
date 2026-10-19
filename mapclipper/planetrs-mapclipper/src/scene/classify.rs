@@ -202,7 +202,7 @@ mod tests {
     }
 
     #[test]
-    fn when_a_way_is_a_harbour_basin_then_it_is_water_rather_than_landuse() {
+    fn given_a_way_tagged_as_a_harbour_basin_when_classified_then_it_is_water_rather_than_landuse() {
         assert_eq!(
             category(&tags(&[("waterway", "dock"), ("name", "Bassin")])),
             Some(Category::Water)
@@ -211,14 +211,14 @@ mod tests {
 
     /// A quay is both, and its shape on the water is what a reader sees.
     #[test]
-    fn when_a_quay_is_also_tagged_as_industrial_land_then_the_pier_wins() {
+    fn given_a_quay_also_tagged_as_industrial_land_when_classified_then_the_pier_wins() {
         let quay = tags(&[("man_made", "quay"), ("landuse", "industrial")]);
 
         assert_eq!(category(&quay), Some(Category::Pier));
     }
 
     #[test]
-    fn when_land_is_lived_on_then_it_reads_as_urban_rather_than_industrial() {
+    fn given_land_tagged_residential_when_classified_then_it_reads_as_urban_rather_than_industrial() {
         assert_eq!(
             category(&tags(&[("landuse", "residential")])),
             Some(Category::Urban)
@@ -230,13 +230,13 @@ mod tests {
     }
 
     #[test]
-    fn when_a_way_carries_nothing_worth_drawing_then_it_is_left_out() {
+    fn given_a_way_tagged_only_with_its_source_when_classified_then_it_is_left_out() {
         assert_eq!(category(&tags(&[("source", "survey")])), None);
     }
 
     /// A ring road closes on itself and is still a line; a basin closes and is a surface.
     #[test]
-    fn when_a_closed_way_is_a_road_then_it_is_not_filled() {
+    fn given_a_major_road_and_water_when_asked_whether_they_enclose_an_area_then_only_the_water_does() {
         assert!(!Category::RoadMajor.is_area());
         assert!(Category::Water.is_area());
     }
@@ -244,7 +244,7 @@ mod tests {
     /// A theme names categories in a file, so every name has to survive the round trip or a theme
     /// silently styles nothing.
     #[test]
-    fn when_a_category_is_named_then_the_name_finds_it_again() {
+    fn given_every_category_when_named_then_its_name_finds_it_again() {
         assert!(
             EVERY_CATEGORY
                 .into_iter()
@@ -253,7 +253,7 @@ mod tests {
     }
 
     #[test]
-    fn when_a_name_belongs_to_no_category_then_nothing_comes_back() {
+    fn given_a_name_belonging_to_no_category_when_looked_up_then_nothing_comes_back() {
         assert_eq!(Category::named("chartreuse"), None);
     }
 }
@@ -273,7 +273,7 @@ mod waterway_tests {
     /// a couple of metres wide, and treating it as the same thing as a pond makes a brook read
     /// wider than the pond beside it.
     #[test]
-    fn when_a_way_is_a_stream_then_it_is_a_line_rather_than_a_surface() {
+    fn given_a_way_tagged_as_a_stream_when_classified_then_it_is_a_line_rather_than_a_surface() {
         assert_eq!(
             category(&tags(&[("waterway", "stream")])),
             Some(Category::Waterway)
@@ -282,7 +282,7 @@ mod waterway_tests {
     }
 
     #[test]
-    fn when_a_way_is_a_river_or_a_ditch_then_it_is_also_a_line() {
+    fn given_a_way_tagged_as_a_river_or_a_ditch_when_classified_then_it_is_also_a_line() {
         for kind in ["river", "canal", "ditch", "drain", "brook"] {
             assert_eq!(
                 category(&tags(&[("waterway", kind)])),
@@ -294,7 +294,7 @@ mod waterway_tests {
 
     /// The areal ones stay areal: a dock and a riverbank are surfaces in OSM's own model.
     #[test]
-    fn when_a_way_is_a_dock_or_a_riverbank_then_it_is_still_a_surface() {
+    fn given_a_way_tagged_as_a_dock_or_a_riverbank_when_classified_then_it_is_still_a_surface() {
         assert_eq!(category(&tags(&[("waterway", "dock")])), Some(Category::Water));
         assert_eq!(
             category(&tags(&[("waterway", "riverbank")])),
@@ -304,7 +304,7 @@ mod waterway_tests {
     }
 
     #[test]
-    fn when_a_way_is_a_lake_then_it_is_a_surface() {
+    fn given_a_way_tagged_as_a_lake_when_classified_then_it_is_a_surface() {
         assert_eq!(category(&tags(&[("natural", "water")])), Some(Category::Water));
     }
 }

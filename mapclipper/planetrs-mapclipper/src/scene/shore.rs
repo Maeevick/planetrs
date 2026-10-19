@@ -320,26 +320,27 @@ mod tests {
     }
 
     #[test]
-    fn when_a_segment_crosses_the_frame_then_it_is_cut_at_both_edges() {
+    fn given_a_segment_across_the_frame_when_clipped_then_it_is_cut_at_both_edges() {
         let runs = clip(&[[-1.0, 0.5], [2.0, 0.5]], &unit());
 
         assert_eq!(runs, vec![vec![[0.0, 0.5], [1.0, 0.5]]]);
     }
 
     #[test]
-    fn when_a_line_leaves_and_comes_back_then_it_becomes_two_runs() {
+    fn given_a_line_that_leaves_the_frame_and_comes_back_when_clipped_then_it_becomes_two_runs() {
         let runs = clip(&[[0.5, 0.5], [0.5, 2.0], [0.8, 2.0], [0.8, 0.5]], &unit());
 
         assert_eq!(runs.len(), 2);
     }
 
     #[test]
-    fn when_a_line_misses_the_frame_entirely_then_nothing_survives() {
+    fn given_a_line_missing_the_frame_entirely_when_clipped_then_nothing_survives() {
         assert!(clip(&[[2.0, 2.0], [3.0, 3.0]], &unit()).is_empty());
     }
 
     #[test]
-    fn when_a_point_sits_on_an_edge_then_its_position_runs_clockwise_from_the_south_west() {
+    fn given_the_four_corners_of_the_frame_when_measured_along_its_edge_then_they_run_clockwise_from_the_south_west()
+     {
         let rect = unit();
         let corners = [
             rect.along([0.0, 0.0]),
@@ -359,7 +360,7 @@ mod tests {
     /// The case the whole module exists for. A shore running west to east has land to its north and
     /// water to its south, so the filled polygon must be the southern half and nothing else.
     #[test]
-    fn when_the_shore_runs_east_then_the_water_is_the_half_to_its_south() {
+    fn given_a_shore_running_east_when_the_sea_is_drawn_then_the_water_is_the_half_to_its_south() {
         let filled = water(vec![vec![[0.0, 0.5], [1.0, 0.5]]], &unit());
 
         assert_eq!(filled.len(), 1);
@@ -376,7 +377,7 @@ mod tests {
     /// Same shore, walked the other way: land is now south and the water is the northern half.
     /// Getting this backwards fills the land and drowns the city, which still looks like a map.
     #[test]
-    fn when_the_shore_runs_west_then_the_water_is_the_half_to_its_north() {
+    fn given_a_shore_running_west_when_the_sea_is_drawn_then_the_water_is_the_half_to_its_north() {
         let filled = water(vec![vec![[1.0, 0.5], [0.0, 0.5]]], &unit());
 
         assert_eq!(filled.len(), 1);
@@ -387,7 +388,7 @@ mod tests {
     }
 
     #[test]
-    fn when_the_shore_cuts_a_corner_then_only_that_corner_is_filled() {
+    fn given_a_shore_cutting_a_corner_when_the_sea_is_drawn_then_only_that_corner_is_filled() {
         let filled = water(vec![vec![[0.0, 0.2], [0.2, 0.0]]], &unit());
 
         assert!(
@@ -397,43 +398,43 @@ mod tests {
     }
 
     #[test]
-    fn when_a_fragment_stops_inside_the_frame_then_it_is_dropped_rather_than_closed() {
+    fn given_a_fragment_stopping_in_the_frame_when_the_sea_is_drawn_then_it_is_dropped_rather_than_closed() {
         assert!(water(vec![vec![[0.0, 0.5], [0.4, 0.5]]], &unit()).is_empty());
     }
 
     #[test]
-    fn when_there_is_no_shore_at_all_then_nothing_is_filled() {
+    fn given_no_shore_at_all_when_the_sea_is_drawn_then_nothing_is_filled() {
         assert!(water(Vec::new(), &unit()).is_empty());
     }
 
     #[test]
-    fn when_a_ring_is_wholly_inside_then_clipping_leaves_it_alone() {
+    fn given_a_ring_wholly_inside_the_frame_when_clipped_then_it_is_left_alone() {
         let ring = vec![[0.2, 0.2], [0.8, 0.2], [0.8, 0.8], [0.2, 0.8], [0.2, 0.2]];
 
         assert!((signed_area(&clip_ring(&ring, &unit())).abs() - 0.36).abs() < 1e-9);
     }
 
     #[test]
-    fn when_a_ring_swallows_the_frame_then_clipping_leaves_the_frame() {
+    fn given_a_ring_swallowing_the_frame_when_clipped_then_only_the_frame_is_left() {
         let ring = vec![[-5.0, -5.0], [5.0, -5.0], [5.0, 5.0], [-5.0, 5.0], [-5.0, -5.0]];
 
         assert!((signed_area(&clip_ring(&ring, &unit())).abs() - 1.0).abs() < 1e-9);
     }
 
     #[test]
-    fn when_a_ring_overlaps_one_corner_then_only_that_corner_survives() {
+    fn given_a_ring_overlapping_one_corner_when_clipped_then_only_that_corner_survives() {
         let ring = vec![[-1.0, -1.0], [0.5, -1.0], [0.5, 0.5], [-1.0, 0.5], [-1.0, -1.0]];
 
         assert!((signed_area(&clip_ring(&ring, &unit())).abs() - 0.25).abs() < 1e-9);
     }
 
     #[test]
-    fn when_a_ring_misses_the_frame_then_nothing_survives() {
+    fn given_a_ring_missing_the_frame_when_clipped_then_nothing_survives() {
         assert!(clip_ring(&[[2.0, 2.0], [3.0, 2.0], [3.0, 3.0], [2.0, 2.0]], &unit()).is_empty());
     }
 
     #[test]
-    fn when_a_ring_is_clipped_then_it_comes_back_closed() {
+    fn given_a_ring_crossing_the_frame_when_clipped_then_it_comes_back_closed() {
         let ring = vec![[-1.0, 0.5], [2.0, 0.5], [2.0, 0.9], [-1.0, 0.9], [-1.0, 0.5]];
         let clipped = clip_ring(&ring, &unit());
 
