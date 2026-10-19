@@ -22,6 +22,10 @@ println!("{} blobs, ways from blob {}", planet.blobs.len(), sections.ways.start)
 # Ok::<(), planetrs_pbf::PbfError>(())
 ```
 
+The `testing` feature writes small planet files for tests, a header and sorted blocks of nodes, ways
+and relations, so that whatever reads a planet can be tested on a handful of nodes rather than on
+ninety gigabytes.
+
 The system tests read a real planet and run on request:
 
 ```sh
