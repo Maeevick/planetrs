@@ -266,3 +266,52 @@ fn given_both_tools_parts_and_a_rebuild_of_the_geocoders_when_carried_over_then_
     );
     Ok(())
 }
+
+#[test]
+fn given_a_dataset_of_an_older_planet_when_carried_over_then_nothing_joins_the_rebuild_and_the_other_tools_parts_are_left_behind()
+-> Outcome {
+    let (previous, building) = (scratch("carry-older-previous"), scratch("carry-older-building"));
+    let older = Provenance {
+        source_name: "planet-260831.osm.pbf".into(),
+        replication_timestamp: 1_788_134_404,
+        ..planet()
+    };
+    let map_of_france = Part::MapIndex { country: "FR".into() };
+    record(
+        &previous,
+        &older,
+        Part::Gazetteer,
+        "gazetteer.parquet",
+        b"old gazetteer",
+        1,
+    )?;
+    record(
+        &previous,
+        &older,
+        map_of_france.clone(),
+        "map-FR.parquet",
+        b"older map of france",
+        1,
+    )?;
+    record(
+        &building,
+        &planet(),
+        Part::Gazetteer,
+        "gazetteer.parquet",
+        b"new gazetteer",
+        1,
+    )?;
+
+    let carried = carry_over(&previous, &building, |part| matches!(part, Part::MapIndex { .. }))?;
+
+    assert_eq!(parts_listed_in(&building)?, vec![Part::Gazetteer]);
+    assert!(!building.join("map-FR.parquet").exists());
+    assert_eq!(
+        carried,
+        CarriedOver {
+            kept: vec![],
+            left: vec![map_of_france]
+        }
+    );
+    Ok(())
+}
