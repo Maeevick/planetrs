@@ -209,3 +209,18 @@ fn given_the_map_and_the_harvest_exist_when_cut_again_then_both_are_kept_and_dat
         "the name used is printed"
     );
 }
+
+#[test]
+fn given_a_harvest_when_inspected_as_json_then_stdout_names_the_planet_it_was_cut_from() {
+    let directory = scratch("inspect");
+    let harvest = harvest_in(&directory);
+
+    let output = run(&directory, &["inspect", &harvest, "-O", "json"]);
+
+    assert!(output.status.success(), "{}", text(&output.stderr));
+    assert!(
+        text(&output.stdout).contains("\"source\":\"monaco.osm.pbf\""),
+        "{}",
+        text(&output.stdout)
+    );
+}

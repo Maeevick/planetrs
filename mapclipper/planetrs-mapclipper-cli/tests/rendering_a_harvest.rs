@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 use planetrs_mapclipper::harvest::{Harvest, Member, NamedNode, Node, Provenance, Relation, Way, format};
 use planetrs_mapclipper_cli::cli::{
-    Cli, Command, Drawing, Framing, Global, InspectArgs, LabelKind, MarkKind, Outputs, RenderArgs, Shape,
+    Cli, Command, Drawing, Framing, Global, LabelKind, MarkKind, Outputs, RenderArgs,
 };
 use planetrs_mapclipper_cli::run;
 
@@ -343,19 +343,6 @@ fn given_a_lagoon_relation_whose_members_close_when_rendered_then_the_lagoon_is_
     assert!(written.contains("\"osm\":99"));
 }
 
-#[test]
-fn given_a_harvest_on_disk_when_inspected_then_it_reports_the_planet_it_came_from() {
-    let harvest = harvest_at("inspect.mapclip");
-
-    run(quietly(Command::Inspect(InspectArgs {
-        file: harvest,
-        output: Shape::Json,
-    })))
-    .expect("the inspection succeeds");
-}
-
-/// Names belong in the data whatever the picture was asked to carry, because a reader drawing its
-/// own map places them its own way.
 #[test]
 fn given_names_in_the_harvest_when_no_labels_are_asked_for_then_they_are_still_in_the_geojson() {
     let harvest = harvest_at("names.mapclip");
