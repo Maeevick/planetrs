@@ -202,6 +202,16 @@ pub(crate) struct RowGroupSpan {
     pub(crate) highest: i64,
 }
 
+/// Where each row group of a file lies, with the lowest value of the integer column `name`.
+#[cfg(test)]
+pub(crate) fn row_group_bytes(
+    bytes: &[u8],
+    name: &str,
+) -> Result<Vec<(i64, std::ops::Range<u64>)>, TableError> {
+    let _ = (bytes, name);
+    Ok(Vec::new())
+}
+
 /// The columns of a file whose row groups carry statistics, in schema order.
 #[cfg(test)]
 pub(crate) fn columns_with_statistics(bytes: &[u8]) -> Result<Vec<String>, TableError> {

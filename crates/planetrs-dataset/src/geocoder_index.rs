@@ -74,7 +74,7 @@ pub fn to_parquet(country: &str, entries: &[Entry], planet: &Provenance) -> Resu
     cut_at(country, entries, planet, ENTRIES_PER_ROW_GROUP)
 }
 
-fn cut_at(
+pub(crate) fn cut_at(
     country: &str,
     entries: &[Entry],
     planet: &Provenance,
