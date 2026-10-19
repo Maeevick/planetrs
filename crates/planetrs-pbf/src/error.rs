@@ -124,4 +124,22 @@ mod tests {
 
         assert!(std::error::Error::source(&tagged).is_some());
     }
+
+    /// The failure and its causes, joined as a command line prints them.
+    fn joined(error: &dyn std::error::Error) -> String {
+        let mut text = error.to_string();
+        let mut cause = error.source();
+        while let Some(source) = cause {
+            text.push_str(&format!(": {source}"));
+            cause = source.source();
+        }
+        text
+    }
+
+    #[test]
+    fn given_a_failure_at_a_blob_when_joined_with_its_causes_then_each_is_said_once() {
+        let failed = PbfError::Io(io::Error::other("the disk went away")).at_blob(4_096);
+
+        assert_eq!(joined(&failed), "at blob offset 4096: the disk went away");
+    }
 }
