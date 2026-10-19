@@ -5,6 +5,5 @@
 //! files asked for, or to stdout for `-`, and everything said about them goes to stderr.
 
 pub mod cli;
-pub mod progress;
 pub mod report;
 pub mod run;

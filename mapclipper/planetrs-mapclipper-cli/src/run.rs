@@ -8,18 +8,18 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+use planetrs_cli::Progress;
 use planetrs_geo::Area;
-use planetrs_pbf::{IdIndex, Planet};
-
-use crate::cli::{Command, Drawing, Framing, MarkKind, Outputs, Shape};
-use crate::progress::Progress;
-use crate::report::{Report, bytes, quoted, seconds, thousands};
 use planetrs_mapclipper::error::ClipError;
 use planetrs_mapclipper::harvest::passes::{HarvestReport, harvest_area};
 use planetrs_mapclipper::harvest::{Harvest, format};
 use planetrs_mapclipper::output::{Mark, Marker, geojson, svg};
 use planetrs_mapclipper::scene::{self, Scene};
 use planetrs_mapclipper::theme::{BUILT_IN, Theme};
+use planetrs_pbf::{IdIndex, Planet};
+
+use crate::cli::{Command, Drawing, Framing, MarkKind, Outputs, Shape};
+use crate::report::{Report, bytes, quoted, seconds, thousands};
 
 /// Where a sidecar index goes when the caller did not say: beside the planet file.
 fn index_beside(planet: &Path) -> PathBuf {
@@ -133,7 +133,7 @@ fn read_planet(
     let mut index = IdIndex::read_for(&index_at, opened.fingerprint())
         .unwrap_or_else(|| IdIndex::empty(opened.fingerprint(), opened.blobs.len()));
 
-    let progress = Progress::to_stderr();
+    let progress = Progress::to_stderr(false);
     let harvested = harvest_area(&opened, &source_name(planet), area, &mut index, &|line| {
         progress.note(line)
     });
