@@ -1,7 +1,7 @@
 PLANET ?= $(or $(lastword $(sort $(wildcard planet-*.osm.pbf))),planet-latest.osm.pbf)
 WORK   ?= .work
 
-.PHONY: help build release fmt lint test test-unit test-integrated test-system test-all check msrv doc deny package index map clean
+.PHONY: help build release fmt lint test test-unit test-integrated test-alone test-system test-all check msrv doc deny package index map clean
 
 help:
 	@grep -E '^[a-z-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -24,6 +24,12 @@ test-unit: ## pure logic, no filesystem
 test-integrated: ## real formats on the filesystem, no live services
 	cargo test --workspace --tests
 
+# Cargo turns a crate's features on for the whole workspace at once, so a command line can lean on a
+# feature that only the other one asks for. cargo install builds each alone, and so does this.
+test-alone: ## each command line's tests, built on its own as cargo install builds it
+	cargo test -p planetrs-geocoder-cli --tests
+	cargo test -p planetrs-mapclipper-cli --tests
+
 test-system: ## against a real planet file and the network, slowest: PLANET=/path/to/planet.osm.pbf
 	PLANET=$(abspath $(PLANET)) cargo test --workspace --release -- --ignored
 
@@ -31,7 +37,7 @@ test: test-unit test-integrated ## unit then integrated, fastest first
 
 test-all: test-unit test-integrated test-system ## every tier, fastest first
 
-check: fmt lint test ## what has to pass before anything is done
+check: fmt lint test test-alone ## what has to pass before anything is done
 
 msrv: ## the oldest toolchain supported, Rust 1.88
 	cargo +1.88 check --workspace --all-targets
