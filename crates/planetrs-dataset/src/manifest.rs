@@ -86,12 +86,23 @@ pub enum ManifestError {
         /// What the JSON reader said.
         detail: String,
     },
+    /// The manifest is written in a format this version does not read.
+    UnknownFormat {
+        /// The format it names.
+        found: String,
+    },
 }
 
 impl std::fmt::Display for ManifestError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::NotAManifest { detail } => write!(formatter, "not a planetrs dataset manifest: {detail}"),
+            Self::UnknownFormat { found } => {
+                write!(
+                    formatter,
+                    "the manifest is in the format {found:?}, and this version reads {FORMAT:?}"
+                )
+            }
         }
     }
 }
@@ -193,5 +204,19 @@ mod tests {
             "© OpenStreetMap contributors, https://www.openstreetmap.org/copyright"
         );
         Ok(())
+    }
+
+    #[test]
+    fn given_the_manifest_of_another_format_when_read_then_it_is_refused_with_the_format_it_names() {
+        let foreign = monaco().to_json().replace(FORMAT, "planetrs dataset 2");
+
+        let read = Manifest::from_json(&foreign);
+
+        assert_eq!(
+            read,
+            Err(ManifestError::UnknownFormat {
+                found: "planetrs dataset 2".into()
+            })
+        );
     }
 }
