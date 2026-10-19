@@ -78,4 +78,19 @@ mod tests {
 
         assert_eq!(read, Ok((3.268_240_2, 48.198_06)));
     }
+
+    #[test]
+    fn given_bytes_that_are_not_a_little_endian_point_when_read_then_they_are_refused() {
+        let written = point(3.268_240_2, 48.198_06);
+        let big_endian = [[0x00].as_slice(), &written[1..]].concat();
+        let line_string = [&written[..1], &2u32.to_le_bytes(), &written[5..]].concat();
+
+        let refused = [&written[..20], &big_endian, &line_string, &[]].map(read_point);
+
+        assert!(
+            refused
+                .iter()
+                .all(|read| *read == Err(WkbError::NotA { kind: "point" }))
+        );
+    }
 }
