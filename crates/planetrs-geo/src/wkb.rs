@@ -5,6 +5,9 @@
 
 const LITTLE_ENDIAN: u8 = 1;
 const POINT: u32 = 1;
+const LINE_STRING: u32 = 2;
+/// A byte order, a geometry type and a count.
+const LINE_HEADER: usize = 9;
 
 /// A point as WKB: a byte order, a geometry type, then longitude and latitude.
 pub fn point(longitude: f64, latitude: f64) -> Vec<u8> {
@@ -20,8 +23,15 @@ pub fn point(longitude: f64, latitude: f64) -> Vec<u8> {
 /// A line as WKB: a byte order, a geometry type, the count of vertices, then each vertex's longitude
 /// and latitude.
 pub fn line_string(vertices: &[[f64; 2]]) -> Vec<u8> {
-    let _ = vertices;
-    Vec::new()
+    let mut bytes = Vec::with_capacity(LINE_HEADER + vertices.len() * 16);
+    bytes.push(LITTLE_ENDIAN);
+    bytes.extend_from_slice(&LINE_STRING.to_le_bytes());
+    bytes.extend_from_slice(&(vertices.len() as u32).to_le_bytes());
+    for [longitude, latitude] in vertices {
+        bytes.extend_from_slice(&longitude.to_le_bytes());
+        bytes.extend_from_slice(&latitude.to_le_bytes());
+    }
+    bytes
 }
 
 /// Why bytes could not be read as the geometry asked for.
@@ -54,8 +64,20 @@ pub fn read_point(bytes: &[u8]) -> Result<(f64, f64), WkbError> {
 
 /// The vertices of a WKB line, each as longitude and latitude.
 pub fn read_line_string(bytes: &[u8]) -> Result<Vec<[f64; 2]>, WkbError> {
-    let _ = bytes;
-    Err(WkbError::NotA { kind: "line string" })
+    let refused = WkbError::NotA { kind: "line string" };
+    if bytes.len() < LINE_HEADER || bytes[0] != LITTLE_ENDIAN || bytes[1..5] != LINE_STRING.to_le_bytes() {
+        return Err(refused);
+    }
+    let count = u32::from_le_bytes([bytes[5], bytes[6], bytes[7], bytes[8]]) as usize;
+    let vertices = &bytes[LINE_HEADER..];
+    if vertices.len() != count.saturating_mul(16) {
+        return Err(refused);
+    }
+    let (whole, _) = vertices.as_chunks::<16>();
+    Ok(whole
+        .iter()
+        .map(|vertex| [f64_of(&vertex[..8]), f64_of(&vertex[8..])])
+        .collect())
 }
 
 fn f64_of(bytes: &[u8]) -> f64 {
