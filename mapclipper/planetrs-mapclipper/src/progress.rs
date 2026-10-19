@@ -7,10 +7,6 @@
 use std::io::{IsTerminal, Write};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-/// How often a counter is redrawn. A blob is a tenth of a second of work at worst, so this is
-/// several times a second at most and costs nothing beside the inflate.
-const EVERY: usize = 512;
-
 pub struct Progress {
     watching: bool,
     last_width: AtomicU64,
@@ -31,34 +27,25 @@ impl Progress {
         }
     }
 
-    pub fn start(&self, label: &str, total: usize) {
-        if self.watching && total > 0 {
-            self.draw(&format!("{label}: 0 / {total} blobs"));
-        }
-    }
-
-    pub fn step(&self, label: &str, done: usize, total: usize) {
-        if self.watching && (done.is_multiple_of(EVERY) || done == total) {
-            self.draw(&format!("{label}: {done} / {total} blobs"));
-        }
-    }
-
-    pub fn done(&self, _label: &str) {
+    /// Says where the run is, in place of whatever the line said before.
+    pub fn note(&self, line: &str) {
         if self.watching {
-            self.clear();
+            self.draw(line);
         }
     }
 
     fn draw(&self, line: &str) {
         let mut stderr = std::io::stderr().lock();
-        let _ = write!(stderr, "\r{line}");
+        let padding = (self.last_width.load(Ordering::Relaxed) as usize).saturating_sub(line.len());
+        let _ = write!(stderr, "\r{line}{}", " ".repeat(padding));
         let _ = stderr.flush();
         self.last_width.store(line.len() as u64, Ordering::Relaxed);
     }
 
-    fn clear(&self) {
+    /// Wipes the line, so whatever is written next starts clean.
+    pub fn clear(&self) {
         let width = self.last_width.swap(0, Ordering::Relaxed) as usize;
-        if width > 0 {
+        if self.watching && width > 0 {
             let mut stderr = std::io::stderr().lock();
             let _ = write!(stderr, "\r{}\r", " ".repeat(width));
             let _ = stderr.flush();
@@ -75,8 +62,7 @@ mod tests {
     #[test]
     fn when_nobody_is_watching_then_nothing_is_drawn() {
         let quiet = Progress::silent();
-        quiet.start("nodes", 100);
-        quiet.step("nodes", 512, 100);
+        quiet.note("nodes: 512 / 52810 blobs");
 
         assert_eq!(quiet.last_width.load(Ordering::Relaxed), 0);
     }

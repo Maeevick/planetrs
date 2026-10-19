@@ -133,7 +133,11 @@ fn read_planet(
         .unwrap_or_else(|| IdIndex::empty(opened.fingerprint(), opened.blobs.len()));
 
     let progress = Progress::to_stderr();
-    let (harvest, report) = harvest_area(&opened, &source_name(planet), area, &mut index, &progress)?;
+    let harvested = harvest_area(&opened, &source_name(planet), area, &mut index, &|line| {
+        progress.note(line)
+    });
+    progress.clear();
+    let (harvest, report) = harvested?;
 
     if let Err(error) = index.write(&index_at) {
         eprintln!(

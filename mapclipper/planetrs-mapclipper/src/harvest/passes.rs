@@ -29,7 +29,6 @@ use rayon::prelude::*;
 use super::id_filter::IdFilter;
 use super::{Harvest, Member, NamedNode, Node, Provenance, Relation, Tags, Way};
 use crate::error::ClipError;
-use crate::progress::Progress;
 
 const MULTIPOLYGON: &str = "multipolygon";
 
@@ -183,7 +182,7 @@ impl<T> Scanned<T> {
 fn scan<T, Keep>(
     planet: &Planet,
     blobs: &[usize],
-    progress: &Progress,
+    progress: &(dyn Fn(&str) + Sync),
     label: &str,
     keep: Keep,
 ) -> Result<Scanned<T>, PbfError>
@@ -192,8 +191,7 @@ where
     Keep: Fn(&Block<'_>, &mut Vec<T>, &mut Vec<NamedNode>) -> Result<Option<IdSpan>, PbfError> + Sync + Send,
 {
     let seen = AtomicUsize::new(0);
-    let total = blobs.len();
-    progress.start(label, total);
+    let _ = (progress, label, blobs.len());
 
     let scanned = blobs
         .par_iter()
@@ -212,12 +210,11 @@ where
             scanned.blobs += 1;
             scanned.inflated_bytes += buffers.inflated.len() as u64;
             scanned.buffers = buffers;
-            progress.step(label, seen.fetch_add(1, Ordering::Relaxed) + 1, total);
+            seen.fetch_add(1, Ordering::Relaxed);
             Ok::<_, PbfError>(scanned)
         })
         .try_reduce(Scanned::default, |left, right| Ok(left.merged(right)))?;
 
-    progress.done(label);
     Ok(scanned)
 }
 
@@ -255,7 +252,7 @@ fn nodes_inside(
     planet: &Planet,
     sections: &Sections,
     area: &Area,
-    progress: &Progress,
+    progress: &(dyn Fn(&str) + Sync),
 ) -> Result<Scanned<Node>, PbfError> {
     let collected = area.collected();
 
@@ -338,7 +335,7 @@ fn ways_touching(
     planet: &Planet,
     blobs: &[usize],
     held: &[i64],
-    progress: &Progress,
+    progress: &(dyn Fn(&str) + Sync),
     label: &str,
 ) -> Result<Scanned<Way>, PbfError> {
     let filter = IdFilter::of(held.iter(), held.len());
@@ -371,7 +368,7 @@ fn ways_with_id(
     planet: &Planet,
     blobs: &[usize],
     wanted: &[i64],
-    progress: &Progress,
+    progress: &(dyn Fn(&str) + Sync),
 ) -> Result<Scanned<Way>, PbfError> {
     let filter = IdFilter::of(wanted.iter(), wanted.len());
 
@@ -403,7 +400,7 @@ fn nodes_with_id(
     planet: &Planet,
     blobs: &[usize],
     wanted: &[i64],
-    progress: &Progress,
+    progress: &(dyn Fn(&str) + Sync),
 ) -> Result<Scanned<Node>, PbfError> {
     let filter = IdFilter::of(wanted.iter(), wanted.len());
 
@@ -440,7 +437,7 @@ fn multipolygons_touching(
     planet: &Planet,
     sections: &Sections,
     held_ways: &[i64],
-    progress: &Progress,
+    progress: &(dyn Fn(&str) + Sync),
 ) -> Result<Scanned<Relation>, PbfError> {
     scan(
         planet,
@@ -502,7 +499,7 @@ pub fn harvest_area(
     source_name: &str,
     area: &Area,
     index: &mut IdIndex,
-    progress: &Progress,
+    progress: &(dyn Fn(&str) + Sync),
 ) -> Result<(Harvest, HarvestReport), ClipError> {
     let sections = planet.sections()?;
     let mut report = HarvestReport {

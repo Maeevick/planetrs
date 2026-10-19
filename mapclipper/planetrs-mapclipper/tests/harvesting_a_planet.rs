@@ -5,11 +5,11 @@
 //! scene can still tell where a way leaves the box.
 
 use std::path::PathBuf;
+use std::sync::Mutex;
 
 use planetrs_geo::{Area, BoundingBox};
 use planetrs_mapclipper::harvest::passes::harvest_area;
 use planetrs_mapclipper::harvest::{Harvest, Member, NamedNode, Provenance};
-use planetrs_mapclipper::progress::Progress;
 use planetrs_pbf::testing::{MemberKind, Node, PlanetFile, Relation, Way};
 use planetrs_pbf::{IdIndex, Planet};
 
@@ -75,18 +75,20 @@ fn written(planet: &PlanetFile, name: &str) -> std::io::Result<PathBuf> {
     Ok(path)
 }
 
-fn harvested(planet: &PlanetFile, name: &str) -> Result<Harvest, Box<dyn std::error::Error>> {
+fn harvested_saying(
+    planet: &PlanetFile,
+    name: &str,
+    progress: &(dyn Fn(&str) + Sync),
+) -> Result<Harvest, Box<dyn std::error::Error>> {
     let path = written(planet, name)?;
     let opened = Planet::open(&path)?;
     let mut index = IdIndex::empty(opened.fingerprint(), opened.blobs.len());
-    let (harvest, _) = harvest_area(
-        &opened,
-        "monaco.osm.pbf",
-        &monaco()?,
-        &mut index,
-        &Progress::silent(),
-    )?;
+    let (harvest, _) = harvest_area(&opened, "monaco.osm.pbf", &monaco()?, &mut index, progress)?;
     Ok(harvest)
+}
+
+fn harvested(planet: &PlanetFile, name: &str) -> Result<Harvest, Box<dyn std::error::Error>> {
+    harvested_saying(planet, name, &|_| {})
 }
 
 fn node_ids(harvest: &Harvest) -> Vec<i64> {
@@ -231,6 +233,21 @@ fn given_a_replicated_planet_when_harvested_then_the_harvest_names_the_file_and_
             writing_program: "planetrs fixture".to_string(),
         }
     );
+    Ok(())
+}
+
+#[test]
+fn given_a_planet_when_harvested_then_each_pass_says_how_many_of_its_blobs_it_has_read() -> Outcome {
+    let said = Mutex::new(Vec::new());
+
+    harvested_saying(&around_monaco(), "progress", &|line| {
+        said.lock().expect("one writer at a time").push(line.to_string());
+    })?;
+
+    let said = said.into_inner()?;
+    for pass in ["nodes", "ways", "relations", "member ways", "member nodes"] {
+        assert!(said.contains(&format!("{pass}: 1 / 1 blobs")), "{said:?}");
+    }
     Ok(())
 }
 
