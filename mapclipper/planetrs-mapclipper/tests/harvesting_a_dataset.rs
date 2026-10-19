@@ -1,8 +1,8 @@
 //! A harvest cut from a dataset's map indexes, held to the planet's own harvest byte for byte.
 //!
-//! Every box lies inside the countries indexed, where the dataset answers for the planet: a box
-//! around Nice, a box across the border between France and Monaco, and a box around a lake whose
-//! inner ring lies far away.
+//! Inside the countries indexed, the dataset answers for the planet: a box around Nice, a box across
+//! the border between France and Monaco, and a box around a lake whose inner ring lies far away. A
+//! box reaching beyond them is refused.
 
 use std::path::PathBuf;
 
@@ -69,9 +69,9 @@ fn given_a_box_across_the_border_of_france_and_monaco_when_harvested_from_the_da
         "border",
         BoundingBox {
             west: 7.34,
-            south: 43.70,
-            east: 7.44,
-            north: 43.74,
+            south: 43.715,
+            east: 7.435,
+            north: 43.745,
         },
     )?;
 
@@ -86,7 +86,7 @@ fn given_a_box_around_a_lake_whose_inner_ring_lies_far_away_when_harvested_from_
         "lake",
         BoundingBox {
             west: 7.04,
-            south: 43.61,
+            south: 43.615,
             east: 7.09,
             north: 43.65,
         },

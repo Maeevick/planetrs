@@ -63,6 +63,7 @@ pub fn build_map_index(
     let sections = planet.sections()?;
     let territory = countries_in(&planet, &sections, countries, progress)?;
     let codes: Vec<String> = territory.codes().map(str::to_string).collect();
+    let coverages = territory.coverages();
     let mut index = IdIndex::empty(planet.blobs.len());
 
     let largest_node = largest_id(&planet, sections.nodes.clone())?;
@@ -233,12 +234,20 @@ pub fn build_map_index(
             let writing = |failure| ClipError::writing(&beside, failure);
             std::fs::create_dir_all(directory).map_err(writing)?;
             let file = File::create(&beside).map_err(writing)?;
-            map_index::write_parquet(BufWriter::new(file), code, count, element_at, grid, &source)
-                .map_err(ClipError::Encoding)?
-                .into_inner()
-                .map_err(|failure| writing(failure.into_error()))?
-                .sync_all()
-                .map_err(writing)?;
+            map_index::write_parquet(
+                BufWriter::new(file),
+                code,
+                &coverages[country],
+                count,
+                element_at,
+                grid,
+                &source,
+            )
+            .map_err(ClipError::Encoding)?
+            .into_inner()
+            .map_err(|failure| writing(failure.into_error()))?
+            .sync_all()
+            .map_err(writing)?;
             record_written(
                 directory,
                 &source,

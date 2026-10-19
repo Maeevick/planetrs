@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 
 use planetrs_dataset::territory::{country_code, outline_of};
 use planetrs_geo::Outline;
-use planetrs_geo::territory::TerritoryMask;
+use planetrs_geo::territory::{Coverage, TerritoryMask};
 use planetrs_pbf::{Planet, Sections, dense_group, visit_relations, visit_ways};
 
 use super::scan::{every_blob, scan};
@@ -23,6 +23,13 @@ impl Countries {
     /// The countries' codes, in the order their files are written.
     pub(super) fn codes(&self) -> impl Iterator<Item = &str> {
         self.outlines.iter().map(|(code, _)| code.as_str())
+    }
+
+    /// Where a box cut from each country's map index lacks nothing the planet holds, in the order of
+    /// [`Countries::codes`].
+    pub(super) fn coverages(&self) -> Vec<Coverage> {
+        let outlines: Vec<&Outline> = self.outlines.iter().map(|(_, outline)| outline).collect();
+        Coverage::of_each(&outlines)
     }
 
     /// The index among [`Countries::codes`] of the country holding a longitude and latitude, the

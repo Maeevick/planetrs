@@ -1,5 +1,6 @@
 //! A harvest taken from a dataset's map indexes rather than from the planet: for any area inside the
 //! countries indexed, the very harvest the planet gives, read from the few row groups around it.
+//! An area reaching beyond them is refused, since the dataset would lack what the planet holds there.
 //!
 //! The five passes of a harvest are replayed over the elements near the area: the nodes inside the
 //! window, tested on the planet's own grid; the ways touching them; the multipolygons touching those;
@@ -8,12 +9,14 @@
 
 use planetrs_dataset::map_index::{Element, Grid, Line, Position};
 use planetrs_dataset::{Dataset, ForReadingFiles, MapIndex};
-use planetrs_geo::{Area, Window};
+use planetrs_geo::territory::Coverage;
+use planetrs_geo::{Area, BoundingBox, Window};
 
 use super::{Harvest, Member, NamedNode, Node, Provenance, Relation, Way};
 use crate::error::ClipError;
 
-/// Everything the map indexes of `dataset` hold for one area, as the passes over the planet take it.
+/// Everything the map indexes of `dataset` hold for one area, as the passes over the planet take it,
+/// or [`ClipError::OutsideTheDataset`] when the area reaches beyond the countries they cover.
 pub fn harvest_from_dataset<F: ForReadingFiles>(
     dataset: &Dataset<F>,
     area: &Area,
@@ -27,6 +30,12 @@ pub fn harvest_from_dataset<F: ForReadingFiles>(
         grid.latitude_offset,
         grid.longitude_offset,
     );
+    let coverages: Vec<Coverage> = indexes.iter().map(MapIndex::coverage).collect();
+    if !Coverage::cover(&coverages, &ground_of(&window, grid)) {
+        return Err(ClipError::OutsideTheDataset {
+            countries: indexes.iter().map(|index| index.country().to_string()).collect(),
+        });
+    }
     let inside = |at: &Position| {
         window.holds(
             (at.latitude - grid.latitude_offset) / grid.granularity,
@@ -150,6 +159,18 @@ fn one_grid(indexes: &[MapIndex]) -> Result<Grid, ClipError> {
         _ => Err(ClipError::Grid {
             detail: "the dataset's map indexes do not state one grid".into(),
         }),
+    }
+}
+
+/// The ground whose positions a window holds, in degrees: rounded outward from the area collected, it
+/// is what the dataset must cover.
+fn ground_of(window: &Window, grid: Grid) -> BoundingBox {
+    let degrees = |units: i64, offset: i64| (units * grid.granularity + offset) as f64 / 1e9;
+    BoundingBox {
+        west: degrees(window.west, grid.longitude_offset),
+        south: degrees(window.south, grid.latitude_offset),
+        east: degrees(window.east, grid.longitude_offset),
+        north: degrees(window.north, grid.latitude_offset),
     }
 }
 

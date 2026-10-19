@@ -1,21 +1,16 @@
-//! The Riviera as a planet: France and Monaco side by side, with named and unnamed nodes in each, a
-//! road across their border, a road leaving France for land no index covers, and a lake whose inner
-//! ring lies far away.
+//! The Riviera as a planet: France and Monaco side by side, sharing their border as OpenStreetMap
+//! draws it, with named and unnamed nodes in each, a road across their border, a road leaving France
+//! for land no index covers, and a lake whose inner ring lies far away.
 
 use planetrs_pbf::testing::{MemberKind, Node, PlanetFile, Relation, Way};
 
-/// A ring of four corners closed on its first node, as one way.
-fn ring(way: i64, first_node: i64, south: f64, west: f64, north: f64, east: f64) -> (Vec<Node>, Way) {
-    let corners = [(south, west), (south, east), (north, east), (north, west)];
-    let nodes = corners
+/// The four corners of a box as nodes numbered from `first_node`, anticlockwise from the south-west.
+fn corners(first_node: i64, south: f64, west: f64, north: f64, east: f64) -> Vec<Node> {
+    [(south, west), (south, east), (north, east), (north, west)]
         .iter()
         .zip(first_node..)
         .map(|((latitude, longitude), id)| Node::at(id, *latitude, *longitude))
-        .collect();
-    (
-        nodes,
-        Way::through(way, (first_node..first_node + 4).chain([first_node])),
-    )
+        .collect()
 }
 
 fn country(relation: i64, code: &str, outline: i64) -> Relation {
@@ -28,8 +23,10 @@ fn country(relation: i64, code: &str, outline: i64) -> Relation {
 }
 
 pub fn riviera() -> PlanetFile {
-    let (france_corners, france) = ring(2001, 1001, 43.60, 7.00, 43.80, 7.40);
-    let (monaco_corners, monaco) = ring(2002, 1011, 43.70, 7.40, 43.76, 7.45);
+    let france_corners = corners(1001, 43.60, 7.00, 43.80, 7.40);
+    let monaco_corners = corners(1011, 43.70, 7.40, 43.76, 7.45);
+    let france = Way::through(2001, [1001, 1002, 1011, 1014, 1003, 1004, 1001]);
+    let monaco = Way::through(2002, [1011, 1012, 1013, 1014, 1011]);
     let planet = PlanetFile::sorted()
         .replicated_at(1_788_739_204, 4_321)
         .with_node(
@@ -43,7 +40,7 @@ pub fn riviera() -> PlanetFile {
                 .tagged("name", "Monaco")
                 .tagged("place", "city"),
         )
-        .with_node(Node::at(4, 43.71, 7.35))
+        .with_node(Node::at(4, 43.72, 7.35))
         .with_node(Node::at(5, 43.73, 7.43))
         .with_node(Node::at(6, 43.69, 7.30))
         .with_node(Node::at(7, 44.20, 7.30))

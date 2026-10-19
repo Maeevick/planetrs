@@ -100,7 +100,7 @@ fn given_a_road_across_a_border_when_indexed_then_both_countries_keep_it_with_ev
         ],
         refs: vec![4, 5],
         positions: vec![
-            at(43_710_000_000, 7_350_000_000),
+            at(43_720_000_000, 7_350_000_000),
             at(43_730_000_000, 7_430_000_000),
         ],
     };

@@ -9,6 +9,7 @@
 
 use std::io::Write;
 
+use planetrs_geo::territory::Coverage;
 use planetrs_geo::wkb;
 
 use crate::geoparquet;
@@ -32,6 +33,9 @@ const GRID: &str = "planetrs.grid";
 
 /// The footer key holding the country the file is the map index of.
 const COUNTRY: &str = "planetrs.country";
+
+/// The footer key holding the ground where a box cut from the file lacks nothing the planet holds.
+const COVERAGE: &str = "planetrs.coverage";
 
 /// How finely the Hilbert curve orders boxes: a cell of 2^16 to a side over the whole planet is
 /// about 600 metres, finer than any row group.
@@ -103,49 +107,55 @@ pub enum Element {
     },
 }
 
-/// The map index of `country` as a GeoParquet file.
+/// The map index of `country` as a GeoParquet file, answering for the boxes inside `coverage`.
 ///
 /// Elements are ordered along a Hilbert curve through the centres of their boxes, so the rows of one
 /// box sit in a few row groups, and the row groups carry the bounds of their boxes for a reader to
 /// pick them by. The same elements always give the same bytes, whatever order they come in.
 pub fn to_parquet(
     country: &str,
+    coverage: &Coverage,
     elements: &[Element],
     grid: Grid,
     planet: &Provenance,
 ) -> Result<Vec<u8>, TableError> {
-    to_parquet_from(country, elements.len(), |at| elements[at].clone(), grid, planet)
+    write_parquet(
+        Vec::new(),
+        country,
+        coverage,
+        elements.len(),
+        |at| elements[at].clone(),
+        grid,
+        planet,
+    )
 }
 
 /// [`to_parquet`] for `count` elements built by `element_at` when they are needed, twice each,
-/// rather than held all at once: a country's map index is larger than memory.
-pub fn to_parquet_from(
-    country: &str,
-    count: usize,
-    element_at: impl Fn(usize) -> Element + Sync,
-    grid: Grid,
-    planet: &Provenance,
-) -> Result<Vec<u8>, TableError> {
-    write_parquet(Vec::new(), country, count, element_at, grid, planet)
-}
-
-/// [`to_parquet_from`], written into `out` as it is encoded, so that a country's map index need
-/// never be held in memory, and given back once its footer is written.
+/// written into `out` as it is encoded and given back once its footer is written: a country's map
+/// index is larger than memory.
 pub fn write_parquet<W: Write + Send>(
     out: W,
     country: &str,
+    coverage: &Coverage,
     count: usize,
     element_at: impl Fn(usize) -> Element + Sync,
     grid: Grid,
     planet: &Provenance,
 ) -> Result<W, TableError> {
-    written(out, country, count, element_at, grid, planet, ROWS_PER_ROW_GROUP)
+    written(
+        out,
+        stated(country, coverage, grid, planet),
+        count,
+        element_at,
+        ROWS_PER_ROW_GROUP,
+    )
 }
 
 /// [`to_parquet`], with row groups of about `rows_per_row_group` rows.
 #[cfg(test)]
 pub(crate) fn cut_at(
     country: &str,
+    coverage: &Coverage,
     elements: &[Element],
     grid: Grid,
     planet: &Provenance,
@@ -153,22 +163,41 @@ pub(crate) fn cut_at(
 ) -> Result<Vec<u8>, TableError> {
     written(
         Vec::new(),
-        country,
+        stated(country, coverage, grid, planet),
         elements.len(),
         |at| elements[at].clone(),
-        grid,
-        planet,
         rows_per_row_group,
     )
 }
 
-fn written<W: Write + Send>(
-    out: W,
+/// What a map index's footer states beside its rows: the GeoParquet declaration, the planet and the
+/// licence, the country, the grid its positions were read on and the ground it answers for.
+fn stated(
     country: &str,
-    count: usize,
-    element_at: impl Fn(usize) -> Element + Sync,
+    coverage: &Coverage,
     grid: Grid,
     planet: &Provenance,
+) -> Vec<(&'static str, String)> {
+    vec![
+        geoparquet::geo_covered_by_bbox(&["Point", "LineString", "GeometryCollection"]),
+        manifest::notice("map index", planet),
+        (COUNTRY, country.to_string()),
+        (
+            GRID,
+            format!(
+                "{},{},{}",
+                grid.granularity, grid.latitude_offset, grid.longitude_offset
+            ),
+        ),
+        (COVERAGE, coverage.to_text()),
+    ]
+}
+
+fn written<W: Write + Send>(
+    out: W,
+    stated: Vec<(&'static str, String)>,
+    count: usize,
+    element_at: impl Fn(usize) -> Element + Sync,
     rows_per_row_group: usize,
 ) -> Result<W, TableError> {
     let mut placed: Vec<(u64, (u8, i64), usize, usize)> = (0..count)
@@ -184,25 +213,10 @@ fn written<W: Write + Send>(
         })
         .collect::<Result<_, TableError>>()?;
     placed.par_sort_unstable_by_key(|(key, order, _, _)| (*key, *order));
-    let mut writer = TableWriter::into(
-        out,
-        &[
-            geoparquet::geo_covered_by_bbox(&["Point", "LineString", "GeometryCollection"]),
-            manifest::notice("map index", planet),
-            (COUNTRY, country.to_string()),
-            (
-                GRID,
-                format!(
-                    "{},{},{}",
-                    grid.granularity, grid.latitude_offset, grid.longitude_offset
-                ),
-            ),
-        ],
-        &BOX_FIELDS,
-    )
-    .with_close_integers(&["refs.list.item", "unresolved.list.item", "member_ways.list.item"])
-    .with_split_reals(&BOX_FIELDS)
-    .with_unique_values(&["geometry"]);
+    let mut writer = TableWriter::into(out, &stated, &BOX_FIELDS)
+        .with_close_integers(&["refs.list.item", "unresolved.list.item", "member_ways.list.item"])
+        .with_split_reals(&BOX_FIELDS)
+        .with_unique_values(&["geometry"]);
     let mut group: Vec<usize> = Vec::new();
     let mut rows = 0;
     let mut groups_written = 0;
@@ -562,6 +576,15 @@ pub(crate) fn grid_in(footer: &Footer) -> Option<Grid> {
     footer.metadata_value(GRID).as_deref().and_then(grid_of)
 }
 
+/// The ground a map index file's footer states it answers for, nothing when it states none.
+pub(crate) fn coverage_in(footer: &Footer) -> Coverage {
+    footer
+        .metadata_value(COVERAGE)
+        .as_deref()
+        .and_then(Coverage::from_text)
+        .unwrap_or_default()
+}
+
 fn grid_of(text: &str) -> Option<Grid> {
     let mut values = text.split(',').map(|value| value.parse::<i64>().ok());
     let grid = Grid {
@@ -677,7 +700,7 @@ mod tests {
     #[test]
     fn given_nodes_a_way_and_a_multipolygon_when_written_then_reading_them_back_gives_the_same_elements_and_grid()
     -> Result<(), TableError> {
-        let written = to_parquet("MC", &harbour(), grid(), &planet())?;
+        let written = to_parquet("MC", &Coverage::default(), &harbour(), grid(), &planet())?;
 
         let (read_grid, read) = from_parquet(&written)?;
 
@@ -706,7 +729,13 @@ mod tests {
             })
             .collect();
 
-        let (_, read) = from_parquet(&to_parquet("MC", &nodes, grid(), &planet())?)?;
+        let (_, read) = from_parquet(&to_parquet(
+            "MC",
+            &Coverage::default(),
+            &nodes,
+            grid(),
+            &planet(),
+        )?)?;
 
         assert_eq!(by_id(read), nodes);
         Ok(())
@@ -718,8 +747,8 @@ mod tests {
         let mut reversed = harbour();
         reversed.reverse();
 
-        let once = to_parquet("MC", &harbour(), grid(), &planet())?;
-        let again = to_parquet("MC", &reversed, grid(), &planet())?;
+        let once = to_parquet("MC", &Coverage::default(), &harbour(), grid(), &planet())?;
+        let again = to_parquet("MC", &Coverage::default(), &reversed, grid(), &planet())?;
 
         assert_eq!(once, again);
         Ok(())
@@ -728,7 +757,7 @@ mod tests {
     #[test]
     fn given_more_rows_than_a_row_group_holds_when_written_then_no_multipolygon_is_parted_from_its_members()
     -> Result<(), TableError> {
-        let written = cut_at("MC", &harbour(), grid(), &planet(), 1)?;
+        let written = cut_at("MC", &Coverage::default(), &harbour(), grid(), &planet(), 1)?;
 
         let Tail::Footer(footer) = tables::footer_from_tail(&written, written.len() as u64)? else {
             return Err(unexpected("footer"));
@@ -753,7 +782,7 @@ mod tests {
     #[test]
     fn given_a_map_index_when_its_footer_is_read_then_the_box_alone_carries_statistics()
     -> Result<(), TableError> {
-        let written = to_parquet("MC", &harbour(), grid(), &planet())?;
+        let written = to_parquet("MC", &Coverage::default(), &harbour(), grid(), &planet())?;
 
         let with_statistics = tables::columns_with_statistics(&written)?;
 

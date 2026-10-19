@@ -3,6 +3,8 @@
 use std::ops::{Range, RangeInclusive};
 use std::path::{Path, PathBuf};
 
+use planetrs_geo::territory::Coverage;
+
 use crate::directory::MANIFEST;
 use crate::files::{ForReadingFiles, Unreachable};
 use crate::manifest::{Entry, Manifest, ManifestError, Part};
@@ -303,6 +305,12 @@ impl MapIndex {
     /// The grid its positions were read on, as its footer states it.
     pub fn grid(&self) -> Option<Grid> {
         crate::map_index::grid_in(&self.footer)
+    }
+
+    /// The ground where a box cut from it lacks nothing the planet holds, as its footer states it:
+    /// nothing when it states none.
+    pub fn coverage(&self) -> Coverage {
+        crate::map_index::coverage_in(&self.footer)
     }
 }
 
@@ -652,7 +660,7 @@ mod tests {
             latitude_offset: 0,
             longitude_offset: 0,
         };
-        let map = crate::map_index::cut_at("FR", &three_towns(), grid, &planet(), 1)?;
+        let map = crate::map_index::cut_at("FR", &Coverage::default(), &three_towns(), grid, &planet(), 1)?;
         let manifest = Manifest {
             planet: planet(),
             files: vec![Entry {

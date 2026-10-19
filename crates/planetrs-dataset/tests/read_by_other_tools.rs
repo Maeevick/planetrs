@@ -9,6 +9,7 @@ use std::process::Command;
 use planetrs_dataset::Provenance;
 use planetrs_dataset::gazetteer::{self, Area};
 use planetrs_dataset::map_index::{self, Element, Grid, Line, Position};
+use planetrs_geo::territory::Coverage;
 
 type Outcome = Result<(), Box<dyn std::error::Error>>;
 
@@ -192,7 +193,10 @@ fn written_map_index(name: &str) -> Result<PathBuf, Box<dyn std::error::Error>> 
         latitude_offset: 0,
         longitude_offset: 0,
     };
-    std::fs::write(&path, map_index::to_parquet("MC", &harbour(), grid, &planet())?)?;
+    std::fs::write(
+        &path,
+        map_index::to_parquet("MC", &Coverage::default(), &harbour(), grid, &planet())?,
+    )?;
     Ok(path)
 }
 
