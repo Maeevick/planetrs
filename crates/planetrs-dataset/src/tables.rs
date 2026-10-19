@@ -191,6 +191,32 @@ pub(crate) struct RowGroupSpan {
     pub(crate) highest: i64,
 }
 
+/// The columns of a file whose row groups carry statistics, in schema order.
+#[cfg(test)]
+pub(crate) fn columns_with_statistics(bytes: &[u8]) -> Result<Vec<String>, TableError> {
+    let builder =
+        ParquetRecordBatchReaderBuilder::try_new(Bytes::copy_from_slice(bytes)).map_err(unreadable)?;
+    let metadata = builder.metadata();
+    let names: Vec<String> = metadata
+        .file_metadata()
+        .schema_descr()
+        .columns()
+        .iter()
+        .map(|column| column.path().string())
+        .collect();
+    Ok(names
+        .into_iter()
+        .enumerate()
+        .filter(|(at, _)| {
+            metadata
+                .row_groups()
+                .iter()
+                .any(|group| group.column(*at).statistics().is_some())
+        })
+        .map(|(_, name)| name)
+        .collect())
+}
+
 /// Every row group of a file, with the span of the integer column `name`.
 #[cfg(test)]
 pub(crate) fn row_groups(bytes: &[u8], name: &str) -> Result<Vec<RowGroupSpan>, TableError> {

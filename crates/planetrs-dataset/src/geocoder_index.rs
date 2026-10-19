@@ -449,4 +449,15 @@ mod tests {
         );
         Ok(())
     }
+
+    #[test]
+    fn given_a_geocoder_index_when_its_footer_is_read_then_only_the_commune_carries_statistics()
+    -> Result<(), TableError> {
+        let written = to_parquet("FR", &sens(), &planet())?;
+
+        let with_statistics = tables::columns_with_statistics(&written)?;
+
+        assert_eq!(with_statistics, vec!["commune".to_string()]);
+        Ok(())
+    }
 }
