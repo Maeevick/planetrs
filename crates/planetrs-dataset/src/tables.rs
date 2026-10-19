@@ -167,8 +167,16 @@ pub(crate) fn read(bytes: &[u8]) -> Result<Vec<Column>, TableError> {
 /// The key-value pairs a Parquet file carries in its footer, in their order.
 #[cfg(test)]
 pub(crate) fn metadata(bytes: &[u8]) -> Result<Vec<(String, String)>, TableError> {
-    let _ = bytes;
-    Ok(Vec::new())
+    let builder =
+        ParquetRecordBatchReaderBuilder::try_new(Bytes::copy_from_slice(bytes)).map_err(unreadable)?;
+    Ok(builder
+        .metadata()
+        .file_metadata()
+        .key_value_metadata()
+        .into_iter()
+        .flatten()
+        .map(|pair| (pair.key.clone(), pair.value.clone().unwrap_or_default()))
+        .collect())
 }
 
 fn field_of(column: &Column) -> Field {

@@ -12,6 +12,7 @@
 
 pub mod files;
 pub mod gazetteer;
+mod geoparquet;
 #[cfg(feature = "remote")]
 pub mod http;
 pub mod manifest;

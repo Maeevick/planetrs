@@ -7,6 +7,7 @@
 
 use planetrs_geo::wkb;
 
+use crate::geoparquet;
 use crate::manifest::Provenance;
 use crate::tables::{self, Column, TableError, Values};
 
@@ -39,7 +40,7 @@ const AREAS_PER_ROW_GROUP: usize = 100_000;
 pub fn to_parquet(areas: &[Area], planet: &Provenance) -> Result<Vec<u8>, TableError> {
     let _ = planet;
     let row_groups: Vec<Vec<Column>> = areas.chunks(AREAS_PER_ROW_GROUP).map(columns_of).collect();
-    tables::write(&row_groups, &[])
+    tables::write(&row_groups, &[geoparquet::geo(&["Point"])])
 }
 
 /// The areas of a gazetteer file, in its order.
