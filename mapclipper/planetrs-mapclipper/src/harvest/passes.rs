@@ -31,6 +31,9 @@ use super::{Harvest, Member, NamedNode, Node, Provenance, Relation, Tags, Way};
 use crate::error::ClipError;
 
 const MULTIPOLYGON: &str = "multipolygon";
+/// How many blobs pass between two progress lines. A blob is a tenth of a second of work at
+/// worst, so this is several times a second at most and costs nothing beside the inflate.
+const BLOBS_BETWEEN_PROGRESS_LINES: usize = 512;
 
 fn text(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).into_owned()
@@ -191,7 +194,10 @@ where
     Keep: Fn(&Block<'_>, &mut Vec<T>, &mut Vec<NamedNode>) -> Result<Option<IdSpan>, PbfError> + Sync + Send,
 {
     let seen = AtomicUsize::new(0);
-    let _ = (progress, label, blobs.len());
+    let total = blobs.len();
+    if total > 0 {
+        progress(&blobs_read(label, 0, total));
+    }
 
     let scanned = blobs
         .par_iter()
@@ -210,12 +216,20 @@ where
             scanned.blobs += 1;
             scanned.inflated_bytes += buffers.inflated.len() as u64;
             scanned.buffers = buffers;
-            seen.fetch_add(1, Ordering::Relaxed);
+            let done = seen.fetch_add(1, Ordering::Relaxed) + 1;
+            if done.is_multiple_of(BLOBS_BETWEEN_PROGRESS_LINES) || done == total {
+                progress(&blobs_read(label, done, total));
+            }
             Ok::<_, PbfError>(scanned)
         })
         .try_reduce(Scanned::default, |left, right| Ok(left.merged(right)))?;
 
     Ok(scanned)
+}
+
+/// How far a pass has got, as its progress line says it.
+fn blobs_read(pass: &str, done: usize, total: usize) -> String {
+    format!("{pass}: {done} / {total} blobs")
 }
 
 fn cost<T>(scanned: &Scanned<T>, elapsed: Duration) -> PassCost {
