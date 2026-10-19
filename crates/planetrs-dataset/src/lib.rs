@@ -20,6 +20,7 @@ mod geoparquet;
 pub mod http;
 pub mod location;
 pub mod manifest;
+pub mod map_index;
 mod tables;
 pub mod territory;
 #[cfg(any(test, feature = "testing"))]
