@@ -212,12 +212,16 @@ impl PlanetFile {
     }
 
     fn header_block(&self) -> Vec<u8> {
-        Message::new()
+        let header = Message::new()
             .text(4, "OsmSchema-V0.6")
             .text(4, DENSE_NODES)
             .text(5, SORT_TYPE_THEN_ID)
-            .text(16, &self.writing_program)
-            .into_bytes()
+            .text(16, &self.writing_program);
+        match self.replication {
+            Some((timestamp, sequence)) => header.number(32, timestamp as u64).number(33, sequence as u64),
+            None => header,
+        }
+        .into_bytes()
     }
 
     /// Writes the file at `path`, replacing whatever was there: fixtures live in temporary places.
