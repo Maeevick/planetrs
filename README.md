@@ -96,9 +96,9 @@ planetrs-mapclipper clip \
 
 The real thing is the same commands without the arguments. `download` fetches the latest planet,
 about 90 GB, resumes when the connection breaks, and checks its md5 before the file takes its name.
-For France and Monaco, the geocoder's `index` then needs about 24 GB of memory and four minutes on a
+For France and Monaco, the geocoder's `index` then needs about 28 GB of memory and four minutes on a
 recent laptop, after which a whole file of sites geocodes in seconds; the mapclipper's needs about
-45 GB and ten minutes, after which a map of anywhere in them is cut in a second:
+46 GB and ten minutes, after which a map of anywhere in them is cut in a second:
 
 ```sh
 planetrs-geocoder download

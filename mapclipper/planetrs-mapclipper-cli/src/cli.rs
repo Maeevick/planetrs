@@ -17,7 +17,7 @@ use planetrs_mapclipper::scene::{Canvas, LabelClass, Place, Rules};
 use planetrs_mapclipper::theme::Theme;
 
 const INDEX_FOOTER: &str = "\
-The planet is read several times; France and Monaco take about ten minutes and 45 GB of memory.
+The planet is read several times; France and Monaco take about ten minutes and 46 GB of memory.
 The dataset is rebuilt beside the old one, keeping the geocoder's parts built from the same planet,
 and replaces it only once complete.
 

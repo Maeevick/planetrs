@@ -91,7 +91,7 @@ Examples:
 Data © OpenStreetMap contributors, ODbL 1.0: https://www.openstreetmap.org/copyright";
 
 const INDEX_FOOTER: &str = "\
-The planet is read several times; France and Monaco take about four minutes and 24 GB of memory.
+The planet is read several times; France and Monaco take about four minutes and 28 GB of memory.
 The dataset is rebuilt beside the old one, keeping the map indexes built from the same planet, and
 replaces it only once complete.
 

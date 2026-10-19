@@ -31,7 +31,7 @@ says `Commune`, and the command line asks you to look at it before using it.
 
 ```sh
 planetrs-geocoder download             # the latest planet, about 90 GB, resumable, md5-checked
-planetrs-geocoder index                # France and Monaco: four minutes and 24 GB of memory
+planetrs-geocoder index                # France and Monaco: four minutes and 28 GB of memory
 planetrs-geocoder "Acme;8 Route des Tilleuls;89100;Sens;France"
 planetrs-geocoder -f sites.csv -o answers.csv
 planetrs-geocoder trace "Acme;8 Route des Tilleuls;89100;Sens;France"
