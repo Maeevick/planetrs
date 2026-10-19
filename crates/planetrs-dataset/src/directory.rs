@@ -114,13 +114,46 @@ pub struct CarriedOver {
 
 /// Brings into the dataset being built in `building` every part of the dataset in `previous` that
 /// `others` says another tool builds, so that rebuilding one tool's parts never loses the other's.
+///
+/// A file is hard-linked into place, or copied where a link cannot be made, and listed in the
+/// rebuild's manifest as the previous one listed it.
 pub fn carry_over(
     previous: &Path,
     building: &Path,
     others: impl Fn(&Part) -> bool,
 ) -> Result<CarriedOver, RecordError> {
-    let _ = (previous, building, others);
-    Ok(CarriedOver::default())
+    let (Some(before), Some(rebuilt)) = (recorded_in(previous)?, recorded_in(building)?) else {
+        return Ok(CarriedOver::default());
+    };
+    let carried: Vec<Entry> = before
+        .files
+        .into_iter()
+        .filter(|entry| others(&entry.part))
+        .collect();
+    for entry in &carried {
+        link_or_copy(&previous.join(&entry.file), &building.join(&entry.file))?;
+    }
+    let kept = carried.iter().map(|entry| entry.part.clone()).collect();
+    let mut files: Vec<Entry> = rebuilt.files.into_iter().chain(carried).collect();
+    files.sort_by(|left, right| left.part.cmp(&right.part));
+    let manifest = Manifest {
+        planet: rebuilt.planet,
+        files,
+    };
+    write_whole(&building.join(MANIFEST), manifest.to_json().as_bytes())?;
+    Ok(CarriedOver {
+        kept,
+        left: Vec::new(),
+    })
+}
+
+/// Puts the file at `from` at `to` too, as a second name for the same bytes where the file system
+/// allows it, else as a copy.
+fn link_or_copy(from: &Path, to: &Path) -> Result<(), RecordError> {
+    if std::fs::hard_link(from, to).is_ok() {
+        return Ok(());
+    }
+    std::fs::copy(from, to).map(|_| ()).map_err(io_at(to))
 }
 
 /// The manifest already in `directory`, if there is one.
