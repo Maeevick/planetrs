@@ -6,6 +6,7 @@
 const LITTLE_ENDIAN: u8 = 1;
 const POINT: u32 = 1;
 const LINE_STRING: u32 = 2;
+const GEOMETRY_COLLECTION: u32 = 7;
 /// A byte order, a geometry type and a count.
 const LINE_HEADER: usize = 9;
 
@@ -37,7 +38,12 @@ pub fn line_string(vertices: &[[f64; 2]]) -> Vec<u8> {
 /// A collection of no geometry as WKB, which a multipolygon's own row carries while its members'
 /// rows carry its shape.
 pub fn empty_collection() -> Vec<u8> {
-    Vec::new()
+    [
+        [LITTLE_ENDIAN].as_slice(),
+        &GEOMETRY_COLLECTION.to_le_bytes(),
+        &0u32.to_le_bytes(),
+    ]
+    .concat()
 }
 
 /// Why bytes could not be read as the geometry asked for.
