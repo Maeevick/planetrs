@@ -8,7 +8,7 @@
 use planetrs_geo::wkb;
 
 use crate::geoparquet;
-use crate::manifest::Provenance;
+use crate::manifest::{self, Provenance};
 use crate::tables::{self, Column, TableError, Values};
 
 /// One administrative area: a country at level 2, a commune at level 8, anything between or below.
@@ -38,9 +38,11 @@ const AREAS_PER_ROW_GROUP: usize = 100_000;
 
 /// The gazetteer as a GeoParquet file, one row per area in the order given.
 pub fn to_parquet(areas: &[Area], planet: &Provenance) -> Result<Vec<u8>, TableError> {
-    let _ = planet;
     let row_groups: Vec<Vec<Column>> = areas.chunks(AREAS_PER_ROW_GROUP).map(columns_of).collect();
-    tables::write(&row_groups, &[geoparquet::geo(&["Point"])])
+    tables::write(
+        &row_groups,
+        &[geoparquet::geo(&["Point"]), manifest::notice("gazetteer", planet)],
+    )
 }
 
 /// The areas of a gazetteer file, in its order.
