@@ -31,7 +31,7 @@ says `Commune`, and the command line asks you to look at it before using it.
 
 ```sh
 planetrs-geocoder download             # the latest planet, about 90 GB, resumable, md5-checked
-planetrs-geocoder index                # France and Monaco: four minutes and 20 GB of memory
+planetrs-geocoder index                # France and Monaco: four minutes and 24 GB of memory
 planetrs-geocoder "Acme;8 Route des Tilleuls;89100;Sens;France"
 planetrs-geocoder -f sites.csv -o answers.csv
 planetrs-geocoder trace "Acme;8 Route des Tilleuls;89100;Sens;France"
@@ -97,7 +97,7 @@ The API documentation is on [docs.rs](https://docs.rs/planetrs-geocoder).
 
 The commune is resolved from `admin_level=8` boundary relations, which carry the name, the official
 reference and the postcode. Matching a postcode and a town name against those settles almost every
-site to exactly one commune, in a pass over the whole planet.
+site to exactly one commune of the planet, every one of which the dataset's gazetteer holds.
 
 Settling it first does two things. It makes a whole class of failure impossible rather than unlikely:
 a search for `97400 Saint-Denis` cannot answer from the Saint-Denis north of Paris, because the
@@ -168,9 +168,9 @@ answering only when a single street of the commune fits it:
   the text has more as one block before or after it, as a centre's name or a locality does.
 
 A street type pairs only with a street type, each rule forgives one kind of difference only, and two
-fitting streets end the search. Rarity is counted over every street name the index holds. A street
-these rules find at no recorded door ranks below the one shop of the label in the commune, and above
-the commune's centre.
+fitting streets end the search. Rarity is counted over every street name of the site's country. A
+street these rules find at no recorded door ranks below the one shop of the label in the commune,
+and above the commune's centre.
 
 **When even those find nothing**, the address is rewritten before settling for the centre. It is
 split at every separator a person uses, `/`, `,`, `-`, `et`, `and`, and each piece is tried as it is
@@ -180,12 +180,13 @@ the least informative word. Two equally good rewritings on two different streets
 centre stays. A rewriting must also keep enough rare words to name a street: `ROUTE SAINT`, all that
 is left of `Route de Saint Vigor` without `Vigor`, names none.
 
-**Road numbers.** The index files every road's `ref` as a name of its own, `D620` for `ref=D 620`,
-and a road known only by its number is filed under it. In a site, `RD 620`, `RD620`, `R.D. 620`,
-`CD 620`, `D 620` and `Route Départementale 620`, and `RN 7` or `Route Nationale 7` for a national
-road, all read as that number, wherever in a part they stand: `118 RD 712 Les Ponts Neufs` reads as
-door 118 of `D712`. A road's number is weak evidence, since a departmental road runs for kilometres,
-so it is the last answer tried before the centre, and it must match exactly: `D620` is not `D620A`.
+**Road numbers.** The geocoder index files every road's `ref` as a name of its own, `D620` for
+`ref=D 620`, and a road known only by its number is filed under it. In a site, `RD 620`, `RD620`,
+`R.D. 620`, `CD 620`, `D 620` and `Route Départementale 620`, and `RN 7` or `Route Nationale 7` for
+a national road, all read as that number, wherever in a part they stand:
+`118 RD 712 Les Ponts Neufs` reads as door 118 of `D712`. A road's number is weak evidence, since a
+departmental road runs for kilometres, so it is the last answer tried before the centre, and it must
+match exactly: `D620` is not `D620A`.
 
 ## How a shop answers
 
@@ -201,11 +202,11 @@ places, and the label does not choose between them.
 
 ## When the centre is an answer
 
-A site placed at its commune's centre is refused, because a centre written as a coordinate looks like
-an address and is not one. The smallest communes are spared: the index measures every commune's area
-from its outline, holes subtracted, and in a commune of at most 3.5 km², a disc about a kilometre
-across, the centre is within about a kilometre of the site wherever it stands. The answer still says
-`Commune`; it is only no longer refused.
+A site placed at its commune's centre is refused, because a centre written as a coordinate looks
+like an address and is not one. The smallest communes are spared: the gazetteer holds every
+commune's area, measured from its outline with holes subtracted, and in a commune of at most
+3.5 km², a disc about a kilometre across, the centre is within about a kilometre of the site wherever
+it stands. The answer still says `Commune`; it is only no longer refused.
 
 ## Why a kilometre
 
@@ -245,15 +246,16 @@ it was kept, and the code still calls them by the step that brought them:
 
 - The reading rules are French. Streets of other countries can be indexed with `--countries`, and are
   read with the same rules, which suit them less.
-- The index is built on one machine from one planet file; a remote index is not supported yet.
+- A dataset is built from one planet file on one machine, with tens of gigabytes of memory; it is
+  then read from anywhere, over HTTP included.
 - macOS and Linux only, for now.
 
 ## Data and licence
 
 The code is MIT ([LICENSE](https://github.com/maeevick/planetrs/blob/main/LICENSE)).
 OpenStreetMap is © OpenStreetMap contributors and available under the Open Data Commons Open Database
-License (ODbL) by the OpenStreetMap Foundation (OSMF): <https://www.openstreetmap.org/copyright>. An
-index is a Derivative Database, and every one of its files names the
-[licence](https://opendatacommons.org/licenses/odbl/1-0/) and links to it; a geocoding result, one at
+License (ODbL) by the OpenStreetMap Foundation (OSMF): <https://www.openstreetmap.org/copyright>. A
+dataset is a Derivative Database, and its manifest and every one of its files name the
+[licence](https://opendatacommons.org/licenses/odbl/1-0/) and link to it; a geocoding result, one at
 a time, is an insubstantial extract, and wherever it is shown, OpenStreetMap is credited. See the
 [planetrs README](https://github.com/maeevick/planetrs#data-and-licence) for the whole of it.

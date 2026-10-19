@@ -17,9 +17,10 @@ API, no key, no rate limit, and no network once the planet is on disk.[^1]
 
 **Grimbleshanks Mortimer Quill**, Archivist of Neglected Knowledge and Assistant Deputy Custodian of
 the Great Library of Cogsburg, reads the planet one blob at a time and files what he finds: every
-commune on Earth, and every street, door, hamlet and shop of France and Monaco, in tab-separated files
-sorted so that two readings of one planet agree to the byte. He keeps `planetrs-pbf`, `planetrs-geo`
-and the index, and reminds visitors that people change but books remain constant.[^2]
+commune on Earth, every street, door, hamlet and shop of France and Monaco, and every way and named
+place a map of them needs, in GeoParquet files written so that two readings of one planet agree to
+the byte. He keeps `planetrs-pbf`, `planetrs-geo` and the dataset, and reminds visitors that people
+change but books remain constant.[^2]
 
 **Veil** hunts. Hand Veil an address typed in a hurry, `ZA des Rivières - 46 Rue de Lisbonne`, or
 `13 Cours du Général Vauban` for a street that was always the Maréchal's, and Veil comes back with
@@ -43,7 +44,8 @@ goblins insist on, and apologises to the laptop fan.
 | [`planetrs-geocoder`](geocoder/README.md) | a coordinate for a place or a postal address, and how precise it is: the door, the nearest door, a shop of the label, the street, or the commune's centre |
 | [`planetrs-mapclipper`](mapclipper/README.md) | a small illustrated map of anywhere, as GeoJSON, SVG or PNG, in themes that are files rather than code |
 
-Both read the OpenStreetMap planet file directly, and both are libraries as well as commands.
+Both read a dataset built once from the OpenStreetMap planet file, from a directory or over HTTP, and
+both are libraries as well as commands.
 
 ## Install
 
@@ -55,12 +57,15 @@ curl -fsSL "https://github.com/maeevick/planetrs/releases/latest/download/planet
 install -m 755 "planetrs-geocoder-$target/planetrs-geocoder" ~/.local/bin/
 ```
 
-`planetrs-mapclipper` comes the same way, or either command from source with Cargo:
+`planetrs-mapclipper` comes the same way, or either command from crates.io with Cargo:
 
 ```sh
-cargo install --git https://github.com/maeevick/planetrs planetrs-geocoder-cli
-cargo install --git https://github.com/maeevick/planetrs planetrs-mapclipper-cli
+cargo install planetrs-geocoder-cli
+cargo install planetrs-mapclipper-cli
 ```
+
+`cargo install --git https://github.com/maeevick/planetrs planetrs-geocoder-cli` builds the latest
+commit instead.
 
 A binary downloaded through a browser is quarantined by macOS until `xattr -d com.apple.quarantine
 planetrs-geocoder`. The binaries are not notarised yet; `curl` sidesteps the question.
@@ -89,15 +94,18 @@ planetrs-mapclipper clip \
   --theme atlas --labels settlements --marker name --name "en=Monaco" --png monaco.png
 ```
 
-The real thing is the same three commands without the arguments. `download` fetches the latest
-planet, about 90 GB, resumes when the connection breaks, and checks its md5 before the file takes its
-name. `index` then needs about 20 GB of memory and four minutes on a recent laptop for France and
-Monaco, after which a whole file of sites geocodes in seconds:
+The real thing is the same commands without the arguments. `download` fetches the latest planet,
+about 90 GB, resumes when the connection breaks, and checks its md5 before the file takes its name.
+For France and Monaco, the geocoder's `index` then needs about 24 GB of memory and four minutes on a
+recent laptop, after which a whole file of sites geocodes in seconds; the mapclipper's needs about
+45 GB and ten minutes, after which a map of anywhere in them is cut in a second:
 
 ```sh
 planetrs-geocoder download
 planetrs-geocoder index
 planetrs-geocoder -f sites.csv -o answers.csv
+planetrs-mapclipper index
+planetrs-mapclipper clip --lat 48.8530 --lon 2.3499 --width-km 3.5 --height-km 2 --png notre-dame.png
 ```
 
 ## The workspace
@@ -118,9 +126,10 @@ whoever reads it.
 
 ## Why not a service
 
-The planet file has no spatial index, so every question is a full scan. That is fine as a batch job
-and impossible as a request, which makes a command line the honest shape for this rather than a
-hosted API.
+The planet file has no spatial index, so every question about it is a full scan. planetrs reads it
+once, into a dataset filed by commune and by place, after which a question reads a few row groups of
+it, from a disk or from wherever the dataset is published. Nothing of ours has to run in between,
+which makes a command line and a library the honest shape for this rather than a hosted API.
 
 It is also the shape the work needs. A coordinate that will be relied on after the fact has to be
 defensible, and that means every step from the published planet file to the coordinate must be one
@@ -150,9 +159,9 @@ Commons Open Database License ([ODbL](https://opendatacommons.org/licenses/odbl/
 OpenStreetMap Foundation (OSMF): <https://www.openstreetmap.org/copyright>. planetrs follows it for
 everything it derives from the planet:
 
-- **An index** built by `planetrs-geocoder index` is a Derivative Database. Share one and you share it
-  under the ODbL, with the notice every one of its files carries, naming the licence and linking to
-  it as data has to.
+- **A dataset** built by either tool's `index` is a Derivative Database. Share one and you share it
+  under the ODbL, with the notice its manifest and every one of its files carry, naming the licence
+  and linking to it as data has to.
 - **Geocoding results** are, under the OSMF's geocoding guideline, insubstantial extracts one at a
   time, so they bring no share-alike; wherever you show them, credit OpenStreetMap. The command line
   ends every run with that credit.
@@ -167,7 +176,7 @@ everything it derives from the planet:
     server would rather you used a mirror: `download --from` takes any of them.
 
 [^2]: He also shelves demonology beside gardening, both being about things that grow in the dark.
-    The index files communes by OpenStreetMap relation id, a compromise he has catalogued under
+    The dataset files communes by OpenStreetMap relation id, a compromise he has catalogued under
     Regrettable, Necessary.
 
 [^3]: Shhhhh. Veil is hunting.
