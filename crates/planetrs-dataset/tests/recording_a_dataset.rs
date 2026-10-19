@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use planetrs_dataset::directory::{MANIFEST, record};
+use planetrs_dataset::directory::{MANIFEST, RecordError, record};
 use planetrs_dataset::{Entry, Manifest, Part, Provenance};
 
 type Outcome = Result<(), Box<dyn std::error::Error>>;
@@ -111,5 +111,41 @@ fn given_parts_recorded_in_any_order_and_one_again_when_the_manifest_is_read_the
             .collect::<Vec<_>>(),
         vec![(Part::Gazetteer, 4), (france, 3), (monaco, 1)]
     );
+    Ok(())
+}
+
+#[test]
+fn given_a_dataset_of_one_planet_when_a_part_of_another_is_recorded_then_it_is_refused_and_never_written()
+-> Outcome {
+    let directory = scratch("other-planet");
+    record(
+        &directory,
+        &planet(),
+        Part::Gazetteer,
+        "gazetteer.parquet",
+        b"september",
+        2,
+    )?;
+    let october = Provenance {
+        source_name: "planet-261012.osm.pbf".into(),
+        replication_timestamp: 1_791_763_204,
+        ..planet()
+    };
+
+    let refused = record(
+        &directory,
+        &october,
+        Part::GeocoderIndex { country: "FR".into() },
+        "geocoder-FR.parquet",
+        b"october",
+        3,
+    );
+
+    assert!(
+        matches!(&refused, Err(RecordError::OtherPlanet { recorded, offered })
+            if recorded.source_name == "planet-260907.osm.pbf" && offered.source_name == "planet-261012.osm.pbf"),
+        "{refused:?}"
+    );
+    assert!(!directory.join("geocoder-FR.parquet").exists());
     Ok(())
 }

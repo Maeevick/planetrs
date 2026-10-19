@@ -26,6 +26,13 @@ pub enum RecordError {
     },
     /// The dataset's manifest could not be read.
     Manifest(ManifestError),
+    /// The dataset was built from another planet, and a dataset answers for one.
+    OtherPlanet {
+        /// The planet the dataset was built from.
+        recorded: Box<Provenance>,
+        /// The planet the part was built from.
+        offered: Box<Provenance>,
+    },
 }
 
 impl std::fmt::Display for RecordError {
@@ -33,6 +40,11 @@ impl std::fmt::Display for RecordError {
         match self {
             Self::Io { path, .. } => write!(formatter, "{} could not be written or read", path.display()),
             Self::Manifest(_) => write!(formatter, "the dataset's manifest could not be read"),
+            Self::OtherPlanet { recorded, offered } => write!(
+                formatter,
+                "the dataset was built from {}, and this part from {}",
+                recorded.source_name, offered.source_name
+            ),
         }
     }
 }
@@ -42,6 +54,7 @@ impl std::error::Error for RecordError {
         match self {
             Self::Io { source, .. } => Some(source),
             Self::Manifest(source) => Some(source),
+            Self::OtherPlanet { .. } => None,
         }
     }
 }
