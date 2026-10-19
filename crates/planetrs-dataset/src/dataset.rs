@@ -3,7 +3,7 @@
 use crate::directory::MANIFEST;
 use crate::files::{ForReadingFiles, Unreachable};
 use crate::manifest::{Entry, Manifest, ManifestError, Part};
-use crate::tables::TableError;
+use crate::tables::{self, Column, Footer, RowGroupBytes, TableError, Tail};
 use crate::{gazetteer, geocoder_index};
 
 /// A dataset whose manifest has been read.
@@ -99,7 +99,12 @@ impl<F: ForReadingFiles> Dataset<F> {
 pub struct CountryIndex<'a, F: ForReadingFiles> {
     dataset: &'a Dataset<F>,
     entry: &'a Entry,
+    footer: Footer,
 }
+
+/// How much of a file's end is read first in the hope of finding its whole footer there: a country's
+/// footer of a few hundred kilobytes takes one more read, and a small one takes none.
+const FIRST_TAIL: u64 = 64 * 1024;
 
 impl<F: ForReadingFiles> Dataset<F> {
     /// `country`'s geocoder index with only its footer read, or nothing when the dataset does not
@@ -108,9 +113,64 @@ impl<F: ForReadingFiles> Dataset<F> {
         let wanted = Part::GeocoderIndex {
             country: country.to_string(),
         };
-        Ok(self
-            .entry_of(&wanted)
-            .map(|entry| CountryIndex { dataset: self, entry }))
+        self.entry_of(&wanted)
+            .map(|entry| {
+                self.footer_of(entry).map(|footer| CountryIndex {
+                    dataset: self,
+                    entry,
+                    footer,
+                })
+            })
+            .transpose()
+    }
+
+    /// A part's footer, read from its end in one read or, when it is longer than that, two.
+    fn footer_of(&self, entry: &Entry) -> Result<Footer, DatasetError> {
+        let address = entry.url.as_deref().unwrap_or(&entry.file);
+        let length = self.files.length(address).map_err(DatasetError::Unreachable)?;
+        let mut wanted = FIRST_TAIL.min(length);
+        loop {
+            let tail = self
+                .files
+                .read(address, length - wanted..length)
+                .map_err(DatasetError::Unreachable)?;
+            match tables::footer_from_tail(&tail, length).map_err(|source| table_error(entry, source))? {
+                Tail::Footer(footer) => return Ok(footer),
+                Tail::Short { needed } if needed > wanted && needed <= length => wanted = needed,
+                Tail::Short { .. } => {
+                    return Err(table_error(
+                        entry,
+                        TableError::Unreadable {
+                            detail: "the footer runs past the start of the file".into(),
+                        },
+                    ));
+                }
+            }
+        }
+    }
+
+    /// The columns of one row group of a part, fetched as one range.
+    fn row_group_of(
+        &self,
+        entry: &Entry,
+        footer: &Footer,
+        group: &RowGroupBytes,
+    ) -> Result<Vec<Column>, DatasetError> {
+        let address = entry.url.as_deref().unwrap_or(&entry.file);
+        let bytes = self
+            .files
+            .read(address, group.bytes.clone())
+            .map_err(DatasetError::Unreachable)?;
+        footer
+            .read_row_group(group, bytes)
+            .map_err(|source| table_error(entry, source))
+    }
+}
+
+fn table_error(entry: &Entry, source: TableError) -> DatasetError {
+    DatasetError::Table {
+        file: entry.file.clone(),
+        source,
     }
 }
 
@@ -118,14 +178,38 @@ impl<F: ForReadingFiles> CountryIndex<'_, F> {
     /// How many street names the country counts and how many hold each word, read from their own
     /// row groups.
     pub fn word_counts(&self) -> Result<Vec<geocoder_index::Entry>, DatasetError> {
-        let _ = (self.dataset, self.entry);
-        Ok(Vec::new())
+        self.entries_where(|group| group.highest == Some(0))
     }
 
     /// The entries of one commune, read from the row group holding it.
     pub fn commune(&self, relation: i64) -> Result<Vec<geocoder_index::Entry>, DatasetError> {
-        let _ = relation;
-        Ok(Vec::new())
+        let entries = self.entries_where(|group| {
+            group.lowest.is_some_and(|lowest| lowest <= relation)
+                && group.highest.is_some_and(|highest| relation <= highest)
+        })?;
+        Ok(entries
+            .into_iter()
+            .filter(|entry| geocoder_index::commune_of(entry) == Some(relation))
+            .collect())
+    }
+
+    fn entries_where(
+        &self,
+        chosen: impl Fn(&RowGroupBytes) -> bool,
+    ) -> Result<Vec<geocoder_index::Entry>, DatasetError> {
+        let mut entries = Vec::new();
+        for group in self
+            .footer
+            .row_groups("commune")
+            .iter()
+            .filter(|group| chosen(group))
+        {
+            let columns = self.dataset.row_group_of(self.entry, &self.footer, group)?;
+            entries.extend(
+                geocoder_index::entries_of(&columns).map_err(|source| table_error(self.entry, source))?,
+            );
+        }
+        Ok(entries)
     }
 }
 

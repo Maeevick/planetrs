@@ -5,6 +5,7 @@
 //! the row groups, because only the caller knows where a commune or a multipolygon ends, and every
 //! setting that shapes the bytes is pinned here, so that the same table always writes the same file.
 
+use std::ops::Range;
 use std::sync::Arc;
 
 use arrow_array::builder::{ListBuilder, StringBuilder};
@@ -14,13 +15,18 @@ use arrow_array::{
     Array, ArrayRef, BinaryArray, Float64Array, Int32Array, Int64Array, RecordBatch, StringArray,
 };
 use arrow_schema::{DataType, Field, Schema};
-use bytes::Bytes;
+use bytes::{Buf, Bytes};
 use parquet::arrow::ArrowWriter;
-use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+use parquet::arrow::arrow_reader::{
+    ArrowReaderMetadata, ArrowReaderOptions, ParquetRecordBatchReaderBuilder,
+};
 use parquet::arrow::arrow_writer::ArrowWriterOptions;
 use parquet::basic::{Compression, GzipLevel};
-use parquet::file::metadata::KeyValue;
+use parquet::errors::ParquetError;
+use parquet::file::metadata::{KeyValue, ParquetMetaData, ParquetMetaDataReader};
 use parquet::file::properties::{EnabledStatistics, WriterProperties};
+use parquet::file::reader::{ChunkReader, Length};
+use parquet::file::statistics::Statistics;
 use parquet::schema::types::ColumnPath;
 
 /// The writer every file of a dataset names, rather than the library that happens to encode it.
@@ -150,8 +156,13 @@ pub(crate) fn write(
 
 /// Every row of a Parquet file, its row groups joined, as named columns.
 pub(crate) fn read(bytes: &[u8]) -> Result<Vec<Column>, TableError> {
-    let builder =
-        ParquetRecordBatchReaderBuilder::try_new(Bytes::copy_from_slice(bytes)).map_err(unreadable)?;
+    columns_from(ParquetRecordBatchReaderBuilder::try_new(Bytes::copy_from_slice(bytes)).map_err(unreadable)?)
+}
+
+/// The columns a reader yields, its batches joined.
+fn columns_from<T: ChunkReader + 'static>(
+    builder: ParquetRecordBatchReaderBuilder<T>,
+) -> Result<Vec<Column>, TableError> {
     let fields: Vec<(String, DataType, bool)> = builder
         .schema()
         .fields()
@@ -204,12 +215,15 @@ pub(crate) struct RowGroupSpan {
 
 /// Where each row group of a file lies, with the lowest value of the integer column `name`.
 #[cfg(test)]
-pub(crate) fn row_group_bytes(
-    bytes: &[u8],
-    name: &str,
-) -> Result<Vec<(i64, std::ops::Range<u64>)>, TableError> {
-    let _ = (bytes, name);
-    Ok(Vec::new())
+pub(crate) fn row_group_bytes(bytes: &[u8], name: &str) -> Result<Vec<(i64, Range<u64>)>, TableError> {
+    match footer_from_tail(bytes, bytes.len() as u64)? {
+        Tail::Footer(footer) => Ok(footer
+            .row_groups(name)
+            .into_iter()
+            .map(|group| (group.lowest.unwrap_or_default(), group.bytes))
+            .collect()),
+        Tail::Short { .. } => Err(unreadable("a whole file is shorter than its footer")),
+    }
 }
 
 /// The columns of a file whose row groups carry statistics, in schema order.
@@ -267,6 +281,140 @@ pub(crate) fn row_groups(bytes: &[u8], name: &str) -> Result<Vec<RowGroupSpan>, 
             _ => Err(kind_mismatch(name)),
         })
         .collect()
+}
+
+/// A file's footer, read from its end alone: what a reader needs to choose the row groups to fetch.
+#[derive(Debug, Clone)]
+pub(crate) struct Footer {
+    metadata: Arc<ParquetMetaData>,
+    length: u64,
+}
+
+/// What a file's last bytes gave: its footer, or how many bytes from its end the footer needs.
+#[derive(Debug, Clone)]
+pub(crate) enum Tail {
+    Footer(Footer),
+    Short { needed: u64 },
+}
+
+/// One row group as a reader chooses it: where its bytes lie, and the lowest and highest value of
+/// the integer column it is pruned by, when the footer carries them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RowGroupBytes {
+    pub(crate) index: usize,
+    pub(crate) bytes: Range<u64>,
+    pub(crate) lowest: Option<i64>,
+    pub(crate) highest: Option<i64>,
+}
+
+/// The footer of a file of `length` bytes, from its last bytes `tail`, or how many it needs.
+pub(crate) fn footer_from_tail(tail: &[u8], length: u64) -> Result<Tail, TableError> {
+    let mut reader = ParquetMetaDataReader::new();
+    match reader.try_parse_sized(&Bytes::copy_from_slice(tail), length) {
+        Ok(()) => Ok(Tail::Footer(Footer {
+            metadata: Arc::new(reader.finish().map_err(unreadable)?),
+            length,
+        })),
+        Err(ParquetError::NeedMoreData(needed)) => Ok(Tail::Short {
+            needed: needed as u64,
+        }),
+        Err(other) => Err(unreadable(other)),
+    }
+}
+
+impl Footer {
+    /// Every row group, with the span of the integer column `pruned_by`.
+    pub(crate) fn row_groups(&self, pruned_by: &str) -> Vec<RowGroupBytes> {
+        let column = self
+            .metadata
+            .file_metadata()
+            .schema_descr()
+            .columns()
+            .iter()
+            .position(|column| column.name() == pruned_by);
+        self.metadata
+            .row_groups()
+            .iter()
+            .enumerate()
+            .map(|(index, group)| {
+                let (start, end) = group.columns().iter().fold((u64::MAX, 0), |(start, end), chunk| {
+                    let (offset, length) = chunk.byte_range();
+                    (start.min(offset), end.max(offset + length))
+                });
+                let span = column.and_then(|column| match group.column(column).statistics() {
+                    Some(Statistics::Int64(span)) => Some((span.min_opt().copied(), span.max_opt().copied())),
+                    _ => None,
+                });
+                RowGroupBytes {
+                    index,
+                    bytes: start..end,
+                    lowest: span.and_then(|(lowest, _)| lowest),
+                    highest: span.and_then(|(_, highest)| highest),
+                }
+            })
+            .collect()
+    }
+
+    /// The columns of one row group, decoded from the bytes of its range alone.
+    pub(crate) fn read_row_group(
+        &self,
+        group: &RowGroupBytes,
+        bytes: Vec<u8>,
+    ) -> Result<Vec<Column>, TableError> {
+        let held = SparseFile {
+            start: group.bytes.start,
+            bytes: Bytes::from(bytes),
+            length: self.length,
+        };
+        let metadata = ArrowReaderMetadata::try_new(Arc::clone(&self.metadata), ArrowReaderOptions::new())
+            .map_err(unreadable)?;
+        let builder = ParquetRecordBatchReaderBuilder::new_with_metadata(held, metadata)
+            .with_row_groups(vec![group.index]);
+        columns_from(builder)
+    }
+}
+
+/// The bytes of one range of a file, standing in for the whole file to a reader that asks only
+/// for that range.
+struct SparseFile {
+    start: u64,
+    bytes: Bytes,
+    length: u64,
+}
+
+impl SparseFile {
+    fn slice(&self, start: u64, length: usize) -> Result<Bytes, ParquetError> {
+        let from = start
+            .checked_sub(self.start)
+            .map(|from| from as usize)
+            .filter(|from| from + length <= self.bytes.len())
+            .ok_or_else(|| {
+                ParquetError::General(format!(
+                    "bytes {start}..{} were not fetched",
+                    start + length as u64
+                ))
+            })?;
+        Ok(self.bytes.slice(from..from + length))
+    }
+}
+
+impl Length for SparseFile {
+    fn len(&self) -> u64 {
+        self.length
+    }
+}
+
+impl ChunkReader for SparseFile {
+    type T = bytes::buf::Reader<Bytes>;
+
+    fn get_read(&self, start: u64) -> Result<Self::T, ParquetError> {
+        let rest = (self.start + self.bytes.len() as u64).saturating_sub(start) as usize;
+        Ok(self.slice(start, rest)?.reader())
+    }
+
+    fn get_bytes(&self, start: u64, length: usize) -> Result<Bytes, ParquetError> {
+        self.slice(start, length)
+    }
 }
 
 fn field_of(column: &Column) -> Field {

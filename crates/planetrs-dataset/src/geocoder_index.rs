@@ -124,7 +124,8 @@ fn row_groups_of(entries: &[Entry], per_row_group: usize) -> Vec<&[Entry]> {
     groups
 }
 
-fn commune_of(entry: &Entry) -> Option<i64> {
+/// The commune an entry belongs to, or nothing for a word count.
+pub(crate) fn commune_of(entry: &Entry) -> Option<i64> {
     match entry {
         Entry::Names { .. } | Entry::Word { .. } => None,
         Entry::Door { commune, .. } | Entry::Middle { commune, .. } | Entry::Shop { commune, .. } => {
@@ -135,16 +136,20 @@ fn commune_of(entry: &Entry) -> Option<i64> {
 
 /// The entries of a geocoder index file, in its order.
 pub fn from_parquet(bytes: &[u8]) -> Result<Vec<Entry>, TableError> {
-    let columns = tables::read(bytes)?;
-    let communes = integers(&columns, "commune")?;
-    let kinds = texts(&columns, "kind")?;
-    let names = optional_texts(&columns, "name")?;
-    let shop_names = text_lists(&columns, "names")?;
-    let counts = optional_integers(&columns, "count")?;
-    let numbers = optional_integers(&columns, "number")?;
-    let suffixes = optional_texts(&columns, "suffix")?;
-    let streets = optional_texts(&columns, "street")?;
-    let geometries = optional_bytes(&columns, "geometry")?;
+    entries_of(&tables::read(bytes)?)
+}
+
+/// The entries some columns of a geocoder index hold, in their order.
+pub(crate) fn entries_of(columns: &[Column]) -> Result<Vec<Entry>, TableError> {
+    let communes = integers(columns, "commune")?;
+    let kinds = texts(columns, "kind")?;
+    let names = optional_texts(columns, "name")?;
+    let shop_names = text_lists(columns, "names")?;
+    let counts = optional_integers(columns, "count")?;
+    let numbers = optional_integers(columns, "number")?;
+    let suffixes = optional_texts(columns, "suffix")?;
+    let streets = optional_texts(columns, "street")?;
+    let geometries = optional_bytes(columns, "geometry")?;
     (0..communes.len())
         .map(|row| {
             let commune = communes[row];
