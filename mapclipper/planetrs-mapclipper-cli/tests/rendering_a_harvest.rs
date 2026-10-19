@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 use planetrs_mapclipper::harvest::{Harvest, Member, NamedNode, Node, Provenance, Relation, Way, format};
 use planetrs_mapclipper_cli::cli::{
-    Command, Drawing, Framing, InspectArgs, LabelKind, MarkKind, Outputs, RenderArgs, Shape,
+    Cli, Command, Drawing, Framing, Global, InspectArgs, LabelKind, MarkKind, Outputs, RenderArgs, Shape,
 };
 use planetrs_mapclipper_cli::run;
 
@@ -148,7 +148,14 @@ fn outputs(geojson: Option<PathBuf>, svg: Option<PathBuf>) -> Outputs {
         svg,
         png: None,
         scale: 1.0,
-        quiet: true,
+    }
+}
+
+/// The command line asking for `command`, quietly, as these tests read files rather than stderr.
+fn quietly(command: Command) -> Cli {
+    Cli {
+        global: Global { quiet: true },
+        command,
     }
 }
 
@@ -163,12 +170,12 @@ fn when_a_harvest_is_rendered_then_the_geojson_says_what_it_is_of() {
     let harvest = harvest_at("says.mapclip");
     let geojson = scratch("says.geojson");
 
-    run(Command::Render(RenderArgs {
+    run(quietly(Command::Render(RenderArgs {
         harvest: harvest.clone(),
         framing: framing(29.0),
         drawing: drawing("atlas"),
         outputs: outputs(Some(geojson.clone()), None),
-    }))
+    })))
     .expect("the render succeeds");
 
     let written = std::fs::read_to_string(&geojson).unwrap();
@@ -187,12 +194,12 @@ fn when_anything_is_written_then_it_carries_the_openstreetmap_attribution() {
     let geojson = scratch("licence.geojson");
     let svg = scratch("licence.svg");
 
-    run(Command::Render(RenderArgs {
+    run(quietly(Command::Render(RenderArgs {
         harvest,
         framing: framing(29.0),
         drawing: drawing("linework"),
         outputs: outputs(Some(geojson.clone()), Some(svg.clone())),
-    }))
+    })))
     .expect("the render succeeds");
 
     for path in [&geojson, &svg] {
@@ -224,12 +231,12 @@ fn when_the_same_harvest_is_rendered_twice_then_both_outputs_are_byte_identical(
     let render_to = |suffix: &str| {
         let geojson = scratch(&format!("twice-{suffix}.geojson"));
         let svg = scratch(&format!("twice-{suffix}.svg"));
-        run(Command::Render(RenderArgs {
+        run(quietly(Command::Render(RenderArgs {
             harvest: harvest.clone(),
             framing: framing(29.0),
             drawing: drawing("atlas"),
             outputs: outputs(Some(geojson.clone()), Some(svg.clone())),
-        }))
+        })))
         .expect("the render succeeds");
         (std::fs::read(&geojson).unwrap(), std::fs::read(&svg).unwrap())
     };
@@ -243,12 +250,12 @@ fn when_the_same_harvest_is_rendered_twice_then_both_outputs_are_byte_identical(
 fn when_a_frame_reaches_past_the_harvest_then_it_is_refused_with_both_extents_named() {
     let harvest = harvest_at("small.mapclip");
 
-    let refused = run(Command::Render(RenderArgs {
+    let refused = run(quietly(Command::Render(RenderArgs {
         harvest,
         framing: framing(200.0),
         drawing: drawing("atlas"),
         outputs: outputs(None, Some(scratch("small.svg"))),
-    }))
+    })))
     .unwrap_err();
 
     let said = refused.to_string();
@@ -263,12 +270,12 @@ fn when_a_frame_reaches_past_the_harvest_then_it_is_refused_with_both_extents_na
 fn when_a_theme_is_not_known_then_the_render_is_refused_rather_than_drawn_plain() {
     let harvest = harvest_at("theme.mapclip");
 
-    let refused = run(Command::Render(RenderArgs {
+    let refused = run(quietly(Command::Render(RenderArgs {
         harvest,
         framing: framing(29.0),
         drawing: drawing("chartreuse"),
         outputs: outputs(None, Some(scratch("theme.svg"))),
-    }))
+    })))
     .unwrap_err();
 
     assert!(
@@ -282,12 +289,12 @@ fn when_a_file_is_not_a_harvest_then_the_render_says_so_rather_than_misreading_i
     let not_a_harvest = scratch("foreign.mapclip");
     std::fs::write(&not_a_harvest, b"a map, but described in words").unwrap();
 
-    let refused = run(Command::Render(RenderArgs {
+    let refused = run(quietly(Command::Render(RenderArgs {
         harvest: not_a_harvest,
         framing: framing(29.0),
         drawing: drawing("atlas"),
         outputs: outputs(None, Some(scratch("foreign.svg"))),
-    }))
+    })))
     .unwrap_err();
 
     assert!(
@@ -304,12 +311,12 @@ fn when_the_theme_changes_then_the_geojson_does_not() {
 
     let geojson_under = |theme: &str| {
         let path = scratch(&format!("themed-{theme}.geojson"));
-        run(Command::Render(RenderArgs {
+        run(quietly(Command::Render(RenderArgs {
             harvest: harvest.clone(),
             framing: framing(29.0),
             drawing: drawing(theme),
             outputs: outputs(Some(path.clone()), None),
-        }))
+        })))
         .expect("the render succeeds");
         std::fs::read(&path).unwrap()
     };
@@ -322,12 +329,12 @@ fn when_a_relation_closes_then_the_lagoon_is_in_the_output() {
     let harvest = harvest_at("lagoon.mapclip");
     let geojson = scratch("lagoon.geojson");
 
-    run(Command::Render(RenderArgs {
+    run(quietly(Command::Render(RenderArgs {
         harvest,
         framing: framing(29.0),
         drawing: drawing("atlas"),
         outputs: outputs(Some(geojson.clone()), None),
-    }))
+    })))
     .expect("the render succeeds");
 
     let written = std::fs::read_to_string(&geojson).unwrap();
@@ -340,10 +347,10 @@ fn when_a_relation_closes_then_the_lagoon_is_in_the_output() {
 fn when_a_harvest_is_inspected_then_it_reports_the_planet_it_came_from() {
     let harvest = harvest_at("inspect.mapclip");
 
-    run(Command::Inspect(InspectArgs {
+    run(quietly(Command::Inspect(InspectArgs {
         file: harvest,
         output: Shape::Json,
-    }))
+    })))
     .expect("the inspection succeeds");
 }
 
@@ -354,12 +361,12 @@ fn when_no_labels_are_asked_for_then_the_names_are_still_in_the_geojson() {
     let harvest = harvest_at("names.mapclip");
     let geojson = scratch("names.geojson");
 
-    run(Command::Render(RenderArgs {
+    run(quietly(Command::Render(RenderArgs {
         harvest,
         framing: framing(29.0),
         drawing: drawing("atlas"),
         outputs: outputs(Some(geojson.clone()), None),
-    }))
+    })))
     .expect("the render succeeds");
 
     let written = std::fs::read_to_string(&geojson).unwrap();
@@ -373,12 +380,12 @@ fn when_no_labels_are_asked_for_then_the_picture_carries_none() {
     let harvest = harvest_at("bare.mapclip");
     let svg = scratch("bare.svg");
 
-    run(Command::Render(RenderArgs {
+    run(quietly(Command::Render(RenderArgs {
         harvest,
         framing: framing(29.0),
         drawing: drawing("atlas"),
         outputs: outputs(None, Some(svg.clone())),
-    }))
+    })))
     .expect("the render succeeds");
 
     assert!(!std::fs::read_to_string(&svg).unwrap().contains("Adjamé"));
@@ -389,12 +396,12 @@ fn when_settlements_are_asked_for_then_the_village_is_named_on_the_picture() {
     let harvest = harvest_at("village.mapclip");
     let svg = scratch("village.svg");
 
-    run(Command::Render(RenderArgs {
+    run(quietly(Command::Render(RenderArgs {
         harvest,
         framing: framing(29.0),
         drawing: drawing_with_labels("atlas", vec![LabelKind::Settlements]),
         outputs: outputs(None, Some(svg.clone())),
-    }))
+    })))
     .expect("the render succeeds");
 
     assert!(std::fs::read_to_string(&svg).unwrap().contains(">Adjamé</text>"));
@@ -405,12 +412,12 @@ fn when_only_settlements_are_asked_for_then_the_water_stays_unnamed() {
     let harvest = harvest_at("only-village.mapclip");
     let svg = scratch("only-village.svg");
 
-    run(Command::Render(RenderArgs {
+    run(quietly(Command::Render(RenderArgs {
         harvest,
         framing: framing(29.0),
         drawing: drawing_with_labels("atlas", vec![LabelKind::Settlements]),
         outputs: outputs(None, Some(svg.clone())),
-    }))
+    })))
     .expect("the render succeeds");
 
     let written = std::fs::read_to_string(&svg).unwrap();
@@ -424,12 +431,12 @@ fn when_everything_is_asked_for_then_the_water_is_named_too() {
     let harvest = harvest_at("all-names.mapclip");
     let svg = scratch("all-names.svg");
 
-    run(Command::Render(RenderArgs {
+    run(quietly(Command::Render(RenderArgs {
         harvest,
         framing: framing(29.0),
         drawing: drawing_with_labels("atlas", vec![LabelKind::All]),
         outputs: outputs(None, Some(svg.clone())),
-    }))
+    })))
     .expect("the render succeeds");
 
     let written = std::fs::read_to_string(&svg).unwrap();
@@ -445,12 +452,12 @@ fn when_a_labelled_map_is_drawn_twice_then_both_pictures_are_byte_identical() {
 
     let draw = |suffix: &str| {
         let svg = scratch(&format!("stable-names-{suffix}.svg"));
-        run(Command::Render(RenderArgs {
+        run(quietly(Command::Render(RenderArgs {
             harvest: harvest.clone(),
             framing: framing(29.0),
             drawing: drawing_with_labels("atlas", vec![LabelKind::All]),
             outputs: outputs(None, Some(svg.clone())),
-        }))
+        })))
         .expect("the render succeeds");
         std::fs::read(&svg).unwrap()
     };

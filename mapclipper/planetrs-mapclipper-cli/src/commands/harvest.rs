@@ -9,12 +9,12 @@ use planetrs_mapclipper::harvest::passes::{HarvestReport, harvest_area};
 use planetrs_mapclipper::harvest::{Harvest, format};
 use planetrs_pbf::{IdIndex, Planet};
 
-use super::extent_of;
+use super::{Context, extent_of};
 use crate::cli::HarvestArgs;
 use crate::report::{Report, bytes, seconds, thousands};
 
 /// Harvests the area the command line frames, and says how to draw it.
-pub fn run(arguments: HarvestArgs) -> Result<(), ClipError> {
+pub fn run(context: &Context, arguments: HarvestArgs) -> Result<(), ClipError> {
     let HarvestArgs {
         planet,
         framing,
@@ -22,10 +22,10 @@ pub fn run(arguments: HarvestArgs) -> Result<(), ClipError> {
         index,
     } = arguments;
     let area = framing.area()?;
-    let (harvest, pass_report) = read_planet(&planet, &area, index.as_deref())?;
+    let (harvest, pass_report) = read_planet(context, &planet, &area, index.as_deref())?;
     let size = format::write(&out, &harvest)?;
 
-    let mut report = Report::new(false);
+    let mut report = Report::new(context.quiet);
     describe_harvest(&mut report, &harvest, &pass_report);
     report.line("written", format!("{} ({})", out.display(), bytes(size)));
     report.blank();
@@ -52,6 +52,7 @@ fn source_name(planet: &Path) -> String {
 }
 
 pub(super) fn read_planet(
+    context: &Context,
     planet: &Path,
     area: &Area,
     index_at: Option<&Path>,
@@ -63,7 +64,7 @@ pub(super) fn read_planet(
     let mut index = IdIndex::read_for(&index_at, opened.fingerprint())
         .unwrap_or_else(|| IdIndex::empty(opened.fingerprint(), opened.blobs.len()));
 
-    let progress = Progress::to_stderr(false);
+    let progress = Progress::to_stderr(context.quiet);
     let harvested = harvest_area(&opened, &source_name(planet), area, &mut index, &|line| {
         progress.note(line)
     });

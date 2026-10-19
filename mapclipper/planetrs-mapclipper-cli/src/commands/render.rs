@@ -11,15 +11,16 @@ use planetrs_mapclipper::output::{Mark, Marker, geojson, svg};
 use planetrs_mapclipper::scene::{self, Scene};
 use planetrs_mapclipper::theme::Theme;
 
-use super::extent_of;
 use super::harvest::describe_harvest;
+use super::{Context, extent_of};
 use crate::cli::{Drawing, Framing, MarkKind, Outputs, RenderArgs};
 use crate::report::{Report, bytes, seconds, thousands};
 
 /// Draws the harvest the command line names into the outputs it asks for.
-pub fn run(arguments: RenderArgs) -> Result<(), ClipError> {
+pub fn run(context: &Context, arguments: RenderArgs) -> Result<(), ClipError> {
     let held = format::read(&arguments.harvest)?;
     draw(
+        context,
         &held,
         &arguments.framing,
         &arguments.drawing,
@@ -47,6 +48,7 @@ fn put(path: &Path, contents: &str) -> Result<u64, ClipError> {
 }
 
 pub(super) fn draw(
+    context: &Context,
     held: &Harvest,
     framing: &Framing,
     drawing: &Drawing,
@@ -70,7 +72,7 @@ pub(super) fn draw(
     let drawn_in = started.elapsed();
 
     let marker = marker_for(drawing, framing)?;
-    let mut report = Report::new(outputs.quiet);
+    let mut report = Report::new(context.quiet);
 
     if let Some(passes) = passes {
         describe_harvest(&mut report, held, &passes);

@@ -34,8 +34,20 @@ use planetrs_mapclipper::theme::Theme;
         Exit codes: 0 success, 1 failure, 2 bad arguments."
 )]
 pub struct Cli {
+    /// Settings every command shares.
+    #[command(flatten)]
+    pub global: Global,
+
     #[command(subcommand)]
     pub command: Command,
+}
+
+/// Settings every command shares.
+#[derive(Args, Debug)]
+pub struct Global {
+    /// Print nothing on stderr but errors and the attribution
+    #[arg(short, long, global = true)]
+    pub quiet: bool,
 }
 
 #[derive(Subcommand, Debug)]
@@ -257,10 +269,6 @@ pub struct Outputs {
     /// Draw the PNG at this many times the canvas size
     #[arg(long, default_value_t = 2.0)]
     pub scale: f64,
-
-    /// Say nothing on success beyond the files written
-    #[arg(long, short = 'q')]
-    pub quiet: bool,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, ValueEnum)]

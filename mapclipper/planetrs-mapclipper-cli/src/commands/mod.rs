@@ -10,16 +10,30 @@ use planetrs_cli::ATTRIBUTION;
 use planetrs_mapclipper::error::ClipError;
 use planetrs_pbf::PbfError;
 
-use crate::cli::Command;
+use crate::cli::{Cli, Command, Global};
+
+/// What every command knows before it starts: how much to say.
+pub struct Context {
+    /// Whether to say anything on stderr beyond errors and the attribution.
+    pub quiet: bool,
+}
+
+impl Context {
+    /// Reads the settings every command shares.
+    pub fn of(global: &Global) -> Self {
+        Self { quiet: global.quiet }
+    }
+}
 
 /// Runs the command the command line asks for, ending with the OpenStreetMap attribution when it
 /// read OpenStreetMap data.
-pub fn run(command: Command) -> anyhow::Result<()> {
-    let reads_openstreetmap_data = !matches!(command, Command::Themes(_));
-    match command {
-        Command::Harvest(arguments) => harvest::run(arguments),
-        Command::Render(arguments) => render::run(arguments),
-        Command::Clip(arguments) => clip::run(arguments),
+pub fn run(cli: Cli) -> anyhow::Result<()> {
+    let context = Context::of(&cli.global);
+    let reads_openstreetmap_data = !matches!(cli.command, Command::Themes(_));
+    match cli.command {
+        Command::Harvest(arguments) => harvest::run(&context, arguments),
+        Command::Render(arguments) => render::run(&context, arguments),
+        Command::Clip(arguments) => clip::run(&context, arguments),
         Command::Inspect(arguments) => inspect::run(arguments),
         Command::Themes(arguments) => themes::run(arguments),
     }

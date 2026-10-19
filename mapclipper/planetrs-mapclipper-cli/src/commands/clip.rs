@@ -3,13 +3,14 @@
 use planetrs_mapclipper::error::ClipError;
 use planetrs_mapclipper::harvest::format;
 
+use super::Context;
 use super::harvest::read_planet;
 use super::render::draw;
 use crate::cli::ClipArgs;
 use crate::report::{Report, bytes};
 
 /// Harvests the area the command line frames, keeps the harvest if asked, and draws it.
-pub fn run(arguments: ClipArgs) -> Result<(), ClipError> {
+pub fn run(context: &Context, arguments: ClipArgs) -> Result<(), ClipError> {
     let ClipArgs {
         planet,
         framing,
@@ -19,14 +20,14 @@ pub fn run(arguments: ClipArgs) -> Result<(), ClipError> {
         index,
     } = arguments;
     let area = framing.area()?;
-    let (held, pass_report) = read_planet(&planet, &area, index.as_deref())?;
+    let (held, pass_report) = read_planet(context, &planet, &area, index.as_deref())?;
 
     if let Some(path) = &keep_harvest {
         let size = format::write(path, &held)?;
-        let mut kept = Report::new(outputs.quiet);
+        let mut kept = Report::new(context.quiet);
         kept.line("harvest", format!("{} ({})", path.display(), bytes(size)));
         kept.to_stderr();
     }
 
-    draw(&held, &framing, &drawing, &outputs, Some(pass_report))
+    draw(context, &held, &framing, &drawing, &outputs, Some(pass_report))
 }
