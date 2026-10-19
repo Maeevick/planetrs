@@ -36,6 +36,11 @@ pub enum Unreachable {
         /// The file's length.
         length: u64,
     },
+    /// The file was replaced since it was first described, so its ranges would mix two versions.
+    Changed {
+        /// The file asked for.
+        file: String,
+    },
     /// The file could not be read, for a reason outside the dataset.
     Failed {
         /// The file asked for.
@@ -54,6 +59,7 @@ impl std::fmt::Display for Unreachable {
                 "bytes {}..{} of {file} were asked for, and it holds {length}",
                 range.start, range.end
             ),
+            Self::Changed { file } => write!(formatter, "{file} was replaced while it was being read"),
             Self::Failed { file, detail } => write!(formatter, "reading {file} failed: {detail}"),
         }
     }
