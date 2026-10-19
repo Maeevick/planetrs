@@ -11,6 +11,7 @@ use std::path::Path;
 use flate2::Compression;
 use flate2::write::ZlibEncoder;
 
+use crate::entity::to_zigzag;
 use crate::header::{DENSE_NODES, SORT_TYPE_THEN_ID};
 
 /// The program a fixture names in its header, so a harvest or an index built from one says so.
@@ -84,13 +85,98 @@ impl PlanetFile {
             .text(5, SORT_TYPE_THEN_ID)
             .text(16, &self.writing_program)
             .into_bytes();
-        framed("OSMHeader", &header)
+        let mut nodes = self.nodes.clone();
+        nodes.sort_by_key(|node| node.id);
+        let data = (!nodes.is_empty()).then(|| framed("OSMData", &node_block(&nodes)));
+        [Some(framed("OSMHeader", &header)), data]
+            .into_iter()
+            .flatten()
+            .flatten()
+            .collect()
     }
 
     /// Writes the file at `path`, replacing whatever was there: fixtures live in temporary places.
     pub fn write(&self, path: &Path) -> io::Result<()> {
         std::fs::write(path, self.to_bytes())
     }
+}
+
+/// A block of dense nodes: three delta-coded arrays and one flat stream of tags, ended per node by 0.
+fn node_block(nodes: &[Node]) -> Vec<u8> {
+    let strings = StringTable::of(nodes.iter().flat_map(|node| &node.tags));
+    let ids = deltas(nodes.iter().map(|node| node.id));
+    let latitudes = deltas(nodes.iter().map(|node| node.latitude / GRANULARITY));
+    let longitudes = deltas(nodes.iter().map(|node| node.longitude / GRANULARITY));
+    let tagged = nodes.iter().any(|node| !node.tags.is_empty());
+    let keys_vals = packed(nodes.iter().flat_map(|node| {
+        node.tags
+            .iter()
+            .flat_map(|(key, value)| [strings.index_of(key), strings.index_of(value)])
+            .chain([0])
+    }));
+    let dense = Message::new()
+        .bytes(1, &ids)
+        .bytes(8, &latitudes)
+        .bytes(9, &longitudes);
+    let dense = if tagged {
+        dense.bytes(10, &keys_vals)
+    } else {
+        dense
+    };
+    let group = Message::new().bytes(2, &dense.into_bytes()).into_bytes();
+    primitive_block(&strings, &group)
+}
+
+fn primitive_block(strings: &StringTable, group: &[u8]) -> Vec<u8> {
+    Message::new()
+        .bytes(1, &strings.to_bytes())
+        .bytes(2, group)
+        .number(17, GRANULARITY as u64)
+        .into_bytes()
+}
+
+/// A block's strings, the empty one first as the format reserves index 0, then in order of first use.
+struct StringTable(Vec<String>);
+
+impl StringTable {
+    fn of<'a>(tags: impl Iterator<Item = &'a (String, String)>) -> Self {
+        let mut strings = vec![String::new()];
+        for (key, value) in tags {
+            for text in [key, value] {
+                if !strings.contains(text) {
+                    strings.push(text.clone());
+                }
+            }
+        }
+        Self(strings)
+    }
+
+    fn index_of(&self, text: &str) -> u64 {
+        self.0.iter().position(|known| known == text).unwrap_or(0) as u64
+    }
+
+    fn to_bytes(&self) -> Vec<u8> {
+        self.0
+            .iter()
+            .fold(Message::new(), |table, text| table.text(1, text))
+            .into_bytes()
+    }
+}
+
+fn packed(values: impl Iterator<Item = u64>) -> Vec<u8> {
+    let mut out = Vec::new();
+    values.for_each(|value| put_varint(&mut out, value));
+    out
+}
+
+/// Each value as its difference from the one before, zigzagged, as ids and coordinates are stored.
+fn deltas(values: impl Iterator<Item = i64>) -> Vec<u8> {
+    let mut previous = 0;
+    packed(values.map(|value| {
+        let delta = value - previous;
+        previous = value;
+        to_zigzag(delta)
+    }))
 }
 
 /// One blob as the framing lays it out: the header's length, the header, then the zlib payload.
