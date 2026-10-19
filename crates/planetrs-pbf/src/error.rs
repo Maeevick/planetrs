@@ -72,7 +72,7 @@ impl fmt::Display for PbfError {
                     "the file does not declare Sort.Type_then_ID, so its sections cannot be bisected"
                 )
             }
-            Self::AtBlob { offset, source } => write!(out, "at blob offset {offset}: {source}"),
+            Self::AtBlob { offset, .. } => write!(out, "at blob offset {offset}"),
         }
     }
 }
@@ -80,7 +80,7 @@ impl fmt::Display for PbfError {
 impl std::error::Error for PbfError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Self::Io(error) => Some(error),
+            Self::Io(error) => error.source(),
             Self::AtBlob { source, .. } => Some(source.as_ref()),
             _ => None,
         }
@@ -102,7 +102,7 @@ mod tests {
         let tagged = PbfError::Truncated.at_blob(94_746_421);
 
         assert_eq!(
-            tagged.to_string(),
+            joined(&tagged),
             "at blob offset 94746421: the message ends mid-field"
         );
     }
@@ -112,10 +112,7 @@ mod tests {
     fn when_a_tagged_failure_is_tagged_again_then_the_first_offset_survives() {
         let tagged = PbfError::Truncated.at_blob(1000).at_blob(2000);
 
-        assert_eq!(
-            tagged.to_string(),
-            "at blob offset 1000: the message ends mid-field"
-        );
+        assert_eq!(joined(&tagged), "at blob offset 1000: the message ends mid-field");
     }
 
     #[test]
