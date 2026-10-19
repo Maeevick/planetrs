@@ -51,24 +51,25 @@ Bazar;1 Rue Haute;99999;Nulle Part;France;;;NotFound
 One site prints to stdout. A file writes to `output.csv`, or the name `-o` gives, and **never writes
 over a file**: when the name is taken it adds today's date, then a counter, and says which name it
 used. `-f -` reads stdin and `-o -` writes to stdout. Progress, counts and the attribution go to
-stderr, so the answers can be piped.
+stderr, so the answers can be piped, and `-q` leaves nothing there but errors and the attribution.
 
 | exit code | means |
 | --------- | ----- |
 | 0         | done, `NotFound` rows included |
-| 1         | something failed: no index, a file that cannot be read or written |
+| 1         | something failed: no dataset, a file that cannot be read or written |
 | 2         | the command or the site file is malformed, and nothing was geocoded |
 
-Planets and the index live in a data directory: `--data-dir`, else `PLANETRS_DATA_DIR`, else
-`$XDG_DATA_HOME/planetrs`, else `~/.local/share/planetrs`. `--index DIR` reads or builds an index
-elsewhere.
+Planets, the dataset and the cache of a remote dataset live in a data directory: `--data-dir`, else
+`PLANETRS_DATA_DIR`, else `$XDG_DATA_HOME/planetrs`, else `~/.local/share/planetrs`. `--dataset
+DIR|URL`, else `PLANETRS_DATASET`, reads a dataset from another directory or from a web address;
+`index` builds into a directory only.
 
 ## As a library
 
 ```rust
 use planetrs_geocoder::{Geocoder, Site, refusal_of};
 
-let geocoder = Geocoder::open("index")?;
+let mut geocoder = Geocoder::open("dataset")?;
 let site = Site {
     label: "Acme".into(),
     address: "8 Route des Tilleuls".into(),
@@ -76,7 +77,7 @@ let site = Site {
     town: "Sens".into(),
     country: "France".into(),
 };
-let answer = geocoder.locate(&site);
+let answer = geocoder.locate(&site)?;
 if let Some(answer) = &answer {
     println!("{:.6};{:.6};{}", answer.latitude(), answer.longitude(), answer.precision);
 }
@@ -85,9 +86,11 @@ if let Some(reason) = refusal_of(&site, answer.as_ref()) {
 }
 ```
 
-`planetrs_geocoder::build_index` builds an index from a planet file, and `planetrs_geocoder::index`
-reads and writes its files directly. Opening the index of France and Monaco takes a few seconds and
-about 4 GB of memory; each lookup after that takes well under a millisecond and touches no disk.
+`planetrs_geocoder::build_index` builds a dataset from a planet file. `Geocoder::open` reads a
+dataset's directory, and `Geocoder::over` any dataset `planetrs-dataset` reaches, over HTTP
+included. Opening reads the gazetteer alone. A lookup then reads its country's word counts once and
+its commune with the communes stored beside it, so a first lookup in France takes well under a
+second and about 500 MB, and a later one in a commune already read touches no disk.
 The API documentation is on [docs.rs](https://docs.rs/planetrs-geocoder).
 
 ## Why the commune is settled first

@@ -55,11 +55,11 @@ curl -fsSL "https://github.com/maeevick/planetrs/releases/latest/download/planet
 install -m 755 "planetrs-geocoder-$target/planetrs-geocoder" ~/.local/bin/
 ```
 
-`planetrs-mapclipper` comes the same way, or from crates.io:
+`planetrs-mapclipper` comes the same way, or either command from source with Cargo:
 
 ```sh
-cargo install planetrs-mapclipper
 cargo install --git https://github.com/maeevick/planetrs planetrs-geocoder-cli
+cargo install --git https://github.com/maeevick/planetrs planetrs-mapclipper-cli
 ```
 
 A binary downloaded through a browser is quarantined by macOS until `xattr -d com.apple.quarantine
@@ -102,14 +102,17 @@ planetrs-geocoder -f sites.csv -o answers.csv
 ## The workspace
 
 ```text
-crates/planetrs-pbf              reading PBF: protobuf, framing, blocks, file header, an id index
-crates/planetrs-geo              coordinates, bounding boxes, the window a block is tested against
-geocoder/planetrs-geocoder       the geocoding library
-geocoder/planetrs-geocoder-cli   the planetrs-geocoder command line
-mapclipper/planetrs-mapclipper   the map library and the planetrs-mapclipper command line
+crates/planetrs-pbf                  reading PBF: protobuf, framing, blocks, file header, an id index
+crates/planetrs-geo                  coordinates, bounding boxes, WKB, the window a block is tested against
+crates/planetrs-dataset              the dataset both tools read: a manifest, a gazetteer, GeoParquet indexes
+crates/planetrs-cli                  what both command lines share: data directory, outputs, progress, exit codes
+geocoder/planetrs-geocoder           the geocoding library
+geocoder/planetrs-geocoder-cli       the planetrs-geocoder command line
+mapclipper/planetrs-mapclipper       the map library
+mapclipper/planetrs-mapclipper-cli   the planetrs-mapclipper command line
 ```
 
-The two crates under `crates/` are shared and interpret nothing. What a `highway` means belongs to
+The crates under `crates/` are shared and interpret no tag. What a `highway` means belongs to
 whoever reads it.
 
 ## Why not a service

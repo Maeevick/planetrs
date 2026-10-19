@@ -72,6 +72,11 @@ The GeoJSON and the SVG are byte-deterministic given the same harvest. **A PNG i
 glyphs come from whatever fonts the machine has. That is equally true of a browser. When a run has
 to be defensible afterwards, keep the harvest and the SVG.
 
+**No map and no harvest is ever written over.** When the name asked for is taken, today's date is
+added, then a counter, `abidjan-2026-10-19.svg`, and the report names the file used; `-` writes to
+stdout instead. The report and the progress go to stderr, where `-q` leaves nothing but errors and
+the attribution. A run exits 0 when it succeeds, 1 when it fails and 2 when it was asked for wrongly.
+
 ## Themes are files, not code
 
 ```sh
@@ -196,7 +201,7 @@ declare it is refused rather than bisected wrongly.
 ## Installing
 
 ```sh
-cargo install planetrs-mapclipper
+cargo install --git https://github.com/maeevick/planetrs planetrs-mapclipper-cli
 ```
 
 Release archives for macOS and Linux are on the
@@ -204,9 +209,10 @@ Release archives for macOS and Linux are on the
 comes from `planetrs-geocoder download` or any OpenStreetMap mirror. A harvest needs a file that
 declares `Sort.Type_then_ID`, as the planet and Geofabrik's extracts do.
 
-`--no-default-features` drops the PNG output and with it every dependency beyond `flate2`, `rayon`
-and `clap`. Clap stays because the library's entry point, `run::run`, takes the parsed command. The
-library crates under `crates/` pull nothing beyond `flate2`, so embedding the reader costs nothing.
+`--no-default-features` drops the PNG output and resvg with it. The library, `planetrs-mapclipper`,
+holds no command line: a harvest is `harvest::passes::harvest_area`, a scene is `scene::build`, and
+each output is a function of a scene, while clap stays in `planetrs-mapclipper-cli`. The PBF reader
+under `crates/` pulls nothing beyond `flate2`, so embedding it costs nothing.
 
 ## Data and licence
 
