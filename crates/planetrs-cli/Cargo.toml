@@ -13,6 +13,7 @@ repository.workspace = true
 homepage.workspace = true
 
 [dependencies]
+planetrs-dataset.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
 

@@ -7,6 +7,7 @@
 #![warn(missing_docs)]
 
 pub mod data_dir;
+pub mod dataset;
 pub mod files;
 pub mod progress;
 

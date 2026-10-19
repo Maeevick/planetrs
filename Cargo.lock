@@ -866,6 +866,7 @@ name = "planetrs-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "planetrs-dataset",
  "thiserror",
 ]
 
