@@ -188,7 +188,7 @@ fn first_read<F: ForReadingFiles>(dataset: &Dataset<F>, country: &str) -> Result
 #[cfg(test)]
 mod tests {
     use planetrs_dataset::directory::record;
-    use planetrs_dataset::{Part, Provenance, gazetteer};
+    use planetrs_dataset::{Part, Provenance, gazetteer, geocoder_index};
 
     use super::*;
     use crate::boundary::Country;
@@ -365,6 +365,91 @@ mod tests {
         assert!(
             written.last().is_some_and(|line| line.contains("HouseNumber")),
             "{written:?}"
+        );
+    }
+
+    #[test]
+    fn given_a_street_named_as_asked_across_a_border_when_a_site_is_traced_then_the_trace_names_it_in_the_other_country()
+     {
+        let directory = scratch("across-the-border");
+        let monaco = Country {
+            code: "MC".into(),
+            names: vec!["MONACO".into()],
+        };
+        let beyond = Commune {
+            relation: 2,
+            level: 8,
+            names: vec!["LA CONDAMINE".into()],
+            postcodes: vec!["98000".into()],
+            centre: Some([3.30, 48.20]),
+            country: Some("MC".into()),
+        };
+        let communes = [sens(), beyond];
+        let relations = HashMap::from([("FR".to_string(), 2_202_162), ("MC".to_string(), 1_124_039)]);
+        let areas = gazetteer_of(
+            &communes,
+            &[france(), monaco],
+            &relations,
+            &HashMap::new(),
+            &HashMap::new(),
+        );
+        let bytes = gazetteer::to_parquet(&areas, &planet()).expect("the gazetteer is encoded");
+        record(
+            &directory,
+            &planet(),
+            Part::Gazetteer,
+            "gazetteer.parquet",
+            &bytes,
+            2,
+        )
+        .expect("recorded");
+        let street = |commune, name: &str| {
+            (
+                commune,
+                Street {
+                    name: name.into(),
+                    addresses: vec![],
+                    path: vec![[3.30, 48.20]],
+                },
+            )
+        };
+        for (country, filed) in [
+            ("FR", street(1, "ROUTE TILLEULS")),
+            ("MC", street(2, "RUE INCONNUE")),
+        ] {
+            let entries = geocoder_index_of(
+                country,
+                &communes,
+                &StreetIndex::of(vec![filed]),
+                &ShopIndex::default(),
+            );
+            let reach = crate::parts::reach_of(&entries, &communes);
+            let bytes = geocoder_index::to_parquet(country, &entries, reach, &planet()).expect("encoded");
+            let part = Part::GeocoderIndex {
+                country: country.into(),
+            };
+            record(
+                &directory,
+                &planet(),
+                part,
+                &format!("geocoder-{country}.parquet"),
+                &bytes,
+                1,
+            )
+            .expect("recorded");
+        }
+        let mut geocoder = Geocoder::open(&directory).expect("the dataset opens");
+
+        let written = geocoder
+            .trace(&site("12 Rue Inconnue"))
+            .expect("the dataset reads");
+
+        assert!(
+            written.iter().any(
+                |line| line.contains("same street name in other communes within 20 km")
+                    && line.contains("LA CONDAMINE")
+            ),
+            "{written:#?}"
         );
     }
 }
