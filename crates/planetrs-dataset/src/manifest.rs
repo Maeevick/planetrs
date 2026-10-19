@@ -5,6 +5,15 @@
 
 use serde::{Deserialize, Serialize};
 
+/// The format a manifest is written in, so that a reader can tell it from anything else.
+pub const FORMAT: &str = "planetrs dataset 1";
+
+/// The licence every file of a dataset is under, by its SPDX identifier.
+pub const LICENCE: &str = "ODbL-1.0";
+
+/// Whom the data must be credited to, and where the terms are explained.
+pub const ATTRIBUTION: &str = "© OpenStreetMap contributors, https://www.openstreetmap.org/copyright";
+
 /// The planet a dataset was built from, as precisely as a planet file names itself.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Provenance {
@@ -90,17 +99,42 @@ impl std::fmt::Display for ManifestError {
 impl std::error::Error for ManifestError {}
 
 impl Manifest {
-    /// The manifest as the JSON file a dataset opens with.
+    /// The manifest as the JSON file a dataset opens with, naming its format, licence and credit.
     pub fn to_json(&self) -> String {
-        serde_json::to_string_pretty(self).unwrap_or_default()
+        serde_json::to_string_pretty(&Written {
+            format: FORMAT,
+            licence: LICENCE,
+            attribution: ATTRIBUTION,
+            manifest: self,
+        })
+        .unwrap_or_default()
     }
 
     /// A manifest read from its JSON file.
     pub fn from_json(text: &str) -> Result<Self, ManifestError> {
-        serde_json::from_str(text).map_err(|error| ManifestError::NotAManifest {
-            detail: error.to_string(),
-        })
+        serde_json::from_str::<Read>(text)
+            .map(|read| read.manifest)
+            .map_err(|error| ManifestError::NotAManifest {
+                detail: error.to_string(),
+            })
     }
+}
+
+/// The manifest as written: its fields after the format, the licence and the credit.
+#[derive(Serialize)]
+struct Written<'a> {
+    format: &'a str,
+    licence: &'a str,
+    attribution: &'a str,
+    #[serde(flatten)]
+    manifest: &'a Manifest,
+}
+
+/// The manifest as read: the licence and the credit are the format's, so only the format is kept.
+#[derive(Deserialize)]
+struct Read {
+    #[serde(flatten)]
+    manifest: Manifest,
 }
 
 #[cfg(test)]
