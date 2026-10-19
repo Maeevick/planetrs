@@ -10,6 +10,7 @@
 
 #![warn(missing_docs)]
 
+pub mod dataset;
 pub mod directory;
 pub mod files;
 pub mod gazetteer;
@@ -22,6 +23,7 @@ mod tables;
 #[cfg(any(test, feature = "testing"))]
 pub mod testing;
 
+pub use dataset::{Dataset, DatasetError};
 pub use files::{DirectoryFiles, ForReadingFiles, Unreachable};
 #[cfg(feature = "remote")]
 pub use http::HttpFiles;
