@@ -23,7 +23,7 @@ mod tables;
 #[cfg(any(test, feature = "testing"))]
 pub mod testing;
 
-pub use dataset::{Dataset, DatasetError};
+pub use dataset::{CountryIndex, Dataset, DatasetError};
 pub use files::{DirectoryFiles, ForReadingFiles, Unreachable};
 #[cfg(feature = "remote")]
 pub use http::HttpFiles;

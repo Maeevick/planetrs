@@ -138,10 +138,11 @@ impl<F: ForReadingFiles> Dataset<F> {
     }
 }
 
-/// One country's geocoder index, its footer read: entries are fetched a row group at a time.
-pub struct CountryIndex<'a, F: ForReadingFiles> {
-    dataset: &'a Dataset<F>,
-    entry: &'a Entry,
+/// One country's geocoder index, its footer read and kept: its entries are fetched from the
+/// dataset a row group at a time.
+#[derive(Debug, Clone)]
+pub struct CountryIndex {
+    entry: Entry,
     footer: Footer,
 }
 
@@ -152,19 +153,60 @@ const FIRST_TAIL: u64 = 64 * 1024;
 impl<F: ForReadingFiles> Dataset<F> {
     /// `country`'s geocoder index with only its footer read, or nothing when the dataset does not
     /// index that country.
-    pub fn country_index(&self, country: &str) -> Result<Option<CountryIndex<'_, F>>, DatasetError> {
+    pub fn country_index(&self, country: &str) -> Result<Option<CountryIndex>, DatasetError> {
         let wanted = Part::GeocoderIndex {
             country: country.to_string(),
         };
         self.entry_of(&wanted)
             .map(|entry| {
                 self.footer_of(entry).map(|footer| CountryIndex {
-                    dataset: self,
-                    entry,
+                    entry: entry.clone(),
                     footer,
                 })
             })
             .transpose()
+    }
+
+    /// How many street names a country counts and how many hold each word, read from their own row
+    /// groups of its index.
+    pub fn word_counts(&self, index: &CountryIndex) -> Result<Vec<geocoder_index::Entry>, DatasetError> {
+        self.entries_where(index, |group| group.highest == Some(0))
+    }
+
+    /// The entries of one commune of a country, read from the row group of its index holding it.
+    pub fn commune(
+        &self,
+        index: &CountryIndex,
+        relation: i64,
+    ) -> Result<Vec<geocoder_index::Entry>, DatasetError> {
+        let entries = self.entries_where(index, |group| {
+            group.lowest.is_some_and(|lowest| lowest <= relation)
+                && group.highest.is_some_and(|highest| relation <= highest)
+        })?;
+        Ok(entries
+            .into_iter()
+            .filter(|entry| geocoder_index::commune_of(entry) == Some(relation))
+            .collect())
+    }
+
+    fn entries_where(
+        &self,
+        index: &CountryIndex,
+        chosen: impl Fn(&RowGroupBytes) -> bool,
+    ) -> Result<Vec<geocoder_index::Entry>, DatasetError> {
+        let mut entries = Vec::new();
+        for group in index
+            .footer
+            .row_groups("commune")
+            .iter()
+            .filter(|group| chosen(group))
+        {
+            let columns = self.row_group_of(&index.entry, &index.footer, group)?;
+            entries.extend(
+                geocoder_index::entries_of(&columns).map_err(|source| table_error(&index.entry, source))?,
+            );
+        }
+        Ok(entries)
     }
 
     /// A part's footer, read from its end in one read or, when it is longer than that, two.
@@ -206,45 +248,6 @@ fn table_error(entry: &Entry, source: TableError) -> DatasetError {
     DatasetError::Table {
         file: entry.file.clone(),
         source,
-    }
-}
-
-impl<F: ForReadingFiles> CountryIndex<'_, F> {
-    /// How many street names the country counts and how many hold each word, read from their own
-    /// row groups.
-    pub fn word_counts(&self) -> Result<Vec<geocoder_index::Entry>, DatasetError> {
-        self.entries_where(|group| group.highest == Some(0))
-    }
-
-    /// The entries of one commune, read from the row group holding it.
-    pub fn commune(&self, relation: i64) -> Result<Vec<geocoder_index::Entry>, DatasetError> {
-        let entries = self.entries_where(|group| {
-            group.lowest.is_some_and(|lowest| lowest <= relation)
-                && group.highest.is_some_and(|highest| relation <= highest)
-        })?;
-        Ok(entries
-            .into_iter()
-            .filter(|entry| geocoder_index::commune_of(entry) == Some(relation))
-            .collect())
-    }
-
-    fn entries_where(
-        &self,
-        chosen: impl Fn(&RowGroupBytes) -> bool,
-    ) -> Result<Vec<geocoder_index::Entry>, DatasetError> {
-        let mut entries = Vec::new();
-        for group in self
-            .footer
-            .row_groups("commune")
-            .iter()
-            .filter(|group| chosen(group))
-        {
-            let columns = self.dataset.row_group_of(self.entry, &self.footer, group)?;
-            entries.extend(
-                geocoder_index::entries_of(&columns).map_err(|source| table_error(self.entry, source))?,
-            );
-        }
-        Ok(entries)
     }
 }
 
@@ -452,7 +455,7 @@ mod tests {
         let dataset = Dataset::open(holding_france_with_only(&counts)?)?;
         let france = dataset.country_index("FR")?.ok_or("France is indexed")?;
 
-        let read = france.word_counts()?;
+        let read = dataset.word_counts(&france)?;
 
         assert_eq!(read, france_in_small_row_groups()[..2].to_vec());
         Ok(())
@@ -469,7 +472,7 @@ mod tests {
         let dataset = Dataset::open(holding_france_with_only(&commune)?)?;
         let france = dataset.country_index("FR")?.ok_or("France is indexed")?;
 
-        let read = france.commune(20)?;
+        let read = dataset.commune(&france, 20)?;
 
         assert_eq!(read, vec![street(20, "PLACE GARE")]);
         Ok(())

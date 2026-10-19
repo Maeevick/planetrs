@@ -175,18 +175,14 @@ fn given_a_dataset_read_once_through_a_cache_when_its_parts_are_gone_then_the_sa
         2,
     )?;
     let first = Dataset::open(DirectoryFiles::at(&directory))?.cached_in(&cache);
-    let read_first = first
-        .country_index("FR")?
-        .ok_or("France is indexed")?
-        .commune(946_433)?;
+    let france = first.country_index("FR")?.ok_or("France is indexed")?;
+    let read_first = first.commune(&france, 946_433)?;
     let manifest = std::fs::read(directory.join(MANIFEST))?;
 
     let only_the_manifest = FilesInMemory::default().with(MANIFEST, &manifest);
     let again = Dataset::open(only_the_manifest)?.cached_in(&cache);
-    let read_again = again
-        .country_index("FR")?
-        .ok_or("France is indexed")?
-        .commune(946_433)?;
+    let france_again = again.country_index("FR")?.ok_or("France is indexed")?;
+    let read_again = again.commune(&france_again, 946_433)?;
 
     assert_eq!(read_again, read_first);
     assert_eq!(read_first, entries[1..].to_vec());
