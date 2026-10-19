@@ -127,7 +127,7 @@ fn harvesting(directory: &Path, options: &[&str]) -> Output {
     let arguments: Vec<&str> = options
         .iter()
         .copied()
-        .chain(["harvest", planet.as_str()])
+        .chain(["harvest", "--planet", planet.as_str()])
         .chain(FRAME)
         .chain(["--out", "monaco.mapclip"])
         .collect();

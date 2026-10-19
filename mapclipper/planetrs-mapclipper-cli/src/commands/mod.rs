@@ -13,7 +13,8 @@ use std::time::SystemTime;
 
 use planetrs_cli::dataset::{location_of, name_of};
 use planetrs_cli::{ATTRIBUTION, DataDir, Day, write_new};
-use planetrs_dataset::Location;
+use planetrs_dataset::directory::MANIFEST;
+use planetrs_dataset::{DatasetError, Location, Unreachable};
 use planetrs_mapclipper::error::ClipError;
 use planetrs_pbf::PbfError;
 
@@ -119,6 +120,10 @@ fn next_step(failure: &ClipError) -> Option<String> {
             "built-in themes are {}, or pass a path to a .toml",
             known.join(", ")
         )),
+        ClipError::Dataset(DatasetError::Unreachable(Unreachable::Missing { file })) if file == MANIFEST => {
+            Some("build one: planetrs-mapclipper index, or read the planet: --planet PATH".into())
+        }
+        ClipError::NoMapIndex => Some("build one: planetrs-mapclipper index".into()),
         ClipError::Planet(PbfError::UnsortedSections) => Some(
             "this reader needs a planet file written with Sort.Type_then_ID, as \
              planet.openstreetmap.org publishes"

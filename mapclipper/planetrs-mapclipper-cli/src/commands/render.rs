@@ -55,7 +55,7 @@ pub(super) fn draw(
     let mut report = Report::new(context.quiet);
 
     if let Some(passes) = passes {
-        describe_harvest(&mut report, held, &passes);
+        describe_harvest(&mut report, held, Some(&passes));
     }
     describe_scene(&mut report, &scene, &theme, drawn_in);
 

@@ -22,13 +22,16 @@ use planetrs_mapclipper::theme::Theme;
     version,
     about = "Cut a small illustrated map out of the OpenStreetMap planet file, offline",
     long_about = "Cut a small illustrated map out of the OpenStreetMap planet file, offline.\n\n\
-                  No tile service, no API, no network. Map data is © OpenStreetMap contributors, \
-                  under the ODbL 1.0: every map shows the credit and the address of \
+                  No tile service, no API, no network. A map is cut from the dataset that \
+                  planetrs-mapclipper index builds for the countries asked for, or from the planet \
+                  itself with --planet, anywhere. Map data is © OpenStreetMap contributors, under \
+                  the ODbL 1.0: every map shows the credit and the address of \
                   https://www.openstreetmap.org/copyright, and every data file names the licence.",
     after_help = "Examples:\n  \
-        planetrs-mapclipper clip planet.osm.pbf --lat 5.269 --lon -4.012 --width-km 29 --height-km 16.53 \\\n    \
-            --width-px 1000 --height-px 570 --theme linework --png abidjan.png\n\n  \
-        planetrs-mapclipper harvest planet.osm.pbf --lat 5.269 --lon -4.012 --width-km 40 --height-km 40 \\\n    \
+        planetrs-mapclipper index --countries FR,MC\n\n  \
+        planetrs-mapclipper clip --lat 43.7375 --lon 7.4210 --width-km 3 --height-km 2 \\\n    \
+            --width-px 900 --height-px 600 --theme atlas --png monaco.png\n\n  \
+        planetrs-mapclipper harvest --planet planet.osm.pbf --lat 5.269 --lon -4.012 --width-km 40 --height-km 40 \\\n    \
             --out abidjan.mapclip\n\n  \
         planetrs-mapclipper render abidjan.mapclip --lat 5.269 --lon -4.012 --width-km 29 --height-km 16.53 \\\n    \
             --width-px 1000 --height-px 570 --svg abidjan.svg\n\n\
@@ -104,8 +107,9 @@ pub struct IndexArgs {
 /// What `harvest` reads, and where it keeps what it read.
 #[derive(Args, Debug)]
 pub struct HarvestArgs {
-    /// The planet file, as published at planet.openstreetmap.org/pbf/
-    pub planet: PathBuf,
+    /// The planet file to read instead of the dataset, as published at planet.openstreetmap.org/pbf/
+    #[arg(long, value_name = "PATH")]
+    pub planet: Option<PathBuf>,
 
     /// What ground the map is of.
     #[command(flatten)]
@@ -138,8 +142,9 @@ pub struct RenderArgs {
 /// What `clip` reads and draws, and whether it keeps the harvest.
 #[derive(Args, Debug)]
 pub struct ClipArgs {
-    /// The planet file, as published at planet.openstreetmap.org/pbf/
-    pub planet: PathBuf,
+    /// The planet file to read instead of the dataset, as published at planet.openstreetmap.org/pbf/
+    #[arg(long, value_name = "PATH")]
+    pub planet: Option<PathBuf>,
 
     /// What ground the map is of.
     #[command(flatten)]
@@ -426,6 +431,7 @@ mod tests {
         let cli = parsed(&[
             "planetrs-mapclipper",
             "harvest",
+            "--planet",
             "planet.osm.pbf",
             "--lat",
             "5.269",
@@ -451,6 +457,7 @@ mod tests {
         let with_space = parsed(&[
             "planetrs-mapclipper",
             "harvest",
+            "--planet",
             "p.pbf",
             "--lat",
             "5.0",
@@ -466,6 +473,7 @@ mod tests {
         let with_equals = parsed(&[
             "planetrs-mapclipper",
             "harvest",
+            "--planet",
             "p.pbf",
             "--lat=5.0",
             "--lon=1.0",

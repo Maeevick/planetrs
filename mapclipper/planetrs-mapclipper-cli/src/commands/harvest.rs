@@ -3,8 +3,10 @@
 use std::path::Path;
 
 use planetrs_cli::Progress;
+use planetrs_dataset::{Dataset, Location};
 use planetrs_geo::Area;
 use planetrs_mapclipper::error::ClipError;
+use planetrs_mapclipper::harvest::dataset::harvest_from_dataset;
 use planetrs_mapclipper::harvest::passes::{HarvestReport, harvest_area};
 use planetrs_mapclipper::harvest::{Harvest, format};
 use planetrs_pbf::Planet;
@@ -17,11 +19,11 @@ use crate::report::{Report, bytes, seconds, thousands};
 pub fn run(context: &Context, arguments: HarvestArgs) -> Result<(), ClipError> {
     let HarvestArgs { planet, framing, out } = arguments;
     let area = framing.area()?;
-    let (harvest, pass_report) = read_planet(context, &planet, &area)?;
+    let (harvest, passes) = harvest_of(context, planet.as_deref(), &area)?;
     let (written, size) = put(&out, &format::to_bytes(&harvest))?;
 
     let mut report = Report::new(context.quiet);
-    describe_harvest(&mut report, &harvest, &pass_report);
+    describe_harvest(&mut report, &harvest, passes.as_ref());
     report.line("written", format!("{} ({})", written.display(), bytes(size)));
     report.blank();
     report.note(format!(
@@ -39,11 +41,31 @@ fn source_name(planet: &Path) -> String {
         .unwrap_or_default()
 }
 
-pub(super) fn read_planet(
+/// The harvest of `area`, read from the planet when one is named, else from the dataset, with what
+/// each pass over the planet cost when it was read.
+pub(super) fn harvest_of(
     context: &Context,
-    planet: &Path,
+    planet: Option<&Path>,
     area: &Area,
-) -> Result<(Harvest, HarvestReport), ClipError> {
+) -> Result<(Harvest, Option<HarvestReport>), ClipError> {
+    match planet {
+        Some(planet) => read_planet(context, planet, area).map(|(harvest, passes)| (harvest, Some(passes))),
+        None => read_dataset(context, area).map(|harvest| (harvest, None)),
+    }
+}
+
+/// The harvest of `area` cut from the dataset's map indexes. A remote dataset keeps what it reads in
+/// the data directory's cache.
+fn read_dataset(context: &Context, area: &Area) -> Result<Harvest, ClipError> {
+    let dataset = Dataset::open(context.dataset.files()?)?;
+    let dataset = match context.dataset {
+        Location::Address(_) => dataset.cached_in(context.data.cache()),
+        Location::Directory(_) => dataset,
+    };
+    harvest_from_dataset(&dataset, area)
+}
+
+fn read_planet(context: &Context, planet: &Path, area: &Area) -> Result<(Harvest, HarvestReport), ClipError> {
     let opened = Planet::open(planet)?;
     let progress = Progress::to_stderr(context.quiet);
     let harvested = harvest_area(&opened, &source_name(planet), area, &|line| progress.note(line));
@@ -51,7 +73,7 @@ pub(super) fn read_planet(
     harvested
 }
 
-pub(super) fn describe_harvest(report: &mut Report, harvest: &Harvest, passes: &HarvestReport) {
+pub(super) fn describe_harvest(report: &mut Report, harvest: &Harvest, passes: Option<&HarvestReport>) {
     let provenance = &harvest.provenance;
     report.line(
         "source",
@@ -61,6 +83,10 @@ pub(super) fn describe_harvest(report: &mut Report, harvest: &Harvest, passes: &
         ),
     );
     report.line("collected", extent_of(&harvest.collected));
+    let Some(passes) = passes else {
+        report.line("harvest", "from the dataset's map indexes");
+        return;
+    };
 
     for (label, pass) in [
         ("nodes", passes.nodes),

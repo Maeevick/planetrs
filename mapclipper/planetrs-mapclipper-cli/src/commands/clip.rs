@@ -3,7 +3,7 @@
 use planetrs_mapclipper::error::ClipError;
 use planetrs_mapclipper::harvest::format;
 
-use super::harvest::read_planet;
+use super::harvest::harvest_of;
 use super::render::draw;
 use super::{Context, put};
 use crate::cli::ClipArgs;
@@ -19,7 +19,7 @@ pub fn run(context: &Context, arguments: ClipArgs) -> Result<(), ClipError> {
         keep_harvest,
     } = arguments;
     let area = framing.area()?;
-    let (held, pass_report) = read_planet(context, &planet, &area)?;
+    let (held, passes) = harvest_of(context, planet.as_deref(), &area)?;
 
     if let Some(path) = &keep_harvest {
         let (written, size) = put(path, &format::to_bytes(&held))?;
@@ -28,5 +28,5 @@ pub fn run(context: &Context, arguments: ClipArgs) -> Result<(), ClipError> {
         kept.to_stderr();
     }
 
-    draw(context, &held, &framing, &drawing, &outputs, Some(pass_report))
+    draw(context, &held, &framing, &drawing, &outputs, passes)
 }
