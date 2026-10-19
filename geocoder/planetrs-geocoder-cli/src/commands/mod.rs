@@ -11,15 +11,13 @@ use std::path::Path;
 use std::time::Instant;
 
 use anyhow::{Context as _, Result};
+use planetrs_cli::dataset::{location_of, name_of};
 use planetrs_cli::{ATTRIBUTION, DataDir, UsageError};
 use planetrs_dataset::directory::MANIFEST;
 use planetrs_dataset::{Dataset, DatasetError, ForReadingFiles, Location, Unreachable};
 use planetrs_geocoder::{Geocoder, OpenError};
 
 use crate::cli::{Cli, Command, Global};
-
-/// The environment variable naming the dataset when `--dataset` does not.
-pub const DATASET_VARIABLE: &str = "PLANETRS_DATASET";
 
 /// What every command knows before it starts: where things are, and how much to say.
 pub struct Context {
@@ -35,15 +33,7 @@ impl Context {
     /// Reads the shared settings, the environment standing behind `--data-dir`.
     pub fn of(global: &Global) -> Result<Self> {
         let data = DataDir::resolve(global.data_dir.as_deref(), |name| std::env::var_os(name))?;
-        let named = global.dataset.clone().or_else(|| {
-            std::env::var(DATASET_VARIABLE)
-                .ok()
-                .filter(|named| !named.is_empty())
-        });
-        let dataset = named.map_or_else(
-            || Location::Directory(data.dataset()),
-            |named| Location::of(&named),
-        );
+        let dataset = location_of(global.dataset.as_deref(), &data, |name| std::env::var(name).ok());
         Ok(Self {
             data,
             dataset,
@@ -53,10 +43,7 @@ impl Context {
 
     /// The dataset's location as a person reads it.
     pub fn dataset_name(&self) -> String {
-        match &self.dataset {
-            Location::Directory(directory) => directory.display().to_string(),
-            Location::Address(address) => address.clone(),
-        }
+        name_of(&self.dataset)
     }
 
     /// Opens the dataset, saying how long it took, or says how to get one. A remote dataset keeps

@@ -15,9 +15,7 @@ use crate::harvest::{harvest_boundaries, nodes_by_id, ways_by_id};
 use crate::index_streets::index_streets;
 use crate::parts::{gazetteer_of, geocoder_index_of, reach_of};
 
-/// The countries an index covers when none are named: France and Monaco, whose addresses the
-/// reading and matching rules were written for.
-pub const DEFAULT_COUNTRIES: [&str; 2] = ["FR", "MC"];
+pub use planetrs_dataset::territory::DEFAULT_COUNTRIES;
 
 /// What a finished build holds.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
