@@ -8,7 +8,7 @@ use planetrs_dataset::{gazetteer, geocoder_index};
 use crate::boundary::Country;
 use crate::gazetteer::{Commune, Gazetteer};
 use crate::rarity::WordRarity;
-use crate::shops::{Shop, ShopIndex};
+use crate::shops::{Shop, ShopIndex, metres_between};
 use crate::street_index::{AddressPoint, Street, StreetIndex};
 use crate::text::HouseNumber;
 
@@ -168,8 +168,62 @@ fn streets_of(commune: i64, streets: &StreetIndex) -> Vec<geocoder_index::Entry>
 /// street is placed at the mean of its doors, a street without doors at its middle, as `trace`
 /// places them.
 pub(crate) fn reach_of(entries: &[geocoder_index::Entry], communes: &[Commune]) -> f64 {
-    let _ = (entries, communes);
-    0.0
+    let centres: HashMap<i64, [f64; 2]> = communes
+        .iter()
+        .filter_map(|commune| {
+            commune.centre.map(|[longitude, latitude]| {
+                (
+                    commune.relation,
+                    [at_osm_precision(longitude), at_osm_precision(latitude)],
+                )
+            })
+        })
+        .collect();
+    let mut doors: BTreeMap<(i64, &str), Vec<[f64; 2]>> = BTreeMap::new();
+    let mut middles: BTreeMap<(i64, &str), [f64; 2]> = BTreeMap::new();
+    for entry in entries {
+        match entry {
+            geocoder_index::Entry::Door {
+                commune,
+                street,
+                position,
+                ..
+            } => doors
+                .entry((*commune, street.as_str()))
+                .or_default()
+                .push(*position),
+            geocoder_index::Entry::Middle {
+                commune,
+                street,
+                position,
+            } => {
+                middles.insert((*commune, street.as_str()), *position);
+            }
+            _ => {}
+        }
+    }
+    let without_doors: Vec<((i64, &str), [f64; 2])> = middles
+        .into_iter()
+        .filter(|(street, _)| !doors.contains_key(street))
+        .collect();
+    let placed = without_doors
+        .into_iter()
+        .chain(doors.into_iter().map(|(street, positions)| {
+            let count = positions.len() as f64;
+            let [longitude, latitude] = positions
+                .iter()
+                .fold([0.0, 0.0], |[x, y], [longitude, latitude]| {
+                    [x + longitude, y + latitude]
+                });
+            (street, [longitude / count, latitude / count])
+        }));
+    placed
+        .filter_map(|((commune, _), middle)| {
+            centres
+                .get(&commune)
+                .map(|centre| metres_between(middle, *centre))
+        })
+        .fold(0.0, f64::max)
 }
 
 /// A commune's shops in the order the index file has always held them: by the text of their line.
@@ -297,7 +351,6 @@ pub(crate) fn indexes_of(entries: Vec<geocoder_index::Entry>) -> (StreetIndex, S
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::shops::metres_between;
 
     fn commune(relation: i64, country: &str) -> Commune {
         Commune {
