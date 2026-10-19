@@ -56,7 +56,23 @@ impl ForReadingFiles for FilesInMemory {
 /// replace a file while running, the way a host republishing a dataset would.
 pub struct RangeServer {
     address: SocketAddr,
-    files: Arc<Mutex<BTreeMap<String, Vec<u8>>>>,
+    files: Arc<Mutex<BTreeMap<String, Served>>>,
+}
+
+/// A file as the server holds it: its bytes, shared between requests, and its ETag, computed once.
+#[derive(Clone)]
+struct Served {
+    bytes: Arc<Vec<u8>>,
+    etag: String,
+}
+
+impl Served {
+    fn of(bytes: &[u8]) -> Self {
+        Self {
+            etag: etag_of(bytes),
+            bytes: Arc::new(bytes.to_vec()),
+        }
+    }
 }
 
 impl RangeServer {
@@ -67,7 +83,7 @@ impl RangeServer {
         let files = Arc::new(Mutex::new(
             files
                 .iter()
-                .map(|(name, bytes)| (name.to_string(), bytes.to_vec()))
+                .map(|(name, bytes)| (name.to_string(), Served::of(bytes)))
                 .collect::<BTreeMap<_, _>>(),
         ));
         let served = Arc::clone(&files);
@@ -88,7 +104,7 @@ impl RangeServer {
     /// Replaces a file, or adds it, as a host republishing it would.
     pub fn replace(&self, name: &str, bytes: &[u8]) {
         if let Ok(mut files) = self.files.lock() {
-            files.insert(name.to_string(), bytes.to_vec());
+            files.insert(name.to_string(), Served::of(bytes));
         }
     }
 }
@@ -101,7 +117,7 @@ pub fn etag_of(bytes: &[u8]) -> String {
     format!("\"{hash:016x}\"")
 }
 
-fn answer(stream: TcpStream, files: &Mutex<BTreeMap<String, Vec<u8>>>) {
+fn answer(stream: TcpStream, files: &Mutex<BTreeMap<String, Served>>) {
     let Ok(reading) = stream.try_clone() else {
         return;
     };
@@ -139,8 +155,7 @@ fn answer(stream: TcpStream, files: &Mutex<BTreeMap<String, Vec<u8>>>) {
     let held = files.lock().ok().and_then(|files| files.get(&name).cloned());
     let reply = match held {
         None => respond("404 Not Found", &[], b""),
-        Some(bytes) => {
-            let etag = etag_of(&bytes);
+        Some(Served { bytes, etag }) => {
             let length = bytes.len();
             let tagged = [("ETag", etag.clone()), ("Accept-Ranges", "bytes".to_string())];
             match (method.as_str(), header("range")) {
