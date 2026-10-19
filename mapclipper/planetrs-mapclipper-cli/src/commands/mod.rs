@@ -169,4 +169,20 @@ mod tests {
 
         assert!(next_step(&error).unwrap().contains("Sort.Type_then_ID"));
     }
+
+    #[test]
+    fn given_a_box_reaching_beyond_the_countries_indexed_when_refused_then_the_error_says_to_read_the_planet_or_index_those_it_reaches()
+     {
+        let error = ClipError::OutsideTheDataset {
+            countries: vec!["FR".into(), "MC".into()],
+        };
+
+        let step = next_step(&error).unwrap();
+
+        assert!(step.contains("--planet PATH"), "{step}");
+        assert!(
+            step.contains("planetrs-mapclipper index --countries FR,MC,"),
+            "{step}"
+        );
+    }
 }
