@@ -98,4 +98,4 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@63fed3e2fecf6f7b51dc6f043341b79ef82a9ae7 # v2.9.2
-      - run: cargo publish --workspace --exclude planetrs-geocoder-cli --dry-run --locked
+      - run: cargo publish --workspace --dry-run --locked

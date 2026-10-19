@@ -1,7 +1,10 @@
 [package]
 name = "planetrs-geocoder-cli"
-description = "Command line geocoder over an OpenStreetMap planet file"
-publish = false
+description = "The planetrs-geocoder command: a coordinate for every site of a file, from OpenStreetMap data alone"
+documentation = "https://docs.rs/planetrs-geocoder-cli"
+readme = "../README.md"
+keywords = ["geocoding", "geocoder", "openstreetmap", "address", "cli"]
+categories = ["command-line-utilities", "science::geo"]
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

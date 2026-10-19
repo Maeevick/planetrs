@@ -43,7 +43,7 @@ deny: ## licences, advisories and sources of every dependency
 	cargo deny check
 
 package: ## what crates.io would receive, built from the packaged sources
-	cargo publish --workspace --exclude planetrs-geocoder-cli --dry-run --allow-dirty
+	cargo publish --workspace --dry-run --allow-dirty
 
 index: release ## build the geocoder's index from PLANET into the data directory
 	./target/release/planetrs-geocoder index --planet $(PLANET)
