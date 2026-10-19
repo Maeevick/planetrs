@@ -145,6 +145,7 @@ const GRANULARITY: i64 = 100;
 #[derive(Debug, Clone, PartialEq)]
 pub struct PlanetFile {
     writing_program: String,
+    replication: Option<(i64, i64)>,
     nodes: Vec<Node>,
     ways: Vec<Way>,
     relations: Vec<Relation>,
@@ -155,10 +156,17 @@ impl PlanetFile {
     pub fn sorted() -> Self {
         Self {
             writing_program: FIXTURE_PROGRAM.to_string(),
+            replication: None,
             nodes: Vec::new(),
             ways: Vec::new(),
             relations: Vec::new(),
         }
+    }
+
+    /// The same planet stamped with the minute of OSM history it would be a snapshot of.
+    pub fn replicated_at(mut self, timestamp: i64, sequence: i64) -> Self {
+        self.replication = Some((timestamp, sequence));
+        self
     }
 
     /// The same planet with one more node.
@@ -647,6 +655,22 @@ mod tests {
                     .with_member(MemberKind::Way, 11, "inner"),
             ]
         );
+        Ok(())
+    }
+
+    #[test]
+    fn given_a_replicated_fixture_when_opened_then_its_header_and_fingerprint_carry_the_replication()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let path = written(
+            &PlanetFile::sorted().replicated_at(1_788_739_204, 4_321),
+            "replication",
+        )?;
+
+        let opened = Planet::open(&path)?;
+
+        assert_eq!(opened.header.replication_timestamp, Some(1_788_739_204));
+        assert_eq!(opened.header.replication_sequence, Some(4_321));
+        assert_eq!(opened.fingerprint().replication_timestamp, 1_788_739_204);
         Ok(())
     }
 }
