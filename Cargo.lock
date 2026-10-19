@@ -899,6 +899,7 @@ dependencies = [
  "clap",
  "fs4",
  "md-5",
+ "planetrs-dataset",
  "planetrs-geocoder",
  "planetrs-pbf",
  "thiserror",

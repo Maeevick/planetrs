@@ -6,6 +6,8 @@ use std::time::{Duration, UNIX_EPOCH};
 
 use anyhow::Result;
 
+use planetrs_dataset::Manifest;
+
 use super::Context;
 use crate::data_dir::planet_date;
 use crate::files::Day;
@@ -42,6 +44,13 @@ pub fn provenance(header: &str) -> String {
         Some(countries) => format!("{planet}, streets of {countries}"),
         None => format!("{planet}, communes only"),
     }
+}
+
+/// What a dataset's manifest says about how it was built: from which planet, and for which
+/// countries its streets were indexed.
+pub fn built_from(manifest: &Manifest) -> String {
+    let _ = manifest;
+    String::new()
 }
 
 fn first_line(path: &Path) -> Option<String> {
@@ -136,6 +145,8 @@ pub fn run(context: &Context) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use planetrs_dataset::{Entry, Part, Provenance};
+
     use super::*;
 
     #[test]
@@ -169,21 +180,54 @@ mod tests {
         );
     }
 
+    fn manifest_of(replication_timestamp: i64, countries: &[&str]) -> Manifest {
+        let entry = |part: Part, file: &str| Entry {
+            part,
+            file: file.into(),
+            url: None,
+            bytes: 1,
+            sha256: String::new(),
+            rows: 1,
+        };
+        Manifest {
+            planet: Provenance {
+                source_name: "planet-260907.osm.pbf".into(),
+                file_size: 94_746_421_723,
+                blob_count: 52_810,
+                replication_timestamp,
+                replication_sequence: 4_321,
+                writing_program: "planet-dump-ng 1.2.7".into(),
+            },
+            files: std::iter::once(entry(Part::Gazetteer, "gazetteer.parquet"))
+                .chain(countries.iter().map(|country| {
+                    entry(
+                        Part::GeocoderIndex {
+                            country: country.to_string(),
+                        },
+                        &format!("geocoder-{country}.parquet"),
+                    )
+                }))
+                .collect(),
+        }
+    }
+
     #[test]
-    fn given_a_streets_header_when_read_then_the_planet_day_and_the_countries_are_named() {
-        let header = "# planetrs streets v1, planet 94746421723 bytes, 52810 blobs, replication timestamp \
-                      1788739204, countries FR,MC";
+    fn given_a_dataset_indexing_streets_when_described_then_the_planet_day_and_the_countries_are_named() {
+        let manifest = manifest_of(1_788_739_204, &["FR", "MC"]);
 
         assert_eq!(
-            provenance(header),
+            built_from(&manifest),
             "from the planet of 2026-09-07, streets of FR,MC"
         );
     }
 
     #[test]
-    fn given_a_gazetteer_header_when_read_then_it_says_there_are_communes_only() {
-        let header = "# planetrs gazetteer v1, planet 1 bytes, 1 blobs, replication timestamp 0";
+    fn given_a_dataset_of_the_gazetteer_alone_when_described_then_it_says_there_are_communes_only() {
+        let manifest = manifest_of(0, &[]);
 
-        assert_eq!(provenance(header), "from the planet of 1970-01-01, communes only");
+        assert_eq!(
+            built_from(&manifest),
+            "from the planet of 1970-01-01, communes only"
+        );
     }
 }
