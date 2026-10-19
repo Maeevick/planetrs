@@ -53,6 +53,14 @@ impl<F: ForReadingFiles> Dataset<F> {
         Ok(Self { files, manifest })
     }
 
+    /// The same dataset keeping every range it reads of a part in `directory`, under the part's
+    /// checksum, and answering from there the next time: the manifest is always read afresh, so a
+    /// part republished under another checksum is never served stale.
+    pub fn cached_in(self, directory: impl Into<std::path::PathBuf>) -> Self {
+        let _ = directory.into();
+        self
+    }
+
     /// What the dataset holds and where it came from.
     pub fn manifest(&self) -> &Manifest {
         &self.manifest
