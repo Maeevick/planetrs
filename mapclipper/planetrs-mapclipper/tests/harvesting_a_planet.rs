@@ -10,8 +10,8 @@ use std::sync::Mutex;
 use planetrs_geo::{Area, BoundingBox};
 use planetrs_mapclipper::harvest::passes::harvest_area;
 use planetrs_mapclipper::harvest::{Harvest, Member, NamedNode, Provenance};
+use planetrs_pbf::Planet;
 use planetrs_pbf::testing::{MemberKind, Node, PlanetFile, Relation, Way};
-use planetrs_pbf::{IdIndex, Planet};
 
 type Outcome = Result<(), Box<dyn std::error::Error>>;
 
@@ -82,8 +82,7 @@ fn harvested_saying(
 ) -> Result<Harvest, Box<dyn std::error::Error>> {
     let path = written(planet, name)?;
     let opened = Planet::open(&path)?;
-    let mut index = IdIndex::empty(opened.fingerprint(), opened.blobs.len());
-    let (harvest, _) = harvest_area(&opened, "monaco.osm.pbf", &monaco()?, &mut index, progress)?;
+    let (harvest, _) = harvest_area(&opened, "monaco.osm.pbf", &monaco()?, progress)?;
     Ok(harvest)
 }
 

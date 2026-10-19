@@ -17,10 +17,9 @@ pub fn run(context: &Context, arguments: ClipArgs) -> Result<(), ClipError> {
         drawing,
         outputs,
         keep_harvest,
-        index,
     } = arguments;
     let area = framing.area()?;
-    let (held, pass_report) = read_planet(context, &planet, &area, index.as_deref())?;
+    let (held, pass_report) = read_planet(context, &planet, &area)?;
 
     if let Some(path) = &keep_harvest {
         let (written, size) = put(path, &format::to_bytes(&held))?;

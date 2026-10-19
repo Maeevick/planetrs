@@ -57,7 +57,6 @@ pub struct HarvestReport {
     pub member_nodes: PassCost,
     /// Blobs the last two passes would have read without the id index.
     pub blobs_pruned: u64,
-    pub index_was_reused: bool,
 }
 
 impl HarvestReport {
@@ -512,19 +511,16 @@ pub fn harvest_area(
     planet: &Planet,
     source_name: &str,
     area: &Area,
-    index: &mut IdIndex,
     progress: &(dyn Fn(&str) + Sync),
 ) -> Result<(Harvest, HarvestReport), ClipError> {
     let sections = planet.sections()?;
-    let mut report = HarvestReport {
-        index_was_reused: index.covers(sections.nodes.clone()) && index.covers(sections.ways.clone()),
-        ..HarvestReport::default()
-    };
+    let mut report = HarvestReport::default();
+    let mut index = IdIndex::empty(planet.fingerprint(), planet.blobs.len());
 
     let started = Instant::now();
     let found_nodes = nodes_inside(planet, &sections, area, progress)?;
     report.nodes = cost(&found_nodes, started.elapsed());
-    record_spans(index, &found_nodes);
+    record_spans(&mut index, &found_nodes);
 
     let node_ids = sorted_distinct(found_nodes.kept.iter().map(|node| node.id));
 
@@ -537,7 +533,7 @@ pub fn harvest_area(
         "ways",
     )?;
     report.ways = cost(&found_ways, started.elapsed());
-    record_spans(index, &found_ways);
+    record_spans(&mut index, &found_ways);
 
     let held_ways = sorted_distinct(found_ways.kept.iter().map(|way| way.id));
 

@@ -187,8 +187,8 @@ harvest, spent fetching a few thousand entities.
 The planet declares `Sort.Type_then_ID`, so ids ascend within a section and a blob's span never
 overlaps its neighbour's. Passes one and two inflate those sections anyway, so recording each blob's
 first and last id costs nothing, and the passes that follow read a handful of blobs instead of
-eighteen thousand. The index is kept beside the planet file as a sidecar of under a megabyte, so
-later runs on other areas get it for free.
+eighteen thousand. The index lives for one harvest and is never written down: the passes that build
+it read those sections in any case, so a copy kept on disk would spare no blob.
 
 The sort order is **checked against the file's own header**, not assumed. A file that does not
 declare it is refused rather than bisected wrongly.

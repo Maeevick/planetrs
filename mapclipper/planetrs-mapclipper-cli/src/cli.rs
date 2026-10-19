@@ -80,10 +80,6 @@ pub struct HarvestArgs {
     /// Where the harvest goes
     #[arg(long, short = 'o', value_name = "FILE")]
     pub out: PathBuf,
-
-    /// Where the blob id index is kept, so later runs prune the passes that fetch by id
-    #[arg(long, value_name = "FILE")]
-    pub index: Option<PathBuf>,
 }
 
 /// Which harvest `render` draws, and how.
@@ -120,10 +116,6 @@ pub struct ClipArgs {
     /// Keep the harvest here, so drawing it again costs milliseconds
     #[arg(long, value_name = "FILE")]
     pub keep_harvest: Option<PathBuf>,
-
-    /// Where the blob id index is kept
-    #[arg(long, value_name = "FILE")]
-    pub index: Option<PathBuf>,
 }
 
 /// The file `inspect` reports on.
