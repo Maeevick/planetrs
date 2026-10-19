@@ -5,6 +5,7 @@
 //! identifiers fell in France. The exact outline test is too slow to run nine billion times; a
 //! raster of the country at 0.05°, conservative at its borders, answers in one lookup.
 
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::bounds::BoundingBox;
@@ -109,26 +110,160 @@ impl IdentifierSet {
     }
 }
 
+/// How wide a cell of coverage is: a hundredth of a degree, a kilometre or so, so that a box need
+/// only keep that far from a border it does not cross.
+const COVERAGE_DEGREES: f64 = 0.01;
+
 /// The cells of a hundredth of a degree that lie wholly inside a country indexed, where a box can be
 /// cut from a dataset and lack nothing the planet holds.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Coverage {
     /// By row of latitude, the runs of covered columns, each as its first and last.
-    rows: std::collections::BTreeMap<i32, Vec<(i32, i32)>>,
+    rows: BTreeMap<i32, Vec<(i32, i32)>>,
 }
 
 impl Coverage {
     /// The coverage of each outline of `outlines`, indexed together: the cells inside it that no
     /// border crosses, a border two of them share excepted, since both sides of it are indexed.
+    ///
+    /// A border is told shared by its edges, which two countries' outlines hold alike when, as in
+    /// OpenStreetMap, the countries share the ways drawing it.
     pub fn of_each(outlines: &[&Outline]) -> Vec<Coverage> {
-        outlines.iter().map(|_| Coverage::default()).collect()
+        let crossed = crossed_by_outer_borders(outlines);
+        outlines
+            .iter()
+            .map(|outline| {
+                let mut covered: BTreeMap<i32, Vec<i32>> = BTreeMap::new();
+                for (low, high) in outline.ring_bounds() {
+                    for row in cell_of_coverage(low[1])..=cell_of_coverage(high[1]) {
+                        for column in cell_of_coverage(low[0])..=cell_of_coverage(high[0]) {
+                            let centre = [
+                                (f64::from(column) + 0.5) * COVERAGE_DEGREES,
+                                (f64::from(row) + 0.5) * COVERAGE_DEGREES,
+                            ];
+                            if !crossed.contains(&(row, column)) && outline.contains(centre) {
+                                covered.entry(row).or_default().push(column);
+                            }
+                        }
+                    }
+                }
+                Coverage {
+                    rows: covered
+                        .into_iter()
+                        .map(|(row, mut columns)| {
+                            columns.sort_unstable();
+                            columns.dedup();
+                            (row, runs_of(&columns))
+                        })
+                        .collect(),
+                }
+            })
+            .collect()
     }
 
     /// Whether every cell `box_` touches is covered by one of `coverages`.
     pub fn cover(coverages: &[Coverage], box_: &BoundingBox) -> bool {
-        let _ = (coverages, box_);
-        false
+        (cell_of_coverage(box_.south)..=cell_of_coverage(box_.north)).all(|row| {
+            (cell_of_coverage(box_.west)..=cell_of_coverage(box_.east))
+                .all(|column| coverages.iter().any(|coverage| coverage.holds(row, column)))
+        })
     }
+
+    fn holds(&self, row: i32, column: i32) -> bool {
+        self.rows.get(&row).is_some_and(|runs| {
+            let after = runs.partition_point(|(first, _)| *first <= column);
+            after > 0 && runs[after - 1].1 >= column
+        })
+    }
+}
+
+/// The cell of coverage a longitude or a latitude falls in.
+fn cell_of_coverage(degrees: f64) -> i32 {
+    (degrees / COVERAGE_DEGREES).floor() as i32
+}
+
+/// Sorted, distinct columns as runs of neighbours, each as its first and last.
+fn runs_of(columns: &[i32]) -> Vec<(i32, i32)> {
+    let mut runs: Vec<(i32, i32)> = Vec::new();
+    for column in columns {
+        match runs.last_mut() {
+            Some((_, last)) if *last + 1 == *column => *last = *column,
+            _ => runs.push((*column, *column)),
+        }
+    }
+    runs
+}
+
+/// Every cell an edge of `outlines` touches, but for the edges two of them hold alike.
+fn crossed_by_outer_borders(outlines: &[&Outline]) -> HashSet<(i32, i32)> {
+    let key = |[x1, y1, x2, y2]: [f64; 4]| {
+        let (one, other) = ((x1.to_bits(), y1.to_bits()), (x2.to_bits(), y2.to_bits()));
+        if one <= other { (one, other) } else { (other, one) }
+    };
+    let mut holders: HashMap<_, Vec<usize>> = HashMap::new();
+    for (at, outline) in outlines.iter().enumerate() {
+        for edge in outline.edges() {
+            let held = holders.entry(key(*edge)).or_default();
+            if !held.contains(&at) {
+                held.push(at);
+            }
+        }
+    }
+    let mut crossed = HashSet::new();
+    for outline in outlines {
+        for edge in outline.edges() {
+            if holders.get(&key(*edge)).is_some_and(|held| held.len() < 2) {
+                mark_cells_touched(*edge, &mut crossed);
+            }
+        }
+    }
+    crossed
+}
+
+/// Marks every cell the edge touches, its sides and corners included.
+fn mark_cells_touched([x1, y1, x2, y2]: [f64; 4], crossed: &mut HashSet<(i32, i32)>) {
+    for row in cell_of_coverage(y1.min(y2))..=cell_of_coverage(y1.max(y2)) {
+        for column in cell_of_coverage(x1.min(x2))..=cell_of_coverage(x1.max(x2)) {
+            let (west, south) = (
+                f64::from(column) * COVERAGE_DEGREES,
+                f64::from(row) * COVERAGE_DEGREES,
+            );
+            if segment_touches(
+                [x1, y1, x2, y2],
+                [west, south, west + COVERAGE_DEGREES, south + COVERAGE_DEGREES],
+            ) {
+                crossed.insert((row, column));
+            }
+        }
+    }
+}
+
+/// Whether a segment meets a closed rectangle, by clipping it to the rectangle as Liang and Barsky
+/// do.
+fn segment_touches([x1, y1, x2, y2]: [f64; 4], [west, south, east, north]: [f64; 4]) -> bool {
+    let (dx, dy) = (x2 - x1, y2 - y1);
+    let mut entering = 0.0f64;
+    let mut leaving = 1.0f64;
+    for (towards, room) in [
+        (-dx, x1 - west),
+        (dx, east - x1),
+        (-dy, y1 - south),
+        (dy, north - y1),
+    ] {
+        if towards == 0.0 {
+            if room < 0.0 {
+                return false;
+            }
+        } else {
+            let at = room / towards;
+            if towards < 0.0 {
+                entering = entering.max(at);
+            } else {
+                leaving = leaving.min(at);
+            }
+        }
+    }
+    entering <= leaving
 }
 
 #[cfg(test)]
