@@ -48,6 +48,31 @@ impl Node {
     }
 }
 
+/// A way of a fixture: the nodes it runs through, in order, and its tags.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Way {
+    pub id: i64,
+    pub tags: Tags,
+    pub refs: Vec<i64>,
+}
+
+impl Way {
+    /// A way through the given nodes, which need not exist: a planet may hold refs to missing nodes.
+    pub fn through(id: i64, refs: impl IntoIterator<Item = i64>) -> Self {
+        Self {
+            id,
+            tags: Vec::new(),
+            refs: refs.into_iter().collect(),
+        }
+    }
+
+    /// The same way with one more tag, after the ones it already has.
+    pub fn tagged(mut self, key: &str, value: &str) -> Self {
+        self.tags.push((key.to_string(), value.to_string()));
+        self
+    }
+}
+
 fn on_the_planet_grid(degrees: f64) -> i64 {
     (degrees * 1e7).round() as i64 * GRANULARITY
 }
@@ -60,6 +85,7 @@ const GRANULARITY: i64 = 100;
 pub struct PlanetFile {
     writing_program: String,
     nodes: Vec<Node>,
+    ways: Vec<Way>,
 }
 
 impl PlanetFile {
@@ -68,12 +94,19 @@ impl PlanetFile {
         Self {
             writing_program: FIXTURE_PROGRAM.to_string(),
             nodes: Vec::new(),
+            ways: Vec::new(),
         }
     }
 
     /// The same planet with one more node.
     pub fn with_node(mut self, node: Node) -> Self {
         self.nodes.push(node);
+        self
+    }
+
+    /// The same planet with one more way.
+    pub fn with_way(mut self, way: Way) -> Self {
+        self.ways.push(way);
         self
     }
 
@@ -244,14 +277,15 @@ mod tests {
 
     use super::*;
     use crate::block::block;
-    use crate::entity::dense_group;
+    use crate::entity::{dense_group, visit_ways};
+    use crate::error::PbfError;
     use crate::planet::Planet;
 
     fn text(bytes: &[u8]) -> String {
         String::from_utf8_lossy(bytes).into_owned()
     }
 
-    fn nodes_of(planet: &Planet) -> Result<Vec<Node>, crate::error::PbfError> {
+    fn nodes_of(planet: &Planet) -> Result<Vec<Node>, PbfError> {
         let mut found = Vec::new();
         let (mut payload, mut inflated) = (Vec::new(), Vec::new());
         for at in 0..planet.blobs.len() {
@@ -276,6 +310,30 @@ mod tests {
                             })
                             .collect(),
                     })
+                })?;
+            }
+        }
+        Ok(found)
+    }
+
+    fn ways_of(planet: &Planet) -> Result<Vec<Way>, PbfError> {
+        let mut found = Vec::new();
+        let (mut payload, mut inflated) = (Vec::new(), Vec::new());
+        for at in 0..planet.blobs.len() {
+            planet.inflate_blob(at, &mut payload, &mut inflated)?;
+            let decoded = block(&inflated)?;
+            for group in &decoded.groups {
+                visit_ways(group, &mut |way| {
+                    found.push(Way {
+                        id: way.id,
+                        tags: way
+                            .tags(&decoded)
+                            .iter()
+                            .map(|(key, value)| (text(key), text(value)))
+                            .collect(),
+                        refs: way.refs().collect::<Result<_, _>>()?,
+                    });
+                    Ok(())
                 })?;
             }
         }
@@ -332,6 +390,43 @@ mod tests {
                     latitude: 43_730_000_000,
                     longitude: 7_420_000_000,
                     tags: vec![],
+                },
+            ]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn given_ways_when_their_blob_is_read_then_each_keeps_its_tags_and_its_refs_in_order()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let fixture = PlanetFile::sorted()
+            .with_node(Node::at(1, 43.7384, 7.4246))
+            .with_node(Node::at(2, 43.73, 7.42))
+            .with_way(
+                Way::through(20, [1, 2])
+                    .tagged("highway", "primary")
+                    .tagged("name", "Avenue de Monte-Carlo"),
+            )
+            .with_way(Way::through(10, [2, 3, 1]));
+        let path = written(&fixture, "ways")?;
+
+        let ways = ways_of(&Planet::open(&path)?)?;
+
+        assert_eq!(
+            ways,
+            vec![
+                Way {
+                    id: 10,
+                    tags: vec![],
+                    refs: vec![2, 3, 1],
+                },
+                Way {
+                    id: 20,
+                    tags: vec![
+                        ("highway".to_string(), "primary".to_string()),
+                        ("name".to_string(), "Avenue de Monte-Carlo".to_string())
+                    ],
+                    refs: vec![1, 2],
                 },
             ]
         );
