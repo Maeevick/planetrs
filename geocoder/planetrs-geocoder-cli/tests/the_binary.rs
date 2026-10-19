@@ -4,6 +4,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
+use planetrs_dataset::testing::RangeServer;
 use planetrs_pbf::testing::{MemberKind, Node, PlanetFile, Relation, Way};
 
 const SITE: &str = "Acme;8 Route des Tilleuls;89100;Sens;France";
@@ -83,7 +84,7 @@ fn index_in(directory: &Path) -> PathBuf {
     let built = run(
         directory,
         &[
-            "--index",
+            "--dataset",
             &index.display().to_string(),
             "index",
             "--planet",
@@ -136,7 +137,7 @@ fn given_one_site_when_geocoded_then_stdout_is_the_header_and_its_answer_and_std
     let directory = scratch("one-site");
     let index = index_argument(&directory);
 
-    let output = run(&directory, &["--index", &index, SITE]);
+    let output = run(&directory, &["--dataset", &index, SITE]);
 
     assert!(output.status.success(), "{}", text(&output.stderr));
     assert_eq!(text(&output.stdout), format!("{HEADER}\n{ANSWER}\n"));
@@ -156,9 +157,9 @@ fn given_a_file_when_geocoded_then_its_rows_are_the_one_site_answers() {
 
     let output = run(
         &directory,
-        &["--index", &index, "-f", "sites.csv", "-o", "answers.csv"],
+        &["--dataset", &index, "-f", "sites.csv", "-o", "answers.csv"],
     );
-    let alone = run(&directory, &["--index", &index, other]);
+    let alone = run(&directory, &["--dataset", &index, other]);
 
     assert!(output.status.success(), "{}", text(&output.stderr));
     let written = std::fs::read_to_string(directory.join("answers.csv")).unwrap();
@@ -178,7 +179,7 @@ fn given_the_output_file_exists_when_geocoded_again_then_it_is_kept_and_a_dated_
     .unwrap();
     std::fs::write(directory.join("output.csv"), "kept").unwrap();
 
-    let output = run(&directory, &["--index", &index, "-f", "sites.csv"]);
+    let output = run(&directory, &["--dataset", &index, "-f", "sites.csv"]);
 
     assert!(output.status.success(), "{}", text(&output.stderr));
     assert_eq!(
@@ -204,7 +205,7 @@ fn given_sites_on_stdin_and_output_to_stdout_when_geocoded_then_answers_flow_thr
 
     let output = run_with_stdin(
         &directory,
-        &["--index", &index, "-f", "-", "-o", "-", "--quiet"],
+        &["--dataset", &index, "-f", "-", "-o", "-", "--quiet"],
         &format!("\u{feff}Label;Address;Postal Code;City;Country\r\n{SITE}\r\n"),
     );
 
@@ -220,7 +221,7 @@ fn given_a_town_the_index_does_not_know_when_geocoded_then_the_row_says_not_foun
 
     let output = run(
         &directory,
-        &["--index", &index, "Acme;1 Rue Haute;99999;Nulle Part;France"],
+        &["--dataset", &index, "Acme;1 Rue Haute;99999;Nulle Part;France"],
     );
 
     assert!(output.status.success(), "{}", text(&output.stderr));
@@ -235,11 +236,11 @@ fn given_a_town_the_index_does_not_know_when_geocoded_then_the_row_says_not_foun
 fn given_no_index_when_geocoded_then_it_fails_with_one_and_says_how_to_build_one() {
     let directory = scratch("no-index");
 
-    let output = run(&directory, &["--index", "missing", SITE]);
+    let output = run(&directory, &["--dataset", "missing", SITE]);
 
     assert_eq!(output.status.code(), Some(1));
     let errors = text(&output.stderr);
-    assert!(errors.contains("no index in missing"), "{errors}");
+    assert!(errors.contains("no dataset in missing"), "{errors}");
     assert!(errors.contains("planetrs-geocoder index"), "{errors}");
 }
 
@@ -247,7 +248,7 @@ fn given_no_index_when_geocoded_then_it_fails_with_one_and_says_how_to_build_one
 fn given_a_site_without_five_fields_when_geocoded_then_it_fails_with_two_before_opening_any_index() {
     let directory = scratch("malformed-site");
 
-    let output = run(&directory, &["--index", "missing", "8 Route des Tilleuls;Sens"]);
+    let output = run(&directory, &["--dataset", "missing", "8 Route des Tilleuls;Sens"]);
 
     assert_eq!(output.status.code(), Some(2));
     assert!(
@@ -267,7 +268,7 @@ fn given_a_file_with_a_bad_row_when_geocoded_then_it_fails_with_two_naming_the_l
     )
     .unwrap();
 
-    let output = run(&directory, &["--index", &index, "-f", "sites.csv"]);
+    let output = run(&directory, &["--dataset", &index, "-f", "sites.csv"]);
 
     assert_eq!(output.status.code(), Some(2));
     assert!(
@@ -279,17 +280,29 @@ fn given_a_file_with_a_bad_row_when_geocoded_then_it_fails_with_two_naming_the_l
 }
 
 #[test]
-fn given_a_remote_index_when_asked_then_it_fails_with_two_as_not_supported_yet() {
-    let directory = scratch("remote");
+fn given_a_dataset_served_over_http_when_a_site_is_geocoded_then_its_door_answers_as_from_a_directory() {
+    let directory = scratch("over-http");
+    let index = index_in(&directory);
+    let files: Vec<(String, Vec<u8>)> = std::fs::read_dir(&index)
+        .unwrap()
+        .map(|entry| {
+            let path = entry.unwrap().path();
+            (
+                path.file_name().unwrap().to_string_lossy().into_owned(),
+                std::fs::read(&path).unwrap(),
+            )
+        })
+        .collect();
+    let served: Vec<(&str, &[u8])> = files
+        .iter()
+        .map(|(name, bytes)| (name.as_str(), bytes.as_slice()))
+        .collect();
+    let server = RangeServer::serving(&served).unwrap();
 
-    let output = run(&directory, &["--index", "https://example.org/index", SITE]);
+    let output = run(&directory, &["--dataset", &server.url(), SITE]);
 
-    assert_eq!(output.status.code(), Some(2));
-    assert!(
-        text(&output.stderr).contains("not supported yet"),
-        "{}",
-        text(&output.stderr)
-    );
+    assert!(output.status.success(), "{}", text(&output.stderr));
+    assert_eq!(text(&output.stdout), format!("{HEADER}\n{ANSWER}\n"));
 }
 
 #[test]
@@ -297,7 +310,7 @@ fn given_a_site_when_traced_then_the_last_line_is_its_answer() {
     let directory = scratch("trace");
     let index = index_argument(&directory);
 
-    let output = run(&directory, &["--index", &index, "trace", SITE]);
+    let output = run(&directory, &["--dataset", &index, "trace", SITE]);
 
     assert!(output.status.success(), "{}", text(&output.stderr));
     let traced = text(&output.stdout);
