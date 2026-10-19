@@ -7,6 +7,7 @@
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use crate::bounds::BoundingBox;
 use crate::outline::Outline;
 
 const CELL_DEGREES: f64 = 0.05;
@@ -108,6 +109,28 @@ impl IdentifierSet {
     }
 }
 
+/// The cells of a hundredth of a degree that lie wholly inside a country indexed, where a box can be
+/// cut from a dataset and lack nothing the planet holds.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Coverage {
+    /// By row of latitude, the runs of covered columns, each as its first and last.
+    rows: std::collections::BTreeMap<i32, Vec<(i32, i32)>>,
+}
+
+impl Coverage {
+    /// The coverage of each outline of `outlines`, indexed together: the cells inside it that no
+    /// border crosses, a border two of them share excepted, since both sides of it are indexed.
+    pub fn of_each(outlines: &[&Outline]) -> Vec<Coverage> {
+        outlines.iter().map(|_| Coverage::default()).collect()
+    }
+
+    /// Whether every cell `box_` touches is covered by one of `coverages`.
+    pub fn cover(coverages: &[Coverage], box_: &BoundingBox) -> bool {
+        let _ = (coverages, box_);
+        false
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -154,5 +177,53 @@ mod tests {
 
         assert!(set.contains(7) && set.contains(999));
         assert!(!set.contains(8) && !set.contains(1_000_000));
+    }
+
+    fn box_(west: f64, south: f64, east: f64, north: f64) -> BoundingBox {
+        BoundingBox {
+            west,
+            south,
+            east,
+            north,
+        }
+    }
+
+    /// France and Monaco as two squares side by side, sharing the edge at 7.40 east.
+    fn riviera() -> (Outline, Outline) {
+        let square = |west: f64, south: f64, east: f64, north: f64| {
+            Outline::of(vec![vec![
+                [west, south],
+                [east, south],
+                [east, north],
+                [west, north],
+                [west, south],
+            ]])
+        };
+        (square(7.00, 43.60, 7.40, 43.80), square(7.40, 43.60, 7.45, 43.80))
+    }
+
+    #[test]
+    fn given_two_countries_sharing_a_border_when_covered_then_boxes_inside_or_across_the_shared_border_are_covered_and_one_across_an_outer_border_is_not()
+     {
+        let (france, monaco) = riviera();
+
+        let coverages = Coverage::of_each(&[&france, &monaco]);
+
+        assert!(
+            Coverage::cover(&coverages, &box_(7.10, 43.65, 7.20, 43.70)),
+            "inside France"
+        );
+        assert!(
+            Coverage::cover(&coverages, &box_(7.35, 43.70, 7.43, 43.75)),
+            "across the shared border"
+        );
+        assert!(
+            !Coverage::cover(&coverages, &box_(6.95, 43.65, 7.05, 43.70)),
+            "across France's outer border"
+        );
+        assert!(
+            !Coverage::cover(&coverages, &box_(7.42, 43.70, 7.47, 43.75)),
+            "across Monaco's outer border"
+        );
     }
 }
