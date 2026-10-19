@@ -163,7 +163,6 @@ mod tests {
             ],
             countries: vec![square_country("FR", 10, 500)],
             associated_streets: vec![],
-            unreadable_blobs: 0,
         };
         let ways = HashMap::from([(500, vec![1, 2, 3, 4, 1])]);
         let nodes = HashMap::from([

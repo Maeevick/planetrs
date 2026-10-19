@@ -35,8 +35,6 @@ pub struct IndexSummary {
     pub hamlets: usize,
     /// Shops filed under a commune of the chosen countries.
     pub shops: usize,
-    /// Blobs of the planet that did not decode and were skipped.
-    pub unreadable_blobs: usize,
 }
 
 /// Why a build stopped.
@@ -108,7 +106,7 @@ pub fn build_index(
     let ways = ways_by_id(&opened, &wanted_ways).map_err(reading)?;
     progress(&format!(
         "ways           {} of {} country outline ways in {:.1}s",
-        ways.found.len(),
+        ways.len(),
         wanted_ways.len(),
         elapsed()
     ));
@@ -117,17 +115,17 @@ pub fn build_index(
         .areas
         .iter()
         .filter_map(|area| area.centre_node)
-        .chain(ways.found.values().flatten().copied())
+        .chain(ways.values().flatten().copied())
         .collect();
     let nodes = nodes_by_id(&opened, &wanted_nodes).map_err(reading)?;
     progress(&format!(
         "nodes          {} of {} wanted in {:.1}s",
-        nodes.found.len(),
+        nodes.len(),
         wanted_nodes.len(),
         elapsed()
     ));
 
-    let assembled = assemble(&harvest, &ways.found, &nodes.found);
+    let assembled = assemble(&harvest, &ways, &nodes);
     let report = &assembled.report;
     progress(&format!(
         "assembled      {} areas, {} without a centre, {} outside every country, in {:.1}s",
@@ -146,15 +144,8 @@ pub fn build_index(
     let mut summary = IndexSummary {
         communes: assembled.communes.len(),
         countries: assembled.countries.len(),
-        unreadable_blobs: harvest.unreadable_blobs + ways.unreadable_blobs + nodes.unreadable_blobs,
         ..IndexSummary::default()
     };
-    if summary.unreadable_blobs > 0 {
-        progress(&format!(
-            "unreadable     {} blobs did not decode",
-            summary.unreadable_blobs
-        ));
-    }
 
     let source = Provenance {
         source_name: planet
@@ -195,8 +186,8 @@ pub fn build_index(
             filing.buildings_without_nodes
         ));
         progress(&format!(
-            "               {} roads, {} hamlets; {} outline broken chains, {} unreadable blobs",
-            filing.highways_filed, filing.places_filed, report.outline_broken_chains, report.unreadable_blobs
+            "               {} roads, {} hamlets; {} outline broken chains",
+            filing.highways_filed, filing.places_filed, report.outline_broken_chains
         ));
         progress(&format!(
             "former towns   {} placed inside the commune that absorbed them",
@@ -211,7 +202,6 @@ pub fn build_index(
         summary.roads = filing.highways_filed;
         summary.hamlets = filing.places_filed;
         summary.shops = report.shops_filed;
-        summary.unreadable_blobs += report.unreadable_blobs;
         let areas = gazetteer_of(
             &assembled.communes,
             &assembled.countries,

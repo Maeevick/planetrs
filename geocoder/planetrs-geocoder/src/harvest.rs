@@ -12,7 +12,7 @@ use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 
 use planetrs_pbf::{
-    Block, PbfError, Planet, block as decode_block, dense_group, inflate, visit_relations, visit_ways,
+    Block, PbfError, Planet, block as decode_block, dense_group, visit_relations, visit_ways,
 };
 use rayon::prelude::*;
 
@@ -37,10 +37,6 @@ pub struct HarvestedCountry {
     pub outline_ways: Vec<i64>,
 }
 
-/// What one pass over the relations found, including what it could not read.
-///
-/// A blob that fails to inflate is counted rather than ignored. A gazetteer quietly missing a
-/// thousand communes looks exactly like one that never had them.
 /// A street as an `associatedStreet` relation names it, with the houses it names it for.
 ///
 /// The French cadastre import often writes a house number on a bare node and puts the street name
@@ -53,12 +49,13 @@ pub struct AssociatedStreet {
     pub house_ways: Vec<i64>,
 }
 
+/// What one pass over the relations found: every administrative area, every country and every
+/// associated street.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Harvest {
     pub areas: Vec<HarvestedArea>,
     pub countries: Vec<HarvestedCountry>,
     pub associated_streets: Vec<AssociatedStreet>,
-    pub unreadable_blobs: usize,
 }
 
 impl Harvest {
@@ -66,48 +63,34 @@ impl Harvest {
         self.areas.extend(other.areas);
         self.countries.extend(other.countries);
         self.associated_streets.extend(other.associated_streets);
-        self.unreadable_blobs += other.unreadable_blobs;
         self
     }
 }
 
-/// A pass's findings, and how many blobs it could not read.
-pub struct Scanned<T> {
-    pub found: T,
-    pub unreadable_blobs: usize,
-}
-
-fn scan<T, E, V, M>(planet: &Planet, blobs: Range<usize>, empty: E, visit: V, merge: M) -> Scanned<T>
+/// Reads the blobs in `blobs` in parallel, handing each decoded block to `visit`.
+///
+/// A blob that does not read, inflate or decode stops the pass with its offset. An index built
+/// around it would quietly lack whatever it held, and a gazetteer missing a thousand communes looks
+/// exactly like one that never had them.
+fn scan<T, E, V, M>(planet: &Planet, blobs: Range<usize>, empty: E, visit: V, merge: M) -> Result<T, PbfError>
 where
     T: Send,
     E: Fn() -> T + Sync + Send,
-    V: Fn(&mut T, &Block<'_>) + Sync + Send,
+    V: Fn(&mut T, &Block<'_>) -> Result<(), PbfError> + Sync + Send,
     M: Fn(T, T) -> T + Sync + Send,
 {
-    let (found, unreadable_blobs) = planet.blobs[blobs]
-        .par_iter()
-        .fold(
-            || (empty(), 0usize),
-            |(mut found, mut unreadable), location| {
-                let mut payload = Vec::new();
-                let mut inflated = Vec::new();
-                let readable =
-                    planet.read(location, &mut payload).is_ok() && inflate(&payload, &mut inflated).is_ok();
-                match readable.then(|| decode_block(&inflated)).and_then(Result::ok) {
-                    Some(block) => visit(&mut found, &block),
-                    None => unreadable += 1,
-                }
-                (found, unreadable)
-            },
-        )
-        .reduce(
-            || (empty(), 0),
-            |(left, a), (right, b)| (merge(left, right), a + b),
-        );
-    Scanned {
-        found,
-        unreadable_blobs,
-    }
+    blobs
+        .into_par_iter()
+        .try_fold(&empty, |mut found, at| {
+            let mut payload = Vec::new();
+            let mut inflated = Vec::new();
+            planet.inflate_blob(at, &mut payload, &mut inflated)?;
+            decode_block(&inflated)
+                .and_then(|block| visit(&mut found, &block))
+                .map_err(|error| error.at_blob(planet.blobs[at].offset))?;
+            Ok(found)
+        })
+        .try_reduce(&empty, |left, right| Ok(merge(left, right)))
 }
 
 fn as_text(bytes: &[u8]) -> String {
@@ -121,13 +104,13 @@ fn as_text(bytes: &[u8]) -> String {
 /// report an error.
 pub fn harvest_boundaries(planet: &Planet) -> Result<Harvest, PbfError> {
     let sections = planet.sections()?;
-    let scanned = scan(
+    scan(
         planet,
         sections.relations,
         Harvest::default,
         |found, block| {
             for group in &block.groups {
-                let _ = visit_relations(group, &mut |relation| {
+                visit_relations(group, &mut |relation| {
                     let tags: Vec<(String, String)> = relation
                         .tags(block)
                         .into_iter()
@@ -182,70 +165,64 @@ pub fn harvest_boundaries(planet: &Planet) -> Result<Harvest, PbfError> {
                         });
                     }
                     Ok(())
-                });
+                })?;
             }
+            Ok(())
         },
         Harvest::absorb,
-    );
-    let mut harvest = scanned.found;
-    harvest.unreadable_blobs += scanned.unreadable_blobs;
-    Ok(harvest)
+    )
 }
 
 /// The node identifiers of the ways asked for, read from the ways section.
-pub fn ways_by_id(
-    planet: &Planet,
-    wanted: &HashSet<i64>,
-) -> Result<Scanned<HashMap<i64, Vec<i64>>>, PbfError> {
+pub fn ways_by_id(planet: &Planet, wanted: &HashSet<i64>) -> Result<HashMap<i64, Vec<i64>>, PbfError> {
     let sections = planet.sections()?;
-    Ok(scan(
+    scan(
         planet,
         sections.ways,
         HashMap::new,
         |found, block| {
             for group in &block.groups {
-                let _ = visit_ways(group, &mut |way| {
+                visit_ways(group, &mut |way| {
                     if wanted.contains(&way.id) {
                         let references: Vec<i64> = way.refs().filter_map(Result::ok).collect();
                         found.insert(way.id, references);
                     }
                     Ok(())
-                });
+                })?;
             }
+            Ok(())
         },
         |mut left, right| {
             left.extend(right);
             left
         },
-    ))
+    )
 }
 
 /// Longitude and latitude of the nodes asked for, read from the nodes section.
-pub fn nodes_by_id(
-    planet: &Planet,
-    wanted: &HashSet<i64>,
-) -> Result<Scanned<HashMap<i64, [f64; 2]>>, PbfError> {
+pub fn nodes_by_id(planet: &Planet, wanted: &HashSet<i64>) -> Result<HashMap<i64, [f64; 2]>, PbfError> {
     let sections = planet.sections()?;
-    Ok(scan(
+    scan(
         planet,
         sections.nodes,
         HashMap::new,
         |found, block| {
             for group in &block.groups {
-                if let Ok(Some(dense)) = dense_group(group) {
-                    let _ = dense.visit(&mut |id, latitude, longitude| {
+                if let Some(dense) = dense_group(group)? {
+                    dense.visit(&mut |id, latitude, longitude| {
                         if wanted.contains(&id) {
                             found.insert(id, [block.longitude(longitude), block.latitude(latitude)]);
                         }
-                    });
+                    })?;
                 }
             }
+            Ok(())
         },
         |mut left, right| {
             left.extend(right);
             left
         },
-    ))
+    )
 }
 
 /// The largest node identifier in the file, read from the last blob of the node section.
@@ -358,10 +335,10 @@ pub fn scan_territory_nodes(
     mask: &TerritoryMask,
     countries: &[&Outline],
     inside: &IdentifierSet,
-) -> Result<Scanned<TerritoryNodes>, PbfError> {
+) -> Result<TerritoryNodes, PbfError> {
     let sections = planet.sections()?;
     let in_a_country = |point: [f64; 2]| countries.iter().any(|outline| outline.contains(point));
-    Ok(scan(
+    scan(
         planet,
         sections.nodes,
         TerritoryNodes::default,
@@ -376,10 +353,10 @@ pub fn scan_territory_nodes(
                 block.string_id(b"brand"),
             ];
             for group in &block.groups {
-                let Ok(Some(dense)) = dense_group(group) else {
+                let Some(dense) = dense_group(group)? else {
                     continue;
                 };
-                let _ = dense.visit_tagged(&mut |id, latitude, longitude, tags| {
+                dense.visit_tagged(&mut |id, latitude, longitude, tags| {
                     let point = [block.longitude(longitude), block.latitude(latitude)];
                     if !mask.might_hold(point) {
                         return;
@@ -421,11 +398,12 @@ pub fn scan_territory_nodes(
                             name: as_text(name),
                         });
                     }
-                });
+                })?;
             }
+            Ok(())
         },
         TerritoryNodes::absorb,
-    ))
+    )
 }
 
 /// A named road whose first node fell inside a target country.
@@ -472,9 +450,9 @@ pub fn scan_territory_ways(
     planet: &Planet,
     inside: &IdentifierSet,
     outline_ways: &HashSet<i64>,
-) -> Result<Scanned<TerritoryWays>, PbfError> {
+) -> Result<TerritoryWays, PbfError> {
     let sections = planet.sections()?;
-    Ok(scan(
+    scan(
         planet,
         sections.ways,
         TerritoryWays::default,
@@ -490,7 +468,7 @@ pub fn scan_territory_ways(
                 block.string_id(b"ref"),
             ];
             for group in &block.groups {
-                let _ = visit_ways(group, &mut |way| {
+                visit_ways(group, &mut |way| {
                     if outline_ways.contains(&way.id) {
                         found
                             .outlines
@@ -540,39 +518,38 @@ pub fn scan_territory_ways(
                         });
                     }
                     Ok(())
-                });
+                })?;
             }
+            Ok(())
         },
         TerritoryWays::absorb,
-    ))
+    )
 }
 
 /// Longitude and latitude of every node in an identifier set.
-pub fn node_positions(
-    planet: &Planet,
-    wanted: &IdentifierSet,
-) -> Result<Scanned<HashMap<i64, [f64; 2]>>, PbfError> {
+pub fn node_positions(planet: &Planet, wanted: &IdentifierSet) -> Result<HashMap<i64, [f64; 2]>, PbfError> {
     let sections = planet.sections()?;
-    Ok(scan(
+    scan(
         planet,
         sections.nodes,
         HashMap::new,
         |found, block| {
             for group in &block.groups {
-                if let Ok(Some(dense)) = dense_group(group) {
-                    let _ = dense.visit(&mut |id, latitude, longitude| {
+                if let Some(dense) = dense_group(group)? {
+                    dense.visit(&mut |id, latitude, longitude| {
                         if wanted.contains(id) {
                             found.insert(id, [block.longitude(longitude), block.latitude(latitude)]);
                         }
-                    });
+                    })?;
                 }
             }
+            Ok(())
         },
         |mut left, right| {
             left.extend(right);
             left
         },
-    ))
+    )
 }
 
 #[cfg(test)]
@@ -605,19 +582,5 @@ mod tests {
         };
 
         assert_eq!(left.absorb(right).areas, vec![area(1), area(2)]);
-    }
-
-    #[test]
-    fn given_partial_harvests_that_each_lost_a_blob_when_absorbed_then_the_losses_are_summed() {
-        let left = Harvest {
-            unreadable_blobs: 2,
-            ..Harvest::default()
-        };
-        let right = Harvest {
-            unreadable_blobs: 3,
-            ..Harvest::default()
-        };
-
-        assert_eq!(left.absorb(right).unreadable_blobs, 5);
     }
 }

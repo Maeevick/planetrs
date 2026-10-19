@@ -35,7 +35,6 @@ pub struct StreetIndexReport {
     pub shops_filed: usize,
     pub communes_without_outline: usize,
     pub outline_broken_chains: usize,
-    pub unreadable_blobs: usize,
     pub filing: FilingReport,
 }
 
@@ -70,9 +69,8 @@ pub fn index_streets(
     let largest = largest_node_id(planet)?;
     let inside = IdentifierSet::up_to(largest);
     let nodes = scan_territory_nodes(planet, &mask, &targets, &inside)?;
-    report.address_nodes = nodes.found.addresses.len();
-    report.places = nodes.found.places.len();
-    report.unreadable_blobs += nodes.unreadable_blobs;
+    report.address_nodes = nodes.addresses.len();
+    report.places = nodes.places.len();
     progress(&format!(
         "nodes: {} addresses, {} hamlets",
         report.address_nodes, report.places
@@ -104,25 +102,23 @@ pub fn index_streets(
 
     let ways = scan_territory_ways(planet, &inside, &outline_ways)?;
     drop(inside);
-    report.highways = ways.found.highways.len();
-    report.buildings = ways.found.buildings.len();
-    report.unreadable_blobs += ways.unreadable_blobs;
+    report.highways = ways.highways.len();
+    report.buildings = ways.buildings.len();
     progress(&format!(
         "ways: {} roads, {} addressed buildings, {} of {} outline ways",
         report.highways,
         report.buildings,
-        ways.found.outlines.len(),
+        ways.outlines.len(),
         outline_ways.len()
     ));
 
     let wanted = IdentifierSet::up_to(largest);
     for references in ways
-        .found
         .outlines
         .values()
-        .chain(ways.found.highways.iter().map(|road| &road.references))
-        .chain(ways.found.buildings.iter().map(|building| &building.references))
-        .chain(ways.found.shops.iter().map(|shop| &shop.references))
+        .chain(ways.highways.iter().map(|road| &road.references))
+        .chain(ways.buildings.iter().map(|building| &building.references))
+        .chain(ways.shops.iter().map(|shop| &shop.references))
     {
         for id in references {
             wanted.insert(*id);
@@ -130,8 +126,7 @@ pub fn index_streets(
     }
     let positions = node_positions(planet, &wanted)?;
     drop(wanted);
-    report.unreadable_blobs += positions.unreadable_blobs;
-    progress(&format!("positions: {} nodes", positions.found.len()));
+    progress(&format!("positions: {} nodes", positions.len()));
 
     let mut outlines = Vec::with_capacity(municipalities.len());
     let mut areas: HashMap<i64, f64> = HashMap::new();
@@ -141,14 +136,14 @@ pub fn index_streets(
         };
         let members: Vec<Vec<i64>> = way_ids
             .iter()
-            .filter_map(|id| ways.found.outlines.get(id).cloned())
+            .filter_map(|id| ways.outlines.get(id).cloned())
             .collect();
         let joined = join_into_rings(&members);
         report.outline_broken_chains += joined.broken_chains;
         let rings: Vec<Vec<[f64; 2]>> = joined
             .rings
             .iter()
-            .filter_map(|ring| ring.iter().map(|id| positions.found.get(id).copied()).collect())
+            .filter_map(|ring| ring.iter().map(|id| positions.get(id).copied()).collect())
             .collect();
         let area = crate::rings::area_square_kilometres(&rings);
         let outline = Outline::of(rings);
@@ -193,25 +188,24 @@ pub fn index_streets(
     ));
 
     let sources = StreetSources {
-        addresses: &nodes.found.addresses,
-        places: &nodes.found.places,
-        highways: &ways.found.highways,
-        buildings: &ways.found.buildings,
+        addresses: &nodes.addresses,
+        places: &nodes.places,
+        highways: &ways.highways,
+        buildings: &ways.buildings,
         associated: &harvest.associated_streets,
-        positions: &positions.found,
+        positions: &positions,
     };
     let (filed, filing) = file_streets(&sources, &communes);
     report.filing = filing;
     let shop_points = nodes
-        .found
         .shops
         .iter()
         .map(|shop| (Some(shop.position), &shop.names, &shop.street))
-        .chain(ways.found.shops.iter().map(|shop| {
+        .chain(ways.shops.iter().map(|shop| {
             let points: Vec<[f64; 2]> = shop
                 .references
                 .iter()
-                .filter_map(|id| positions.found.get(id).copied())
+                .filter_map(|id| positions.get(id).copied())
                 .collect();
             (middle_of(&points), &shop.names, &shop.street)
         }));
