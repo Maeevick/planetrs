@@ -15,6 +15,7 @@
 pub mod credit;
 pub mod error;
 pub mod harvest;
+pub mod index;
 pub mod output;
 pub mod scene;
 pub mod theme;

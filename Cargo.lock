@@ -920,6 +920,7 @@ dependencies = [
 name = "planetrs-mapclipper"
 version = "0.1.0"
 dependencies = [
+ "planetrs-dataset",
  "planetrs-geo",
  "planetrs-pbf",
  "rayon",

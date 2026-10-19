@@ -19,6 +19,7 @@ default = ["png"]
 png = ["dep:resvg"]
 
 [dependencies]
+planetrs-dataset.workspace = true
 planetrs-pbf.workspace = true
 planetrs-geo.workspace = true
 rayon.workspace = true
