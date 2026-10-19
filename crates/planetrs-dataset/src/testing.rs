@@ -23,17 +23,33 @@ impl FilesInMemory {
     }
 }
 
+impl FilesInMemory {
+    fn bytes_of(&self, file: &str) -> Result<&[u8], Unreachable> {
+        self.files
+            .get(file)
+            .map(Vec::as_slice)
+            .ok_or_else(|| Unreachable::Missing {
+                file: file.to_string(),
+            })
+    }
+}
+
 impl ForReadingFiles for FilesInMemory {
     fn length(&self, file: &str) -> Result<u64, Unreachable> {
-        Err(Unreachable::Missing {
-            file: file.to_string(),
-        })
+        self.bytes_of(file).map(|bytes| bytes.len() as u64)
     }
 
-    fn read(&self, file: &str, _range: Range<u64>) -> Result<Vec<u8>, Unreachable> {
-        Err(Unreachable::Missing {
-            file: file.to_string(),
-        })
+    fn read(&self, file: &str, range: Range<u64>) -> Result<Vec<u8>, Unreachable> {
+        let bytes = self.bytes_of(file)?;
+        let length = bytes.len() as u64;
+        if range.end > length || range.start > range.end {
+            return Err(Unreachable::PastTheEnd {
+                file: file.to_string(),
+                range,
+                length,
+            });
+        }
+        Ok(bytes[range.start as usize..range.end as usize].to_vec())
     }
 }
 
