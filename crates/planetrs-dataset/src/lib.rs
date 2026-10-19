@@ -13,6 +13,7 @@
 pub mod directory;
 pub mod files;
 pub mod gazetteer;
+pub mod geocoder_index;
 mod geoparquet;
 #[cfg(feature = "remote")]
 pub mod http;
