@@ -121,7 +121,7 @@ impl ForReadingFiles for HttpFiles {
             Some(etag) => request.header("If-Match", etag),
             None => request,
         };
-        let mut response = request.call().map_err(|error| failed(file, error.to_string()))?;
+        let response = request.call().map_err(|error| failed(file, error.to_string()))?;
         match response.status() {
             StatusCode::PARTIAL_CONTENT => {}
             StatusCode::NOT_FOUND => {
@@ -139,18 +139,30 @@ impl ForReadingFiles for HttpFiles {
                 format!("the server sent another range than {asked}"),
             ));
         }
-        let wanted = range.end - range.start;
-        let bytes = response
-            .body_mut()
-            .with_config()
-            .limit(wanted + 1)
-            .read_to_vec()
-            .map_err(|error| failed(file, error.to_string()))?;
-        if bytes.len() as u64 != wanted {
-            return Err(failed(file, format!("{} bytes came for {asked}", bytes.len())));
-        }
-        Ok(bytes)
+        exactly(file, &asked, response, range.end - range.start)
     }
+}
+
+/// The body of a range response, refused unless it holds exactly the `wanted` bytes.
+///
+/// ureq refuses a body that reaches its limit without ending, so the limit sits one byte past the
+/// range: a server sending more than was asked is still stopped there, and the count says so.
+fn exactly(
+    file: &str,
+    asked: &str,
+    mut response: Response<ureq::Body>,
+    wanted: u64,
+) -> Result<Vec<u8>, Unreachable> {
+    let bytes = response
+        .body_mut()
+        .with_config()
+        .limit(wanted + 1)
+        .read_to_vec()
+        .map_err(|error| failed(file, error.to_string()))?;
+    if bytes.len() as u64 != wanted {
+        return Err(failed(file, format!("{} bytes came for {asked}", bytes.len())));
+    }
+    Ok(bytes)
 }
 
 fn failed(file: &str, detail: String) -> Unreachable {
