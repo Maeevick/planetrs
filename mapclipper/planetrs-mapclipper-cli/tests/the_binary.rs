@@ -58,6 +58,15 @@ fn text(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).into_owned()
 }
 
+/// The files in `directory` named `stem-…extension`, as a dated fallback name is.
+fn dated(directory: &Path, stem: &str, extension: &str) -> Vec<String> {
+    std::fs::read_dir(directory)
+        .unwrap()
+        .filter_map(|entry| entry.ok()?.file_name().into_string().ok())
+        .filter(|name| name.starts_with(&format!("{stem}-")) && name.ends_with(extension))
+        .collect()
+}
+
 /// The binary harvesting the frame from the fixture planet into `monaco.mapclip`.
 fn harvesting(directory: &Path, options: &[&str]) -> Output {
     let planet = directory.join("monaco.osm.pbf");
@@ -169,4 +178,34 @@ fn given_quiet_before_or_after_the_command_when_harvested_and_rendered_then_stde
 
     assert_eq!(text(&harvested.stderr), format!("{ATTRIBUTION}\n"));
     assert_eq!(text(&rendered.stderr), format!("{ATTRIBUTION}\n"));
+}
+
+#[test]
+fn given_the_map_and_the_harvest_exist_when_cut_again_then_both_are_kept_and_dated_files_are_written() {
+    let directory = scratch("never-overwrite");
+    let harvest = harvest_in(&directory);
+    let first_harvest = std::fs::read(directory.join(&harvest)).unwrap();
+    std::fs::write(directory.join("map.svg"), "kept").unwrap();
+
+    let rendered = rendering(&directory, &harvest, &[]);
+    let harvested = harvesting(&directory, &[]);
+
+    assert!(rendered.status.success(), "{}", text(&rendered.stderr));
+    assert!(harvested.status.success(), "{}", text(&harvested.stderr));
+    assert_eq!(
+        std::fs::read_to_string(directory.join("map.svg")).unwrap(),
+        "kept"
+    );
+    assert_eq!(std::fs::read(directory.join(&harvest)).unwrap(), first_harvest);
+    let maps = dated(&directory, "map", ".svg");
+    let harvests = dated(&directory, "monaco", ".mapclip");
+    assert_eq!((maps.len(), harvests.len()), (1, 1), "{maps:?} {harvests:?}");
+    assert!(
+        text(&rendered.stderr).contains(&maps[0]),
+        "the name used is printed"
+    );
+    assert!(
+        text(&harvested.stderr).contains(&harvests[0]),
+        "the name used is printed"
+    );
 }
