@@ -60,3 +60,37 @@ fn given_a_box_around_nice_when_harvested_from_the_dataset_then_it_is_the_planet
     assert_eq!(from_dataset, from_planet);
     Ok(())
 }
+
+#[test]
+fn given_a_box_across_the_border_of_france_and_monaco_when_harvested_from_the_dataset_then_it_is_the_planets_harvest_to_the_byte()
+-> Outcome {
+    let (from_planet, from_dataset) = both_harvests(
+        "border",
+        BoundingBox {
+            west: 7.34,
+            south: 43.70,
+            east: 7.44,
+            north: 43.74,
+        },
+    )?;
+
+    assert_eq!(from_dataset, from_planet);
+    Ok(())
+}
+
+#[test]
+fn given_a_box_around_a_lake_whose_inner_ring_lies_far_away_when_harvested_from_the_dataset_then_it_is_the_planets_harvest_to_the_byte()
+-> Outcome {
+    let (from_planet, from_dataset) = both_harvests(
+        "lake",
+        BoundingBox {
+            west: 7.04,
+            south: 43.61,
+            east: 7.09,
+            north: 43.65,
+        },
+    )?;
+
+    assert_eq!(from_dataset, from_planet);
+    Ok(())
+}
