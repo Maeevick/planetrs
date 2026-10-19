@@ -2,9 +2,9 @@
 
 use crate::directory::MANIFEST;
 use crate::files::{ForReadingFiles, Unreachable};
-use crate::gazetteer;
 use crate::manifest::{Manifest, ManifestError, Part};
 use crate::tables::TableError;
+use crate::{gazetteer, geocoder_index};
 
 /// A dataset whose manifest has been read.
 pub struct Dataset<F: ForReadingFiles> {
@@ -74,6 +74,15 @@ impl<F: ForReadingFiles> Dataset<F> {
     }
 }
 
+impl<F: ForReadingFiles> Dataset<F> {
+    /// The entries of `country`'s geocoder index read whole, or nothing when the dataset does not
+    /// index that country.
+    pub fn geocoder_index(&self, country: &str) -> Result<Option<Vec<geocoder_index::Entry>>, DatasetError> {
+        let _ = country;
+        Ok(None)
+    }
+}
+
 /// A whole file, read as one range.
 fn whole(files: &impl ForReadingFiles, file: &str) -> Result<Vec<u8>, DatasetError> {
     let length = files.length(file).map_err(DatasetError::Unreachable)?;
@@ -83,7 +92,7 @@ fn whole(files: &impl ForReadingFiles, file: &str) -> Result<Vec<u8>, DatasetErr
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::manifest::{Entry, Provenance};
+    use crate::manifest::{Entry, Part, Provenance};
     use crate::testing::FilesInMemory;
 
     fn planet() -> Provenance {
@@ -136,6 +145,56 @@ mod tests {
         let areas = dataset.gazetteer()?;
 
         assert_eq!(areas, sens());
+        Ok(())
+    }
+
+    fn holding_sens_and_its_streets() -> Result<FilesInMemory, TableError> {
+        let index = geocoder_index::to_parquet("FR", &streets_of_sens(), &planet())?;
+        let gazetteer = gazetteer::to_parquet(&sens(), &planet())?;
+        let entry = |part: Part, file: &str, bytes: &[u8]| Entry {
+            part,
+            file: file.into(),
+            url: None,
+            bytes: bytes.len() as u64,
+            sha256: String::new(),
+            rows: 1,
+        };
+        let manifest = Manifest {
+            planet: planet(),
+            files: vec![
+                entry(Part::Gazetteer, "gazetteer.parquet", &gazetteer),
+                entry(
+                    Part::GeocoderIndex { country: "FR".into() },
+                    "geocoder-FR.parquet",
+                    &index,
+                ),
+            ],
+        };
+        Ok(FilesInMemory::default()
+            .with(MANIFEST, manifest.to_json().as_bytes())
+            .with("gazetteer.parquet", &gazetteer)
+            .with("geocoder-FR.parquet", &index))
+    }
+
+    fn streets_of_sens() -> Vec<geocoder_index::Entry> {
+        vec![
+            geocoder_index::Entry::Names { count: 1 },
+            geocoder_index::Entry::Middle {
+                commune: 946_433,
+                street: "AVENUE GARE".into(),
+                position: [3.268_208_2, 48.197_500_6],
+            },
+        ]
+    }
+
+    #[test]
+    fn given_a_dataset_indexing_france_when_france_then_belgium_are_asked_then_only_france_comes_back()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let dataset = Dataset::open(holding_sens_and_its_streets()?)?;
+
+        let asked = (dataset.geocoder_index("FR")?, dataset.geocoder_index("BE")?);
+
+        assert_eq!(asked, (Some(streets_of_sens()), None));
         Ok(())
     }
 }
