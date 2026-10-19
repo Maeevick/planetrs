@@ -98,4 +98,8 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@63fed3e2fecf6f7b51dc6f043341b79ef82a9ae7 # v2.9.2
+      # Outside the cached target directory: a registry crate's build is reused by version, and
+      # these crates are packaged afresh at the same version every run.
       - run: cargo publish --workspace --dry-run --locked
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/package
