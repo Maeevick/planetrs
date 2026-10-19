@@ -3,6 +3,7 @@ resolver = "3"
 members = [
     "crates/planetrs-pbf",
     "crates/planetrs-geo",
+    "crates/planetrs-dataset",
     "geocoder/planetrs-geocoder",
     "geocoder/planetrs-geocoder-cli",
     "mapclipper/planetrs-mapclipper",
@@ -19,6 +20,7 @@ homepage = "https://github.com/maeevick/planetrs"
 [workspace.dependencies]
 planetrs-pbf = { path = "crates/planetrs-pbf", version = "0.1.0" }
 planetrs-geo = { path = "crates/planetrs-geo", version = "0.1.0" }
+planetrs-dataset = { path = "crates/planetrs-dataset", version = "0.1.0" }
 planetrs-geocoder = { path = "geocoder/planetrs-geocoder", version = "0.1.0" }
 flate2 = { version = "1.1", default-features = false, features = ["zlib-rs"] }
 rayon = "1.12"
@@ -28,6 +30,8 @@ clap = { version = "4.6.7", features = ["derive"] }
 ureq = { version = "3.4", default-features = false, features = ["rustls"] }
 md-5 = "0.11"
 fs4 = "1.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
