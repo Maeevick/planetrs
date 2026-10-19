@@ -146,4 +146,18 @@ mod tests {
 
         assert_eq!(read_back.ok(), Some(manifest));
     }
+
+    #[test]
+    fn given_a_manifest_when_written_then_it_names_its_format_the_odbl_and_whom_to_credit()
+    -> Result<(), serde_json::Error> {
+        let written: serde_json::Value = serde_json::from_str(&monaco().to_json())?;
+
+        assert_eq!(written["format"], "planetrs dataset 1");
+        assert_eq!(written["licence"], "ODbL-1.0");
+        assert_eq!(
+            written["attribution"],
+            "© OpenStreetMap contributors, https://www.openstreetmap.org/copyright"
+        );
+        Ok(())
+    }
 }
