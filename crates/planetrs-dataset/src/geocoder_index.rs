@@ -142,110 +142,116 @@ const DOOR: &str = "door";
 const MIDDLE: &str = "middle";
 const SHOP: &str = "shop";
 
-fn columns_of(entries: &[Entry]) -> Vec<Column> {
+/// One entry as the row it is written as: every column, most of them empty for any one kind.
+#[derive(Default)]
+struct Row {
+    commune: i64,
+    kind: &'static str,
+    name: Option<String>,
+    names: Vec<String>,
+    count: Option<i64>,
+    number: Option<i64>,
+    suffix: Option<String>,
+    street: Option<String>,
+    geometry: Option<Vec<u8>>,
+}
+
+fn row_of(entry: &Entry) -> Row {
     let point = |[longitude, latitude]: [f64; 2]| Some(wkb::point(longitude, latitude));
-    let mut communes = Vec::with_capacity(entries.len());
-    let mut kinds = Vec::with_capacity(entries.len());
-    let mut names = Vec::with_capacity(entries.len());
-    let mut shop_names = Vec::with_capacity(entries.len());
-    let mut counts = Vec::with_capacity(entries.len());
-    let mut numbers = Vec::with_capacity(entries.len());
-    let mut suffixes = Vec::with_capacity(entries.len());
-    let mut streets = Vec::with_capacity(entries.len());
-    let mut geometries = Vec::with_capacity(entries.len());
-    for entry in entries {
-        let (commune, kind, name, listed, count, number, suffix, street, geometry) = match entry {
-            Entry::Names { count } => (
-                0,
-                NAMES,
-                None,
-                vec![],
-                Some(*count as i64),
-                None,
-                None,
-                None,
-                None,
-            ),
-            Entry::Word { word, count } => (
-                0,
-                WORD,
-                Some(word.clone()),
-                vec![],
-                Some(*count as i64),
-                None,
-                None,
-                None,
-                None,
-            ),
-            Entry::Door {
-                commune,
-                street,
-                number,
-                suffix,
-                position,
-            } => (
-                *commune,
-                DOOR,
-                Some(street.clone()),
-                vec![],
-                None,
-                Some(i64::from(*number)),
-                Some(suffix.clone()),
-                None,
-                point(*position),
-            ),
-            Entry::Middle {
-                commune,
-                street,
-                position,
-            } => (
-                *commune,
-                MIDDLE,
-                Some(street.clone()),
-                vec![],
-                None,
-                None,
-                None,
-                None,
-                point(*position),
-            ),
-            Entry::Shop {
-                commune,
-                names,
-                street,
-                position,
-            } => (
-                *commune,
-                SHOP,
-                None,
-                names.clone(),
-                None,
-                None,
-                None,
-                Some(street.clone()),
-                point(*position),
-            ),
-        };
-        communes.push(commune);
-        kinds.push(kind.to_string());
-        names.push(name);
-        shop_names.push(listed);
-        counts.push(count);
-        numbers.push(number);
-        suffixes.push(suffix);
-        streets.push(street);
-        geometries.push(geometry);
+    match entry {
+        Entry::Names { count } => Row {
+            kind: NAMES,
+            count: Some(*count as i64),
+            ..Row::default()
+        },
+        Entry::Word { word, count } => Row {
+            kind: WORD,
+            name: Some(word.clone()),
+            count: Some(*count as i64),
+            ..Row::default()
+        },
+        Entry::Door {
+            commune,
+            street,
+            number,
+            suffix,
+            position,
+        } => Row {
+            commune: *commune,
+            kind: DOOR,
+            name: Some(street.clone()),
+            number: Some(i64::from(*number)),
+            suffix: Some(suffix.clone()),
+            geometry: point(*position),
+            ..Row::default()
+        },
+        Entry::Middle {
+            commune,
+            street,
+            position,
+        } => Row {
+            commune: *commune,
+            kind: MIDDLE,
+            name: Some(street.clone()),
+            geometry: point(*position),
+            ..Row::default()
+        },
+        Entry::Shop {
+            commune,
+            names,
+            street,
+            position,
+        } => Row {
+            commune: *commune,
+            kind: SHOP,
+            names: names.clone(),
+            street: Some(street.clone()),
+            geometry: point(*position),
+            ..Row::default()
+        },
     }
+}
+
+fn columns_of(entries: &[Entry]) -> Vec<Column> {
+    let rows: Vec<Row> = entries.iter().map(row_of).collect();
+    let column = |name: &str, values: Values| Column::of(name, values);
     vec![
-        Column::of("commune", Values::Integers(communes)),
-        Column::of("kind", Values::Texts(kinds)),
-        Column::of("name", Values::OptionalTexts(names)),
-        Column::of("names", Values::TextLists(shop_names)),
-        Column::of("count", Values::OptionalIntegers(counts)),
-        Column::of("number", Values::OptionalIntegers(numbers)),
-        Column::of("suffix", Values::OptionalTexts(suffixes)),
-        Column::of("street", Values::OptionalTexts(streets)),
-        Column::of("geometry", Values::OptionalBytes(geometries)),
+        column(
+            "commune",
+            Values::Integers(rows.iter().map(|row| row.commune).collect()),
+        ),
+        column(
+            "kind",
+            Values::Texts(rows.iter().map(|row| row.kind.to_string()).collect()),
+        ),
+        column(
+            "name",
+            Values::OptionalTexts(rows.iter().map(|row| row.name.clone()).collect()),
+        ),
+        column(
+            "names",
+            Values::TextLists(rows.iter().map(|row| row.names.clone()).collect()),
+        ),
+        column(
+            "count",
+            Values::OptionalIntegers(rows.iter().map(|row| row.count).collect()),
+        ),
+        column(
+            "number",
+            Values::OptionalIntegers(rows.iter().map(|row| row.number).collect()),
+        ),
+        column(
+            "suffix",
+            Values::OptionalTexts(rows.iter().map(|row| row.suffix.clone()).collect()),
+        ),
+        column(
+            "street",
+            Values::OptionalTexts(rows.iter().map(|row| row.street.clone()).collect()),
+        ),
+        column(
+            "geometry",
+            Values::OptionalBytes(rows.into_iter().map(|row| row.geometry).collect()),
+        ),
     ]
 }
 
