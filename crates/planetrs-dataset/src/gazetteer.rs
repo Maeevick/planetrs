@@ -9,7 +9,10 @@ use planetrs_geo::wkb;
 
 use crate::geoparquet;
 use crate::manifest::{self, Provenance};
-use crate::tables::{self, Column, TableError, Values};
+use crate::tables::{
+    self, Column, TableError, Values, integers, optional_bytes, optional_integers, optional_reals,
+    optional_texts, small_integers, text_lists,
+};
 
 /// One administrative area: a country at level 2, a commune at level 8, anything between or below.
 #[derive(Debug, Clone, PartialEq)]
@@ -127,63 +130,6 @@ fn columns_of(areas: &[Area]) -> Vec<Column> {
 fn unexpected(name: &str) -> TableError {
     TableError::Unreadable {
         detail: format!("the gazetteer's column {name} is missing or of another kind"),
-    }
-}
-
-fn named<'a>(columns: &'a [Column], name: &str) -> Result<&'a Values, TableError> {
-    columns
-        .iter()
-        .find(|column| column.name == name)
-        .map(|column| &column.values)
-        .ok_or_else(|| unexpected(name))
-}
-
-fn integers<'a>(columns: &'a [Column], name: &str) -> Result<&'a [i64], TableError> {
-    match named(columns, name)? {
-        Values::Integers(values) => Ok(values),
-        _ => Err(unexpected(name)),
-    }
-}
-
-fn small_integers<'a>(columns: &'a [Column], name: &str) -> Result<&'a [i32], TableError> {
-    match named(columns, name)? {
-        Values::SmallIntegers(values) => Ok(values),
-        _ => Err(unexpected(name)),
-    }
-}
-
-fn optional_integers<'a>(columns: &'a [Column], name: &str) -> Result<&'a [Option<i64>], TableError> {
-    match named(columns, name)? {
-        Values::OptionalIntegers(values) => Ok(values),
-        _ => Err(unexpected(name)),
-    }
-}
-
-fn optional_reals<'a>(columns: &'a [Column], name: &str) -> Result<&'a [Option<f64>], TableError> {
-    match named(columns, name)? {
-        Values::OptionalReals(values) => Ok(values),
-        _ => Err(unexpected(name)),
-    }
-}
-
-fn optional_texts<'a>(columns: &'a [Column], name: &str) -> Result<&'a [Option<String>], TableError> {
-    match named(columns, name)? {
-        Values::OptionalTexts(values) => Ok(values),
-        _ => Err(unexpected(name)),
-    }
-}
-
-fn text_lists<'a>(columns: &'a [Column], name: &str) -> Result<&'a [Vec<String>], TableError> {
-    match named(columns, name)? {
-        Values::TextLists(values) => Ok(values),
-        _ => Err(unexpected(name)),
-    }
-}
-
-fn optional_bytes<'a>(columns: &'a [Column], name: &str) -> Result<&'a [Option<Vec<u8>>], TableError> {
-    match named(columns, name)? {
-        Values::OptionalBytes(values) => Ok(values),
-        _ => Err(unexpected(name)),
     }
 }
 

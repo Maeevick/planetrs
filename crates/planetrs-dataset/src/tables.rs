@@ -35,6 +35,8 @@ pub(crate) enum Values {
     Integers(Vec<i64>),
     /// 32-bit integers, none missing.
     SmallIntegers(Vec<i32>),
+    /// UTF-8 texts, none missing.
+    Texts(Vec<String>),
     /// 64-bit integers, some missing.
     OptionalIntegers(Vec<Option<i64>>),
     /// Doubles, some missing.
@@ -183,6 +185,7 @@ fn field_of(column: &Column) -> Field {
     let (kind, nullable) = match &column.values {
         Values::Integers(_) => (DataType::Int64, false),
         Values::SmallIntegers(_) => (DataType::Int32, false),
+        Values::Texts(_) => (DataType::Utf8, false),
         Values::OptionalIntegers(_) => (DataType::Int64, true),
         Values::OptionalReals(_) => (DataType::Float64, true),
         Values::OptionalTexts(_) => (DataType::Utf8, true),
@@ -199,6 +202,7 @@ fn array_of(values: &Values) -> ArrayRef {
     match values {
         Values::Integers(values) => Arc::new(Int64Array::from(values.clone())),
         Values::SmallIntegers(values) => Arc::new(Int32Array::from(values.clone())),
+        Values::Texts(values) => Arc::new(StringArray::from(values.clone())),
         Values::OptionalIntegers(values) => Arc::new(Int64Array::from(values.clone())),
         Values::OptionalReals(values) => Arc::new(Float64Array::from(values.clone())),
         Values::OptionalTexts(values) => Arc::new(StringArray::from(values.clone())),
@@ -226,6 +230,7 @@ fn empty_values(kind: &DataType, nullable: bool) -> Result<Values, TableError> {
     match (kind, nullable) {
         (DataType::Int64, false) => Ok(Values::Integers(Vec::new())),
         (DataType::Int32, false) => Ok(Values::SmallIntegers(Vec::new())),
+        (DataType::Utf8, false) => Ok(Values::Texts(Vec::new())),
         (DataType::Int64, true) => Ok(Values::OptionalIntegers(Vec::new())),
         (DataType::Float64, true) => Ok(Values::OptionalReals(Vec::new())),
         (DataType::Utf8, true) => Ok(Values::OptionalTexts(Vec::new())),
@@ -259,6 +264,13 @@ fn extend(values: &mut Values, array: &dyn Array) -> Result<(), TableError> {
                 .ok_or_else(unexpected)?
                 .values()
                 .iter(),
+        ),
+        Values::Texts(into) => into.extend(
+            array
+                .as_string_opt::<i32>()
+                .ok_or_else(unexpected)?
+                .iter()
+                .map(|text| text.unwrap_or_default().to_string()),
         ),
         Values::OptionalIntegers(into) => {
             into.extend(array.as_primitive_opt::<Int64Type>().ok_or_else(unexpected)?)
@@ -295,4 +307,89 @@ fn extend(values: &mut Values, array: &dyn Array) -> Result<(), TableError> {
         ),
     }
     Ok(())
+}
+
+fn kind_mismatch(name: &str) -> TableError {
+    unreadable(format!("the column {name} is missing or of another kind"))
+}
+
+fn named<'a>(columns: &'a [Column], name: &str) -> Result<&'a Values, TableError> {
+    columns
+        .iter()
+        .find(|column| column.name == name)
+        .map(|column| &column.values)
+        .ok_or_else(|| kind_mismatch(name))
+}
+
+/// The values of the column `name`, when it holds 64-bit integers, none missing.
+pub(crate) fn integers<'a>(columns: &'a [Column], name: &str) -> Result<&'a [i64], TableError> {
+    match named(columns, name)? {
+        Values::Integers(values) => Ok(values),
+        _ => Err(kind_mismatch(name)),
+    }
+}
+
+/// The values of the column `name`, when it holds 32-bit integers, none missing.
+pub(crate) fn small_integers<'a>(columns: &'a [Column], name: &str) -> Result<&'a [i32], TableError> {
+    match named(columns, name)? {
+        Values::SmallIntegers(values) => Ok(values),
+        _ => Err(kind_mismatch(name)),
+    }
+}
+
+/// The values of the column `name`, when it holds texts, none missing.
+pub(crate) fn texts<'a>(columns: &'a [Column], name: &str) -> Result<&'a [String], TableError> {
+    match named(columns, name)? {
+        Values::Texts(values) => Ok(values),
+        _ => Err(kind_mismatch(name)),
+    }
+}
+
+/// The values of the column `name`, when it holds 64-bit integers, some missing.
+pub(crate) fn optional_integers<'a>(
+    columns: &'a [Column],
+    name: &str,
+) -> Result<&'a [Option<i64>], TableError> {
+    match named(columns, name)? {
+        Values::OptionalIntegers(values) => Ok(values),
+        _ => Err(kind_mismatch(name)),
+    }
+}
+
+/// The values of the column `name`, when it holds doubles, some missing.
+pub(crate) fn optional_reals<'a>(columns: &'a [Column], name: &str) -> Result<&'a [Option<f64>], TableError> {
+    match named(columns, name)? {
+        Values::OptionalReals(values) => Ok(values),
+        _ => Err(kind_mismatch(name)),
+    }
+}
+
+/// The values of the column `name`, when it holds texts, some missing.
+pub(crate) fn optional_texts<'a>(
+    columns: &'a [Column],
+    name: &str,
+) -> Result<&'a [Option<String>], TableError> {
+    match named(columns, name)? {
+        Values::OptionalTexts(values) => Ok(values),
+        _ => Err(kind_mismatch(name)),
+    }
+}
+
+/// The values of the column `name`, when it holds lists of texts.
+pub(crate) fn text_lists<'a>(columns: &'a [Column], name: &str) -> Result<&'a [Vec<String>], TableError> {
+    match named(columns, name)? {
+        Values::TextLists(values) => Ok(values),
+        _ => Err(kind_mismatch(name)),
+    }
+}
+
+/// The values of the column `name`, when it holds byte strings, some missing.
+pub(crate) fn optional_bytes<'a>(
+    columns: &'a [Column],
+    name: &str,
+) -> Result<&'a [Option<Vec<u8>>], TableError> {
+    match named(columns, name)? {
+        Values::OptionalBytes(values) => Ok(values),
+        _ => Err(kind_mismatch(name)),
+    }
 }
