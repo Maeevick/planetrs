@@ -8,13 +8,13 @@
 use std::ops::Range;
 use std::sync::Arc;
 
-use arrow_array::builder::{ListBuilder, StringBuilder};
+use arrow_array::builder::{Int32Builder, Int64Builder, ListBuilder, StringBuilder};
 use arrow_array::cast::AsArray;
 use arrow_array::types::{Float64Type, Int32Type, Int64Type};
 use arrow_array::{
-    Array, ArrayRef, BinaryArray, Float64Array, Int32Array, Int64Array, RecordBatch, StringArray,
+    Array, ArrayRef, BinaryArray, Float64Array, Int32Array, Int64Array, RecordBatch, StringArray, StructArray,
 };
-use arrow_schema::{DataType, Field, Schema};
+use arrow_schema::{DataType, Field, Fields, Schema};
 use bytes::{Buf, Bytes};
 use parquet::arrow::ArrowWriter;
 use parquet::arrow::arrow_reader::{
@@ -54,7 +54,19 @@ pub(crate) enum Values {
     TextLists(Vec<Vec<String>>),
     /// Byte strings, some missing.
     OptionalBytes(Vec<Option<Vec<u8>>>),
+    /// Byte strings, none missing.
+    Bytes(Vec<Vec<u8>>),
+    /// Lists of 64-bit integers, each list present and possibly empty.
+    IntegerLists(Vec<Vec<i64>>),
+    /// Lists of 32-bit integers, each list present and possibly empty.
+    SmallIntegerLists(Vec<Vec<i32>>),
+    /// Boxes as their west, south, east and north edges, none missing: a struct of `xmin`, `ymin`,
+    /// `xmax` and `ymax`, the shape GeoParquet's bounding box covering asks for.
+    Boxes(Vec<[f64; 4]>),
 }
+
+/// The fields of a box, in the order GeoParquet names them.
+const BOX_FIELDS: [&str; 4] = ["xmin", "ymin", "xmax", "ymax"];
 
 /// One named column.
 #[derive(Debug, Clone, PartialEq)]
@@ -137,7 +149,8 @@ pub(crate) fn write(
     let properties = pruned_by
         .iter()
         .fold(properties, |properties, name| {
-            properties.set_column_statistics_enabled(ColumnPath::from(*name), EnabledStatistics::Chunk)
+            let path = ColumnPath::new(name.split('.').map(str::to_string).collect());
+            properties.set_column_statistics_enabled(path, EnabledStatistics::Chunk)
         })
         .build();
     let options = ArrowWriterOptions::new()
@@ -440,8 +453,25 @@ fn field_of(column: &Column) -> Field {
             false,
         ),
         Values::OptionalBytes(_) => (DataType::Binary, true),
+        Values::Bytes(_) => (DataType::Binary, false),
+        Values::IntegerLists(_) => (
+            DataType::List(Arc::new(Field::new("item", DataType::Int64, false))),
+            false,
+        ),
+        Values::SmallIntegerLists(_) => (
+            DataType::List(Arc::new(Field::new("item", DataType::Int32, false))),
+            false,
+        ),
+        Values::Boxes(_) => (DataType::Struct(box_fields()), false),
     };
     Field::new(&column.name, kind, nullable)
+}
+
+fn box_fields() -> Fields {
+    BOX_FIELDS
+        .iter()
+        .map(|name| Field::new(*name, DataType::Float64, false))
+        .collect()
 }
 
 fn array_of(values: &Values) -> ArrayRef {
@@ -469,6 +499,37 @@ fn array_of(values: &Values) -> ArrayRef {
                 .map(Option::as_deref)
                 .collect::<Vec<Option<&[u8]>>>(),
         )),
+        Values::Bytes(values) => Arc::new(BinaryArray::from(
+            values.iter().map(Vec::as_slice).collect::<Vec<&[u8]>>(),
+        )),
+        Values::IntegerLists(lists) => {
+            let mut builder =
+                ListBuilder::new(Int64Builder::new()).with_field(Field::new("item", DataType::Int64, false));
+            for list in lists {
+                builder.values().append_slice(list);
+                builder.append(true);
+            }
+            Arc::new(builder.finish())
+        }
+        Values::SmallIntegerLists(lists) => {
+            let mut builder =
+                ListBuilder::new(Int32Builder::new()).with_field(Field::new("item", DataType::Int32, false));
+            for list in lists {
+                builder.values().append_slice(list);
+                builder.append(true);
+            }
+            Arc::new(builder.finish())
+        }
+        Values::Boxes(boxes) => {
+            let edges: Vec<ArrayRef> = (0..BOX_FIELDS.len())
+                .map(|edge| {
+                    Arc::new(Float64Array::from_iter_values(
+                        boxes.iter().map(|box_| box_[edge]),
+                    )) as ArrayRef
+                })
+                .collect();
+            Arc::new(StructArray::new(box_fields(), edges, None))
+        }
     }
 }
 
@@ -480,8 +541,21 @@ fn empty_values(kind: &DataType, nullable: bool) -> Result<Values, TableError> {
         (DataType::Int64, true) => Ok(Values::OptionalIntegers(Vec::new())),
         (DataType::Float64, true) => Ok(Values::OptionalReals(Vec::new())),
         (DataType::Utf8, true) => Ok(Values::OptionalTexts(Vec::new())),
-        (DataType::List(_), false) => Ok(Values::TextLists(Vec::new())),
+        (DataType::List(item), false) => match item.data_type() {
+            DataType::Utf8 => Ok(Values::TextLists(Vec::new())),
+            DataType::Int64 => Ok(Values::IntegerLists(Vec::new())),
+            DataType::Int32 => Ok(Values::SmallIntegerLists(Vec::new())),
+            other => Err(unreadable(format!(
+                "a list of {other} is not one a dataset writes"
+            ))),
+        },
         (DataType::Binary, true) => Ok(Values::OptionalBytes(Vec::new())),
+        (DataType::Binary, false) => Ok(Values::Bytes(Vec::new())),
+        (DataType::Struct(fields), false)
+            if fields.iter().map(|field| field.name().as_str()).eq(BOX_FIELDS) =>
+        {
+            Ok(Values::Boxes(Vec::new()))
+        }
         (other, nullable) => Err(unreadable(format!(
             "a column of {other}{} is not one a dataset writes",
             if nullable { " or nothing" } else { "" }
@@ -551,6 +625,54 @@ fn extend(values: &mut Values, array: &dyn Array) -> Result<(), TableError> {
                 .iter()
                 .map(|bytes| bytes.map(<[u8]>::to_vec)),
         ),
+        Values::Bytes(into) => into.extend(
+            array
+                .as_binary_opt::<i32>()
+                .ok_or_else(unexpected)?
+                .iter()
+                .map(|bytes| bytes.unwrap_or_default().to_vec()),
+        ),
+        Values::IntegerLists(into) => {
+            for list in array.as_list_opt::<i32>().ok_or_else(unexpected)?.iter() {
+                let list = list.ok_or_else(unexpected)?;
+                into.push(
+                    list.as_primitive_opt::<Int64Type>()
+                        .ok_or_else(unexpected)?
+                        .values()
+                        .to_vec(),
+                );
+            }
+        }
+        Values::SmallIntegerLists(into) => {
+            for list in array.as_list_opt::<i32>().ok_or_else(unexpected)?.iter() {
+                let list = list.ok_or_else(unexpected)?;
+                into.push(
+                    list.as_primitive_opt::<Int32Type>()
+                        .ok_or_else(unexpected)?
+                        .values()
+                        .to_vec(),
+                );
+            }
+        }
+        Values::Boxes(into) => {
+            let boxes = array.as_struct_opt().ok_or_else(unexpected)?;
+            let edges: Vec<&Float64Array> = (0..BOX_FIELDS.len())
+                .map(|edge| {
+                    boxes
+                        .column(edge)
+                        .as_primitive_opt::<Float64Type>()
+                        .ok_or_else(unexpected)
+                })
+                .collect::<Result<_, _>>()?;
+            into.extend((0..boxes.len()).map(|row| {
+                [
+                    edges[0].value(row),
+                    edges[1].value(row),
+                    edges[2].value(row),
+                    edges[3].value(row),
+                ]
+            }));
+        }
     }
     Ok(())
 }
@@ -636,6 +758,41 @@ pub(crate) fn optional_bytes<'a>(
 ) -> Result<&'a [Option<Vec<u8>>], TableError> {
     match named(columns, name)? {
         Values::OptionalBytes(values) => Ok(values),
+        _ => Err(kind_mismatch(name)),
+    }
+}
+
+/// The values of the column `name`, when it holds byte strings, none missing.
+pub(crate) fn bytes<'a>(columns: &'a [Column], name: &str) -> Result<&'a [Vec<u8>], TableError> {
+    match named(columns, name)? {
+        Values::Bytes(values) => Ok(values),
+        _ => Err(kind_mismatch(name)),
+    }
+}
+
+/// The values of the column `name`, when it holds lists of 64-bit integers.
+pub(crate) fn integer_lists<'a>(columns: &'a [Column], name: &str) -> Result<&'a [Vec<i64>], TableError> {
+    match named(columns, name)? {
+        Values::IntegerLists(values) => Ok(values),
+        _ => Err(kind_mismatch(name)),
+    }
+}
+
+/// The values of the column `name`, when it holds lists of 32-bit integers.
+pub(crate) fn small_integer_lists<'a>(
+    columns: &'a [Column],
+    name: &str,
+) -> Result<&'a [Vec<i32>], TableError> {
+    match named(columns, name)? {
+        Values::SmallIntegerLists(values) => Ok(values),
+        _ => Err(kind_mismatch(name)),
+    }
+}
+
+/// The values of the column `name`, when it holds boxes.
+pub(crate) fn boxes<'a>(columns: &'a [Column], name: &str) -> Result<&'a [[f64; 4]], TableError> {
+    match named(columns, name)? {
+        Values::Boxes(values) => Ok(values),
         _ => Err(kind_mismatch(name)),
     }
 }

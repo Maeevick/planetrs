@@ -20,3 +20,27 @@ pub(crate) fn geo(geometry_types: &[&str]) -> (&'static str, String) {
     });
     ("geo", declaration.to_string())
 }
+
+/// The `geo` key-value pair of a file whose geometry column holds WKB of the given types, and whose
+/// `bbox` column holds each row's bounding box, which readers prune row groups by.
+pub(crate) fn geo_covered_by_bbox(geometry_types: &[&str]) -> (&'static str, String) {
+    let declaration = serde_json::json!({
+        "version": VERSION,
+        "primary_column": "geometry",
+        "columns": {
+            "geometry": {
+                "encoding": "WKB",
+                "geometry_types": geometry_types,
+                "covering": {
+                    "bbox": {
+                        "xmin": ["bbox", "xmin"],
+                        "ymin": ["bbox", "ymin"],
+                        "xmax": ["bbox", "xmax"],
+                        "ymax": ["bbox", "ymax"],
+                    }
+                }
+            }
+        }
+    });
+    ("geo", declaration.to_string())
+}

@@ -7,8 +7,28 @@
 //! map never has to fetch a member by its id. Positions come back to the nanodegree, exactly as the
 //! planet stores them.
 
-use crate::manifest::Provenance;
-use crate::tables::TableError;
+use planetrs_geo::wkb;
+
+use crate::geoparquet;
+use crate::manifest::{self, Provenance};
+use crate::tables::{
+    self, Column, TableError, Tail, Values, boxes, bytes, integer_lists, integers, optional_integers,
+    small_integer_lists, text_lists, texts,
+};
+
+/// How many rows a row group holds before the next element starts another. An element is never
+/// split, so a multipolygon and its members always share a row group.
+const ROWS_PER_ROW_GROUP: usize = 50_000;
+
+/// The footer key holding the planet's grid, as granularity, latitude offset and longitude offset.
+const GRID: &str = "planetrs.grid";
+
+/// The footer key holding the country the file is the map index of.
+const COUNTRY: &str = "planetrs.country";
+
+/// How finely the Hilbert curve orders boxes: a cell of 2^16 to a side over the whole planet is
+/// about 600 metres, finer than any row group.
+const HILBERT_ORDER: u32 = 16;
 
 /// The tags of an element, in the order the planet file states them.
 pub type Tags = Vec<(String, String)>;
@@ -77,27 +97,382 @@ pub enum Element {
 }
 
 /// The map index of `country` as a GeoParquet file.
+///
+/// Elements are ordered along a Hilbert curve through the centres of their boxes, so the rows of one
+/// box sit in a few row groups, and the row groups carry the bounds of their boxes for a reader to
+/// pick them by. The same elements always give the same bytes, whatever order they come in.
 pub fn to_parquet(
     country: &str,
     elements: &[Element],
     grid: Grid,
     planet: &Provenance,
 ) -> Result<Vec<u8>, TableError> {
-    let _ = (country, elements, grid, planet);
-    Ok(Vec::new())
+    let mut placed: Vec<(u64, (u8, i64), Vec<Row>)> = elements
+        .iter()
+        .map(|element| {
+            let rows = rows_of(element)?;
+            Ok((hilbert_key(rows[0].bbox), order_of(element), rows))
+        })
+        .collect::<Result<_, TableError>>()?;
+    placed.sort_by_key(|(key, order, _)| (*key, *order));
+    let mut row_groups = Vec::new();
+    let mut group: Vec<Row> = Vec::new();
+    for (_, _, rows) in placed {
+        group.extend(rows);
+        if group.len() >= ROWS_PER_ROW_GROUP {
+            row_groups.push(columns_of(std::mem::take(&mut group)));
+        }
+    }
+    if !group.is_empty() || row_groups.is_empty() {
+        row_groups.push(columns_of(group));
+    }
+    tables::write(
+        &row_groups,
+        &[
+            geoparquet::geo_covered_by_bbox(&["Point", "LineString", "GeometryCollection"]),
+            manifest::notice("map index", planet),
+            (COUNTRY, country.to_string()),
+            (
+                GRID,
+                format!(
+                    "{},{},{}",
+                    grid.granularity, grid.latitude_offset, grid.longitude_offset
+                ),
+            ),
+        ],
+        &["bbox.xmin", "bbox.ymin", "bbox.xmax", "bbox.ymax"],
+    )
 }
 
 /// The elements of a map index file, with the grid its positions were read on.
 pub fn from_parquet(bytes: &[u8]) -> Result<(Grid, Vec<Element>), TableError> {
-    let _ = bytes;
-    Ok((
-        Grid {
-            granularity: 0,
-            latitude_offset: 0,
-            longitude_offset: 0,
-        },
-        Vec::new(),
-    ))
+    let Tail::Footer(footer) = tables::footer_from_tail(bytes, bytes.len() as u64)? else {
+        return Err(unexpected("footer"));
+    };
+    let grid = footer
+        .metadata_value(GRID)
+        .as_deref()
+        .and_then(grid_of)
+        .ok_or_else(|| unexpected(GRID))?;
+    Ok((grid, elements_of(&tables::read(bytes)?)?))
+}
+
+/// One row of the file: an element, or one member way of a multipolygon.
+struct Row {
+    kind: &'static str,
+    id: i64,
+    relation: Option<i64>,
+    tags: Tags,
+    refs: Vec<i64>,
+    unresolved: Vec<i32>,
+    member_ways: Vec<i64>,
+    member_roles: Vec<String>,
+    geometry: Vec<u8>,
+    bbox: [f64; 4],
+}
+
+/// Where an element sorts among those of the same Hilbert key: nodes, then ways, then
+/// multipolygons, each by id.
+fn order_of(element: &Element) -> (u8, i64) {
+    match element {
+        Element::Node { id, .. } => (0, *id),
+        Element::Way(line) => (1, line.id),
+        Element::Multipolygon { id, .. } => (2, *id),
+    }
+}
+
+/// The rows an element is written as, its own first.
+fn rows_of(element: &Element) -> Result<Vec<Row>, TableError> {
+    match element {
+        Element::Node { id, at, tags } => {
+            let [longitude, latitude] = degrees(*at);
+            Ok(vec![Row {
+                kind: "node",
+                id: *id,
+                relation: None,
+                tags: tags.clone(),
+                refs: Vec::new(),
+                unresolved: Vec::new(),
+                member_ways: Vec::new(),
+                member_roles: Vec::new(),
+                geometry: wkb::point(longitude, latitude),
+                bbox: [longitude, latitude, longitude, latitude],
+            }])
+        }
+        Element::Way(line) => {
+            let bbox = bounds_of(line).ok_or_else(|| unplaced("way", line.id))?;
+            Ok(vec![line_row("way", line, None, bbox)])
+        }
+        Element::Multipolygon {
+            id,
+            tags,
+            members,
+            ways,
+        } => {
+            let bbox = ways
+                .iter()
+                .filter_map(bounds_of)
+                .reduce(union)
+                .ok_or_else(|| unplaced("multipolygon", *id))?;
+            let own = Row {
+                kind: "multipolygon",
+                id: *id,
+                relation: None,
+                tags: tags.clone(),
+                refs: Vec::new(),
+                unresolved: Vec::new(),
+                member_ways: members.iter().map(|(way, _)| *way).collect(),
+                member_roles: members.iter().map(|(_, role)| role.clone()).collect(),
+                geometry: wkb::empty_collection(),
+                bbox,
+            };
+            Ok(std::iter::once(own)
+                .chain(ways.iter().map(|line| {
+                    let own_bbox = bounds_of(line).unwrap_or(bbox);
+                    line_row("member", line, Some(*id), own_bbox)
+                }))
+                .collect())
+        }
+    }
+}
+
+fn line_row(kind: &'static str, line: &Line, relation: Option<i64>, bbox: [f64; 4]) -> Row {
+    let vertices: Vec<[f64; 2]> = line.positions.iter().flatten().map(|at| degrees(*at)).collect();
+    Row {
+        kind,
+        id: line.id,
+        relation,
+        tags: line.tags.clone(),
+        refs: line.refs.clone(),
+        unresolved: line
+            .positions
+            .iter()
+            .enumerate()
+            .filter(|(_, at)| at.is_none())
+            .map(|(index, _)| index as i32)
+            .collect(),
+        member_ways: Vec::new(),
+        member_roles: Vec::new(),
+        geometry: wkb::line_string(&vertices),
+        bbox,
+    }
+}
+
+/// The box around a line's placed nodes, if any is placed.
+fn bounds_of(line: &Line) -> Option<[f64; 4]> {
+    line.positions
+        .iter()
+        .flatten()
+        .map(|at| {
+            let [longitude, latitude] = degrees(*at);
+            [longitude, latitude, longitude, latitude]
+        })
+        .reduce(union)
+}
+
+fn union(left: [f64; 4], right: [f64; 4]) -> [f64; 4] {
+    [
+        left[0].min(right[0]),
+        left[1].min(right[1]),
+        left[2].max(right[2]),
+        left[3].max(right[3]),
+    ]
+}
+
+/// A position in degrees, longitude first, as WKB and GeoParquet order it.
+fn degrees(at: Position) -> [f64; 2] {
+    [at.longitude as f64 / 1e9, at.latitude as f64 / 1e9]
+}
+
+/// The position degrees stand for, back to the exact nanodegree: an f64 holds a coordinate to well
+/// under a millionth of a nanodegree, so rounding recovers it.
+fn position_of([longitude, latitude]: [f64; 2]) -> Position {
+    Position {
+        latitude: (latitude * 1e9).round() as i64,
+        longitude: (longitude * 1e9).round() as i64,
+    }
+}
+
+/// The index along a Hilbert curve of the cell holding a box's centre.
+fn hilbert_key([xmin, ymin, xmax, ymax]: [f64; 4]) -> u64 {
+    let cells = f64::from((1u32 << HILBERT_ORDER) - 1);
+    let cell =
+        |value: f64, low: f64, span: f64| (((value - low) / span).clamp(0.0, 1.0) * cells).round() as u32;
+    let x = cell((xmin + xmax) / 2.0, -180.0, 360.0);
+    let y = cell((ymin + ymax) / 2.0, -90.0, 180.0);
+    hilbert(x, y)
+}
+
+/// The classic conversion of a cell to its index along the curve, a quadrant at a time.
+fn hilbert(mut x: u32, mut y: u32) -> u64 {
+    let side = 1u32 << HILBERT_ORDER;
+    let mut index = 0u64;
+    let mut quadrant = side / 2;
+    while quadrant > 0 {
+        let right = u32::from(x & quadrant > 0);
+        let up = u32::from(y & quadrant > 0);
+        index += u64::from(quadrant) * u64::from(quadrant) * u64::from((3 * right) ^ up);
+        if up == 0 {
+            if right == 1 {
+                x = side - 1 - x;
+                y = side - 1 - y;
+            }
+            std::mem::swap(&mut x, &mut y);
+        }
+        quadrant /= 2;
+    }
+    index
+}
+
+fn columns_of(rows: Vec<Row>) -> Vec<Column> {
+    vec![
+        Column::of(
+            "kind",
+            Values::Texts(rows.iter().map(|row| row.kind.to_string()).collect()),
+        ),
+        Column::of("id", Values::Integers(rows.iter().map(|row| row.id).collect())),
+        Column::of(
+            "relation",
+            Values::OptionalIntegers(rows.iter().map(|row| row.relation).collect()),
+        ),
+        Column::of(
+            "tag_keys",
+            Values::TextLists(
+                rows.iter()
+                    .map(|row| row.tags.iter().map(|(key, _)| key.clone()).collect())
+                    .collect(),
+            ),
+        ),
+        Column::of(
+            "tag_values",
+            Values::TextLists(
+                rows.iter()
+                    .map(|row| row.tags.iter().map(|(_, value)| value.clone()).collect())
+                    .collect(),
+            ),
+        ),
+        Column::of(
+            "refs",
+            Values::IntegerLists(rows.iter().map(|row| row.refs.clone()).collect()),
+        ),
+        Column::of(
+            "unresolved",
+            Values::SmallIntegerLists(rows.iter().map(|row| row.unresolved.clone()).collect()),
+        ),
+        Column::of(
+            "member_ways",
+            Values::IntegerLists(rows.iter().map(|row| row.member_ways.clone()).collect()),
+        ),
+        Column::of(
+            "member_roles",
+            Values::TextLists(rows.iter().map(|row| row.member_roles.clone()).collect()),
+        ),
+        Column::of(
+            "geometry",
+            Values::Bytes(rows.iter().map(|row| row.geometry.clone()).collect()),
+        ),
+        Column::of("bbox", Values::Boxes(rows.iter().map(|row| row.bbox).collect())),
+    ]
+}
+
+/// The elements a file's rows stand for, each multipolygon gathered with the member rows after it.
+fn elements_of(columns: &[Column]) -> Result<Vec<Element>, TableError> {
+    let kinds = texts(columns, "kind")?;
+    let ids = integers(columns, "id")?;
+    let relations = optional_integers(columns, "relation")?;
+    let tag_keys = text_lists(columns, "tag_keys")?;
+    let tag_values = text_lists(columns, "tag_values")?;
+    let refs = integer_lists(columns, "refs")?;
+    let unresolved = small_integer_lists(columns, "unresolved")?;
+    let member_ways = integer_lists(columns, "member_ways")?;
+    let member_roles = text_lists(columns, "member_roles")?;
+    let geometries = bytes(columns, "geometry")?;
+    boxes(columns, "bbox")?;
+    let tags_of = |row: usize| -> Tags {
+        tag_keys[row]
+            .iter()
+            .cloned()
+            .zip(tag_values[row].iter().cloned())
+            .collect()
+    };
+    let line_of = |row: usize| -> Result<Line, TableError> {
+        let mut vertices = wkb::read_line_string(&geometries[row])
+            .map_err(|_| unexpected("geometry"))?
+            .into_iter();
+        let positions = (0..refs[row].len())
+            .map(|index| {
+                if unresolved[row].contains(&(index as i32)) {
+                    Ok(None)
+                } else {
+                    vertices
+                        .next()
+                        .map(|vertex| Some(position_of(vertex)))
+                        .ok_or_else(|| unexpected("geometry"))
+                }
+            })
+            .collect::<Result<_, TableError>>()?;
+        Ok(Line {
+            id: ids[row],
+            tags: tags_of(row),
+            refs: refs[row].clone(),
+            positions,
+        })
+    };
+    let mut elements = Vec::new();
+    for row in 0..ids.len() {
+        match kinds[row].as_str() {
+            "node" => {
+                let (longitude, latitude) =
+                    wkb::read_point(&geometries[row]).map_err(|_| unexpected("geometry"))?;
+                elements.push(Element::Node {
+                    id: ids[row],
+                    at: position_of([longitude, latitude]),
+                    tags: tags_of(row),
+                });
+            }
+            "way" => elements.push(Element::Way(line_of(row)?)),
+            "multipolygon" => elements.push(Element::Multipolygon {
+                id: ids[row],
+                tags: tags_of(row),
+                members: member_ways[row]
+                    .iter()
+                    .copied()
+                    .zip(member_roles[row].iter().cloned())
+                    .collect(),
+                ways: Vec::new(),
+            }),
+            "member" => match elements.last_mut() {
+                Some(Element::Multipolygon { id, ways, .. }) if Some(*id) == relations[row] => {
+                    ways.push(line_of(row)?);
+                }
+                _ => return Err(unexpected("member")),
+            },
+            _ => return Err(unexpected("kind")),
+        }
+    }
+    Ok(elements)
+}
+
+fn grid_of(text: &str) -> Option<Grid> {
+    let mut values = text.split(',').map(|value| value.parse::<i64>().ok());
+    let grid = Grid {
+        granularity: values.next()??,
+        latitude_offset: values.next()??,
+        longitude_offset: values.next()??,
+    };
+    values.next().is_none().then_some(grid)
+}
+
+fn unplaced(kind: &str, id: i64) -> TableError {
+    TableError::Unwritable {
+        detail: format!("the {kind} {id} has no node the planet places"),
+    }
+}
+
+fn unexpected(column: &str) -> TableError {
+    TableError::Unreadable {
+        detail: format!("the map index's {column} is not as written"),
+    }
 }
 
 #[cfg(test)]
