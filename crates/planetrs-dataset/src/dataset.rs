@@ -1,5 +1,8 @@
 //! A dataset opened for reading, wherever its files are: the manifest first, then the parts it lists.
 
+use std::ops::Range;
+use std::path::{Path, PathBuf};
+
 use crate::directory::MANIFEST;
 use crate::files::{ForReadingFiles, Unreachable};
 use crate::manifest::{Entry, Manifest, ManifestError, Part};
@@ -10,6 +13,7 @@ use crate::{gazetteer, geocoder_index};
 pub struct Dataset<F: ForReadingFiles> {
     files: F,
     manifest: Manifest,
+    cache: Option<PathBuf>,
 }
 
 /// Why a dataset, or one of its parts, could not be read.
@@ -50,15 +54,47 @@ impl<F: ForReadingFiles> Dataset<F> {
         let text = whole(&files, MANIFEST)?;
         let manifest =
             Manifest::from_json(&String::from_utf8_lossy(&text)).map_err(DatasetError::Manifest)?;
-        Ok(Self { files, manifest })
+        Ok(Self {
+            files,
+            manifest,
+            cache: None,
+        })
     }
 
     /// The same dataset keeping every range it reads of a part in `directory`, under the part's
     /// checksum, and answering from there the next time: the manifest is always read afresh, so a
     /// part republished under another checksum is never served stale.
-    pub fn cached_in(self, directory: impl Into<std::path::PathBuf>) -> Self {
-        let _ = directory.into();
-        self
+    pub fn cached_in(self, directory: impl Into<PathBuf>) -> Self {
+        Self {
+            cache: Some(directory.into()),
+            ..self
+        }
+    }
+
+    /// A range of a part, from the cache when it holds it, else from the files, kept in the cache
+    /// on the way. The cache is a convenience: when it cannot be written, the read still answers.
+    fn read_part(&self, entry: &Entry, range: Range<u64>) -> Result<Vec<u8>, DatasetError> {
+        let kept = self
+            .cache
+            .as_ref()
+            .filter(|_| !entry.sha256.is_empty())
+            .map(|cache| {
+                cache
+                    .join(&entry.sha256)
+                    .join(format!("{}-{}", range.start, range.end))
+            });
+        if let Some(bytes) = kept.as_ref().and_then(|path| std::fs::read(path).ok()) {
+            return Ok(bytes);
+        }
+        let address = entry.url.as_deref().unwrap_or(&entry.file);
+        let bytes = self
+            .files
+            .read(address, range)
+            .map_err(DatasetError::Unreachable)?;
+        if let Some(path) = kept {
+            keep(&path, &bytes);
+        }
+        Ok(bytes)
     }
 
     /// What the dataset holds and where it came from.
@@ -82,8 +118,7 @@ impl<F: ForReadingFiles> Dataset<F> {
         entry: &Entry,
         parse: fn(&[u8]) -> Result<T, TableError>,
     ) -> Result<T, DatasetError> {
-        let address = entry.url.as_deref().unwrap_or(&entry.file);
-        parse(&whole(&self.files, address)?).map_err(|source| DatasetError::Table {
+        parse(&self.read_part(entry, 0..entry.bytes)?).map_err(|source| DatasetError::Table {
             file: entry.file.clone(),
             source,
         })
@@ -134,14 +169,10 @@ impl<F: ForReadingFiles> Dataset<F> {
 
     /// A part's footer, read from its end in one read or, when it is longer than that, two.
     fn footer_of(&self, entry: &Entry) -> Result<Footer, DatasetError> {
-        let address = entry.url.as_deref().unwrap_or(&entry.file);
-        let length = self.files.length(address).map_err(DatasetError::Unreachable)?;
+        let length = entry.bytes;
         let mut wanted = FIRST_TAIL.min(length);
         loop {
-            let tail = self
-                .files
-                .read(address, length - wanted..length)
-                .map_err(DatasetError::Unreachable)?;
+            let tail = self.read_part(entry, length - wanted..length)?;
             match tables::footer_from_tail(&tail, length).map_err(|source| table_error(entry, source))? {
                 Tail::Footer(footer) => return Ok(footer),
                 Tail::Short { needed } if needed > wanted && needed <= length => wanted = needed,
@@ -164,11 +195,7 @@ impl<F: ForReadingFiles> Dataset<F> {
         footer: &Footer,
         group: &RowGroupBytes,
     ) -> Result<Vec<Column>, DatasetError> {
-        let address = entry.url.as_deref().unwrap_or(&entry.file);
-        let bytes = self
-            .files
-            .read(address, group.bytes.clone())
-            .map_err(DatasetError::Unreachable)?;
+        let bytes = self.read_part(entry, group.bytes.clone())?;
         footer
             .read_row_group(group, bytes)
             .map_err(|source| table_error(entry, source))
@@ -218,6 +245,19 @@ impl<F: ForReadingFiles> CountryIndex<'_, F> {
             );
         }
         Ok(entries)
+    }
+}
+
+/// Writes a range into the cache whole or not at all, and says nothing when it cannot.
+fn keep(path: &Path, bytes: &[u8]) {
+    let partial = path.with_extension("partial");
+    let kept = path
+        .parent()
+        .map_or(Ok(()), std::fs::create_dir_all)
+        .and_then(|()| std::fs::write(&partial, bytes))
+        .and_then(|()| std::fs::rename(&partial, path));
+    if kept.is_err() {
+        let _ = std::fs::remove_file(&partial);
     }
 }
 
