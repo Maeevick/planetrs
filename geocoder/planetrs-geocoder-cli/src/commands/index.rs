@@ -1,11 +1,13 @@
-//! Building the index from a planet file, beside the old one, and swapping it in once complete.
+//! Building the index from a planet file, beside the old one, and swapping it in once complete with
+//! the map index the old one held of the same planet.
 
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result};
 use planetrs_cli::UsageError;
 use planetrs_cli::files::replace_directory;
-use planetrs_dataset::Location;
+use planetrs_dataset::directory::{CarriedOver, carry_over};
+use planetrs_dataset::{Location, Part};
 use planetrs_geocoder::build_index;
 
 use super::Context;
@@ -27,6 +29,36 @@ pub fn country_codes(asked: &[String]) -> Vec<String> {
         }
     }
     codes
+}
+
+/// Whether a part of a dataset is one the mapclipper builds, which indexing never rebuilds.
+fn is_the_mapclippers(part: &Part) -> bool {
+    matches!(part, Part::MapIndex { .. })
+}
+
+/// What a rebuild says about the map index it kept or left out.
+fn carried_lines(carried: &CarriedOver) -> Vec<String> {
+    let countries = |parts: &[Part]| {
+        parts
+            .iter()
+            .filter_map(|part| match part {
+                Part::MapIndex { country } => Some(country.as_str()),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+            .join(",")
+    };
+    let mut lines = Vec::new();
+    if !carried.kept.is_empty() {
+        lines.push(format!("kept the map index of {}", countries(&carried.kept)));
+    }
+    if !carried.left.is_empty() {
+        lines.push(format!(
+            "left out the map index of {}, built from another planet\n  → rebuild it: planetrs-mapclipper index",
+            countries(&carried.left)
+        ));
+    }
+    lines
 }
 
 /// The directory a build happens in before it replaces `destination`.
@@ -98,8 +130,13 @@ pub fn run(context: &Context, arguments: IndexArgs) -> Result<()> {
             return Err(error).context("the index was not built; the previous one, if any, is untouched");
         }
     };
+    let carried = carry_over(&destination, &building, is_the_mapclippers)
+        .with_context(|| format!("keeping the map index of {}", destination.display()))?;
     replace_directory(&building, &destination)
         .with_context(|| format!("moving the new index into {}", destination.display()))?;
+    for line in carried_lines(&carried) {
+        context.say(&line);
+    }
 
     context.say(&format!(
         "indexed {} communes in {} countries; {} doors, {} roads, {} hamlets and {} shops in {}",
