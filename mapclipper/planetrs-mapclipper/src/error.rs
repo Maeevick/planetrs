@@ -3,6 +3,8 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
+use planetrs_dataset::TableError;
+use planetrs_dataset::directory::RecordError;
 use planetrs_geo::GeoError;
 use planetrs_pbf::PbfError;
 
@@ -87,6 +89,29 @@ pub enum ClipError {
     Raster {
         /// What the rasteriser said.
         detail: String,
+    },
+    /// A country asked for has no outline in the planet.
+    #[error("the planet holds no outline of the country {country}")]
+    UnknownCountry {
+        /// The ISO 3166-1 code asked for.
+        country: String,
+    },
+    /// The planet stores positions in a way a map index cannot hold.
+    #[error("the planet's positions cannot be indexed: {detail}")]
+    Grid {
+        /// What is wrong with them.
+        detail: String,
+    },
+    /// A map index could not be encoded.
+    #[error("encoding a map index failed")]
+    Encoding(#[source] TableError),
+    /// A map index could not be recorded in the dataset.
+    #[error("recording a map index in {} failed", directory.display())]
+    Recording {
+        /// The dataset's directory.
+        directory: PathBuf,
+        /// What failed.
+        source: RecordError,
     },
 }
 
