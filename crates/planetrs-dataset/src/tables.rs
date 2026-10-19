@@ -164,6 +164,13 @@ pub(crate) fn read(bytes: &[u8]) -> Result<Vec<Column>, TableError> {
     Ok(columns)
 }
 
+/// The key-value pairs a Parquet file carries in its footer, in their order.
+#[cfg(test)]
+pub(crate) fn metadata(bytes: &[u8]) -> Result<Vec<(String, String)>, TableError> {
+    let _ = bytes;
+    Ok(Vec::new())
+}
+
 fn field_of(column: &Column) -> Field {
     let (kind, nullable) = match &column.values {
         Values::Integers(_) => (DataType::Int64, false),

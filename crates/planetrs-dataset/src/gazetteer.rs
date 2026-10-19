@@ -254,4 +254,30 @@ mod tests {
         assert_eq!(read_back, areas);
         Ok(())
     }
+
+    fn metadata_of(bytes: &[u8], key: &str) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+        let value = tables::metadata(bytes)?
+            .into_iter()
+            .find(|(found, _)| found == key)
+            .map(|(_, value)| value)
+            .ok_or(format!("no {key} metadata"))?;
+        Ok(serde_json::from_str(&value)?)
+    }
+
+    #[test]
+    fn given_a_gazetteer_file_when_its_footer_is_read_then_it_declares_geoparquet_with_centres_as_wkb_points()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let written = to_parquet(&france_sens_and_a_former_town(), &planet())?;
+
+        let geo = metadata_of(&written, "geo")?;
+
+        assert_eq!(geo["version"], "1.1.0");
+        assert_eq!(geo["primary_column"], "geometry");
+        assert_eq!(geo["columns"]["geometry"]["encoding"], "WKB");
+        assert_eq!(
+            geo["columns"]["geometry"]["geometry_types"],
+            serde_json::json!(["Point"])
+        );
+        Ok(())
+    }
 }
