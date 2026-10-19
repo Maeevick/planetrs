@@ -232,7 +232,8 @@ mod tests {
         .expect("the gazetteer is recorded");
         if let Some(streets) = streets {
             let entries = geocoder_index_of("FR", communes, &streets, &ShopIndex::default());
-            let bytes = geocoder_index::to_parquet("FR", &entries, &planet()).expect("the index is encoded");
+            let bytes =
+                geocoder_index::to_parquet("FR", &entries, 0.0, &planet()).expect("the index is encoded");
             let part = Part::GeocoderIndex { country: "FR".into() };
             record(&directory, &planet(), part, "geocoder-FR.parquet", &bytes, 1)
                 .expect("the index is recorded");

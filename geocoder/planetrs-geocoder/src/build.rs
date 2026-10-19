@@ -225,7 +225,7 @@ pub fn build_index(
         for country in countries {
             let entries = geocoder_index_of(country, &assembled.communes, &indexed.streets, &indexed.shops);
             let bytes =
-                geocoder_index::to_parquet(country, &entries, &source).map_err(BuildError::Encoding)?;
+                geocoder_index::to_parquet(country, &entries, 0.0, &source).map_err(BuildError::Encoding)?;
             recording(
                 Part::GeocoderIndex {
                     country: country.to_string(),

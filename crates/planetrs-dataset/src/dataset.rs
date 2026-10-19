@@ -146,6 +146,14 @@ pub struct CountryIndex {
     footer: Footer,
 }
 
+impl CountryIndex {
+    /// How far, in metres, the middle of any street of the country lies from its commune's centre,
+    /// so that whoever looks for streets near a point knows which communes could hold one.
+    pub fn reach_metres(&self) -> f64 {
+        0.0
+    }
+}
+
 /// The entries of the row groups read for one commune, and the communes they span, each read whole.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CommunesRead {
@@ -359,7 +367,7 @@ mod tests {
     }
 
     fn holding_sens_and_its_streets() -> Result<FilesInMemory, TableError> {
-        let index = geocoder_index::to_parquet("FR", &streets_of_sens(), &planet())?;
+        let index = geocoder_index::to_parquet("FR", &streets_of_sens(), 0.0, &planet())?;
         let gazetteer = gazetteer::to_parquet(&sens(), &planet())?;
         let entry = |part: Part, file: &str, bytes: &[u8]| Entry {
             part,
@@ -504,6 +512,32 @@ mod tests {
         let read = dataset.commune(&france, 20)?;
 
         assert_eq!(read, vec![street(20, "PLACE GARE")]);
+        Ok(())
+    }
+
+    #[test]
+    fn given_a_countrys_index_when_its_footer_is_read_then_it_says_how_far_its_streets_reach_from_their_centres()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let index = geocoder_index::to_parquet("FR", &streets_of_sens(), 12_345.6, &planet())?;
+        let manifest = Manifest {
+            planet: planet(),
+            files: vec![Entry {
+                part: Part::GeocoderIndex { country: "FR".into() },
+                file: "geocoder-FR.parquet".into(),
+                url: None,
+                bytes: index.len() as u64,
+                sha256: String::new(),
+                rows: 2,
+            }],
+        };
+        let files = FilesInMemory::default()
+            .with(MANIFEST, manifest.to_json().as_bytes())
+            .with("geocoder-FR.parquet", &index);
+        let dataset = Dataset::open(files)?;
+
+        let france = dataset.country_index("FR")?.ok_or("France is indexed")?;
+
+        assert_eq!(france.reach_metres(), 12_345.6);
         Ok(())
     }
 }

@@ -70,7 +70,15 @@ const ENTRIES_PER_ROW_GROUP: usize = 20_000;
 
 /// The geocoder index of `country` as a GeoParquet file, its entries in the order given: the word
 /// counts first, then each commune's entries together, communes in numeric order.
-pub fn to_parquet(country: &str, entries: &[Entry], planet: &Provenance) -> Result<Vec<u8>, TableError> {
+///
+/// `reach_metres` is how far the middle of any of its streets lies from its commune's centre.
+pub fn to_parquet(
+    country: &str,
+    entries: &[Entry],
+    reach_metres: f64,
+    planet: &Provenance,
+) -> Result<Vec<u8>, TableError> {
+    let _ = reach_metres;
     cut_at(country, entries, planet, ENTRIES_PER_ROW_GROUP)
 }
 
@@ -387,7 +395,7 @@ mod tests {
     -> Result<(), TableError> {
         let entries = sens();
 
-        let read_back = from_parquet(&to_parquet("FR", &entries, &planet())?)?;
+        let read_back = from_parquet(&to_parquet("FR", &entries, 0.0, &planet())?)?;
 
         assert_eq!(read_back, entries);
         Ok(())
@@ -459,7 +467,7 @@ mod tests {
     #[test]
     fn given_a_geocoder_index_when_its_footer_is_read_then_only_the_commune_carries_statistics()
     -> Result<(), TableError> {
-        let written = to_parquet("FR", &sens(), &planet())?;
+        let written = to_parquet("FR", &sens(), 0.0, &planet())?;
 
         let with_statistics = tables::columns_with_statistics(&written)?;
 
