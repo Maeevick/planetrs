@@ -32,5 +32,9 @@ ureq = { workspace = true, optional = true }
 [dev-dependencies]
 planetrs-dataset = { path = ".", features = ["remote", "testing"] }
 
+[[example]]
+name = "serve"
+required-features = ["testing"]
+
 [lints]
 workspace = true
