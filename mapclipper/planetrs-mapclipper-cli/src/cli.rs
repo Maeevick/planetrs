@@ -16,17 +16,29 @@ use planetrs_mapclipper::error::ClipError;
 use planetrs_mapclipper::scene::{Canvas, LabelClass, Place, Rules};
 use planetrs_mapclipper::theme::Theme;
 
+const INDEX_FOOTER: &str = "\
+The planet is read several times; France and Monaco take about ten minutes and 45 GB of memory.
+The dataset is rebuilt beside the old one, keeping the geocoder's parts built from the same planet,
+and replaces it only once complete.
+
+Examples:
+  planetrs-mapclipper index
+  planetrs-mapclipper index --planet planet-260907.osm.pbf --countries FR,MC,BE
+
+Data © OpenStreetMap contributors, ODbL 1.0: https://www.openstreetmap.org/copyright";
+
 #[derive(Parser, Debug)]
 #[command(
     name = "planetrs-mapclipper",
     version,
-    about = "Cut a small illustrated map out of the OpenStreetMap planet file, offline",
-    long_about = "Cut a small illustrated map out of the OpenStreetMap planet file, offline.\n\n\
-                  No tile service, no API, no network. A map is cut from the dataset that \
-                  planetrs-mapclipper index builds for the countries asked for, or from the planet \
-                  itself with --planet, anywhere. Map data is © OpenStreetMap contributors, under \
-                  the ODbL 1.0: every map shows the credit and the address of \
-                  https://www.openstreetmap.org/copyright, and every data file names the licence.",
+    about = "Cut a small illustrated map out of OpenStreetMap, from a dataset or the planet file",
+    long_about = "Cut a small illustrated map out of OpenStreetMap, from a dataset or the planet file.\n\n\
+                  No tile service, no API, and no network once the dataset is on disk. A map is \
+                  cut from the dataset that planetrs-mapclipper index builds for the countries \
+                  asked for, or from the planet itself with --planet, anywhere. Map data is © \
+                  OpenStreetMap contributors, under the ODbL 1.0: every map shows the credit and \
+                  the address of https://www.openstreetmap.org/copyright, and every data file \
+                  names the licence.",
     after_help = "Examples:\n  \
         planetrs-mapclipper index --countries FR,MC\n\n  \
         planetrs-mapclipper clip --lat 43.7375 --lon 7.4210 --width-km 3 --height-km 2 \\\n    \
@@ -51,7 +63,7 @@ pub struct Cli {
 /// Settings every command shares.
 #[derive(Args, Debug)]
 pub struct Global {
-    /// Where planets and the dataset are kept [env: PLANETRS_DATA_DIR]
+    /// Where planets, the dataset and the cache are kept [env: PLANETRS_DATA_DIR]
     #[arg(long, global = true, value_name = "DIR")]
     pub data_dir: Option<PathBuf>,
 
@@ -84,6 +96,7 @@ pub enum Command {
     Themes(ThemesArgs),
 
     /// Build each country's map index from a planet file, into the dataset
+    #[command(after_help = INDEX_FOOTER)]
     Index(IndexArgs),
 }
 

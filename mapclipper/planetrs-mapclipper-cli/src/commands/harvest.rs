@@ -1,4 +1,4 @@
-//! Reading the planet for one area, and keeping what was read as a harvest.
+//! Cutting one area out of the dataset, or out of the planet, and keeping it as a harvest.
 
 use std::path::Path;
 
