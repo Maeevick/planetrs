@@ -13,15 +13,18 @@ repository.workspace = true
 homepage.workspace = true
 
 [features]
-# The fake files and the contract every way of reading files honours, for the tests of their users.
+# Reading a published dataset over HTTP range requests.
+remote = ["dep:ureq"]
+# The fake files, the range server and the contract every way of reading files honours, for tests.
 testing = []
 
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
+ureq = { workspace = true, optional = true }
 
 [dev-dependencies]
-planetrs-dataset = { path = ".", features = ["testing"] }
+planetrs-dataset = { path = ".", features = ["remote", "testing"] }
 
 [lints]
 workspace = true

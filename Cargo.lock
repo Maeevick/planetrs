@@ -532,6 +532,7 @@ dependencies = [
  "planetrs-dataset",
  "serde",
  "serde_json",
+ "ureq",
 ]
 
 [[package]]

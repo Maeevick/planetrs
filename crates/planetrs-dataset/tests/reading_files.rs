@@ -2,8 +2,8 @@
 
 use std::path::PathBuf;
 
-use planetrs_dataset::DirectoryFiles;
-use planetrs_dataset::testing::honours_for_reading_files;
+use planetrs_dataset::testing::{RangeServer, honours_for_reading_files};
+use planetrs_dataset::{DirectoryFiles, HttpFiles};
 
 fn scratch(name: &str) -> PathBuf {
     let directory = std::env::temp_dir().join(format!("planetrs-dataset-{name}-{}", std::process::id()));
@@ -20,5 +20,13 @@ fn given_files_in_a_directory_when_read_then_they_honour_the_contract() {
             std::fs::write(directory.join(name), bytes).expect("a scratch file");
         }
         DirectoryFiles::at(directory)
+    });
+}
+
+#[test]
+fn given_files_on_a_web_server_when_read_then_they_honour_the_contract() {
+    honours_for_reading_files(|holding| {
+        let server = RangeServer::serving(holding).expect("a server on this machine");
+        HttpFiles::at(&server.url())
     });
 }

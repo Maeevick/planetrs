@@ -5,7 +5,10 @@
 //! what the adapters do.
 
 use std::collections::BTreeMap;
+use std::io::{self, BufRead, BufReader, Write};
+use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::ops::Range;
+use std::sync::{Arc, Mutex};
 
 use crate::files::{ForReadingFiles, Unreachable, within};
 
@@ -44,6 +47,148 @@ impl ForReadingFiles for FilesInMemory {
         within(file, &range, bytes.len() as u64)?;
         Ok(bytes[range.start as usize..range.end as usize].to_vec())
     }
+}
+
+/// A web server on this machine serving files by range, as a dataset's host does, for the tests of
+/// whatever reads a dataset over HTTP.
+///
+/// It answers HEAD with a length and a strong ETag, honours `Range` and `If-Match` on GET, and can
+/// replace a file while running, the way a host republishing a dataset would.
+pub struct RangeServer {
+    address: SocketAddr,
+    files: Arc<Mutex<BTreeMap<String, Vec<u8>>>>,
+}
+
+impl RangeServer {
+    /// A server holding `files`, listening on a free port of this machine until the process ends.
+    pub fn serving(files: &[(&str, &[u8])]) -> io::Result<Self> {
+        let listener = TcpListener::bind("127.0.0.1:0")?;
+        let address = listener.local_addr()?;
+        let files = Arc::new(Mutex::new(
+            files
+                .iter()
+                .map(|(name, bytes)| (name.to_string(), bytes.to_vec()))
+                .collect::<BTreeMap<_, _>>(),
+        ));
+        let served = Arc::clone(&files);
+        std::thread::spawn(move || {
+            for stream in listener.incoming().flatten() {
+                let served = Arc::clone(&served);
+                std::thread::spawn(move || answer(stream, &served));
+            }
+        });
+        Ok(Self { address, files })
+    }
+
+    /// The address the files are served under, ending with a slash.
+    pub fn url(&self) -> String {
+        format!("http://{}/", self.address)
+    }
+
+    /// Replaces a file, or adds it, as a host republishing it would.
+    pub fn replace(&self, name: &str, bytes: &[u8]) {
+        if let Ok(mut files) = self.files.lock() {
+            files.insert(name.to_string(), bytes.to_vec());
+        }
+    }
+}
+
+/// A strong validator that changes whenever the bytes do.
+pub fn etag_of(bytes: &[u8]) -> String {
+    let hash = bytes.iter().fold(0xcbf2_9ce4_8422_2325_u64, |hash, byte| {
+        (hash ^ u64::from(*byte)).wrapping_mul(0x0100_0000_01b3)
+    });
+    format!("\"{hash:016x}\"")
+}
+
+fn answer(stream: TcpStream, files: &Mutex<BTreeMap<String, Vec<u8>>>) {
+    let Ok(reading) = stream.try_clone() else {
+        return;
+    };
+    let mut reader = BufReader::new(reading);
+    let mut request = String::new();
+    if reader.read_line(&mut request).is_err() {
+        return;
+    }
+    let mut parts = request.split_whitespace();
+    let method = parts.next().unwrap_or_default().to_string();
+    let name = parts
+        .next()
+        .unwrap_or_default()
+        .trim_start_matches('/')
+        .to_string();
+    let mut headers = Vec::new();
+    loop {
+        let mut line = String::new();
+        match reader.read_line(&mut line) {
+            Ok(0) | Err(_) => break,
+            Ok(_) if line.trim().is_empty() => break,
+            Ok(_) => {
+                if let Some((key, value)) = line.split_once(':') {
+                    headers.push((key.trim().to_lowercase(), value.trim().to_string()));
+                }
+            }
+        }
+    }
+    let header = |wanted: &str| {
+        headers
+            .iter()
+            .find(|(key, _)| key == wanted)
+            .map(|(_, value)| value.clone())
+    };
+    let held = files.lock().ok().and_then(|files| files.get(&name).cloned());
+    let reply = match held {
+        None => respond("404 Not Found", &[], b""),
+        Some(bytes) => {
+            let etag = etag_of(&bytes);
+            let length = bytes.len();
+            let tagged = [("ETag", etag.clone()), ("Accept-Ranges", "bytes".to_string())];
+            match (method.as_str(), header("range")) {
+                ("HEAD", _) => respond_with_length("200 OK", &tagged, length),
+                (_, _) if header("if-match").is_some_and(|asked| asked != etag) => {
+                    respond("412 Precondition Failed", &tagged, b"")
+                }
+                (_, Some(range)) => match asked_range(&range, length) {
+                    Some((first, last)) => respond(
+                        "206 Partial Content",
+                        &[
+                            tagged[0].clone(),
+                            ("Content-Range", format!("bytes {first}-{last}/{length}")),
+                        ],
+                        &bytes[first..=last],
+                    ),
+                    None => respond(
+                        "416 Range Not Satisfiable",
+                        &[("Content-Range", format!("bytes */{length}"))],
+                        b"",
+                    ),
+                },
+                (_, None) => respond("200 OK", &tagged, &bytes),
+            }
+        }
+    };
+    let mut writing = stream;
+    let _ = writing.write_all(&reply);
+}
+
+fn asked_range(range: &str, length: usize) -> Option<(usize, usize)> {
+    let (first, last) = range.strip_prefix("bytes=")?.split_once('-')?;
+    let first: usize = first.parse().ok()?;
+    let last: usize = last.parse::<usize>().ok()?.min(length.checked_sub(1)?);
+    (first <= last).then_some((first, last))
+}
+
+fn respond_with_length(status: &str, headers: &[(&str, String)], length: usize) -> Vec<u8> {
+    let mut head = format!("HTTP/1.1 {status}\r\nContent-Length: {length}\r\nConnection: close\r\n");
+    for (key, value) in headers {
+        head.push_str(&format!("{key}: {value}\r\n"));
+    }
+    head.push_str("\r\n");
+    head.into_bytes()
+}
+
+fn respond(status: &str, headers: &[(&str, String)], body: &[u8]) -> Vec<u8> {
+    [respond_with_length(status, headers, body.len()), body.to_vec()].concat()
 }
 
 /// What every way of reading files must do, checked against one built to hold `holding`.
