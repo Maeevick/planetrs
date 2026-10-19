@@ -1,6 +1,7 @@
 //! The imperative shell: read a file, call the pure half, write what came back.
 //!
-//! Everything that decides anything lives in [`crate::scene`] and is a function of its arguments.
+//! Everything that decides anything lives in [`planetrs_mapclipper::scene`] and is a function of
+//! its arguments.
 //! What is left here is opening files, handing work to the passes, and saying what happened.
 
 use std::io::Write;
@@ -11,14 +12,14 @@ use planetrs_geo::Area;
 use planetrs_pbf::{IdIndex, Planet};
 
 use crate::cli::{Command, Drawing, Framing, MarkKind, Outputs, Shape};
-use crate::error::ClipError;
-use crate::harvest::passes::{HarvestReport, harvest_area};
-use crate::harvest::{Harvest, format};
-use crate::output::{Mark, Marker, geojson, svg};
 use crate::progress::Progress;
 use crate::report::{Report, bytes, quoted, seconds, thousands};
-use crate::scene::{self, Scene};
-use crate::theme::{BUILT_IN, Theme};
+use planetrs_mapclipper::error::ClipError;
+use planetrs_mapclipper::harvest::passes::{HarvestReport, harvest_area};
+use planetrs_mapclipper::harvest::{Harvest, format};
+use planetrs_mapclipper::output::{Mark, Marker, geojson, svg};
+use planetrs_mapclipper::scene::{self, Scene};
+use planetrs_mapclipper::theme::{BUILT_IN, Theme};
 
 /// Where a sidecar index goes when the caller did not say: beside the planet file.
 fn index_beside(planet: &Path) -> PathBuf {
@@ -213,7 +214,7 @@ fn draw(
 
 #[cfg(feature = "png")]
 fn rasterise(path: &Path, drawn: &str, scale: f64) -> Result<u64, ClipError> {
-    crate::output::png::write(path, drawn, scale as f32)
+    planetrs_mapclipper::output::png::write(path, drawn, scale as f32)
 }
 
 #[cfg(not(feature = "png"))]
@@ -500,7 +501,7 @@ fn describe_planet_file(file: &Path, output: Shape) -> Result<String, ClipError>
 fn themes_as_text() -> Result<String, ClipError> {
     let mut report = Report::new(false);
     for (name, text) in BUILT_IN {
-        let theme = crate::theme::parse(text, Path::new(name))?;
+        let theme = planetrs_mapclipper::theme::parse(text, Path::new(name))?;
         report.line(name, &theme.description);
     }
     report.blank();
@@ -512,7 +513,7 @@ fn themes_as_json() -> Result<String, ClipError> {
     let described: Vec<String> = BUILT_IN
         .iter()
         .map(|(name, text)| {
-            let theme = crate::theme::parse(text, Path::new(name))?;
+            let theme = planetrs_mapclipper::theme::parse(text, Path::new(name))?;
             let drawn: Vec<String> = theme
                 .order
                 .iter()

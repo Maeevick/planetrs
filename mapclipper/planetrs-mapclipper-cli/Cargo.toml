@@ -1,0 +1,36 @@
+[package]
+name = "planetrs-mapclipper-cli"
+description = "The planetrs-mapclipper command: a small illustrated map cut out of the OpenStreetMap planet file, offline"
+documentation = "https://docs.rs/planetrs-mapclipper-cli"
+readme = "../README.md"
+keywords = ["openstreetmap", "map", "svg", "geojson", "cli"]
+categories = ["command-line-utilities", "science::geo", "visualization"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[lib]
+name = "planetrs_mapclipper_cli"
+path = "src/lib.rs"
+
+[[bin]]
+name = "planetrs-mapclipper"
+path = "src/main.rs"
+doc = false
+
+[features]
+default = ["png"]
+# Rasterising, through resvg. Turning it off leaves GeoJSON and SVG.
+png = ["planetrs-mapclipper/png"]
+
+[dependencies]
+planetrs-mapclipper = { workspace = true, default-features = false }
+planetrs-geo.workspace = true
+planetrs-pbf.workspace = true
+clap.workspace = true
+
+[lints]
+workspace = true

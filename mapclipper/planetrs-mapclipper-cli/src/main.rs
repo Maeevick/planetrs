@@ -3,8 +3,8 @@
 use std::process::ExitCode;
 
 use clap::Parser;
-use planetrs_mapclipper::cli::Cli;
-use planetrs_mapclipper::run;
+use planetrs_mapclipper_cli::cli::Cli;
+use planetrs_mapclipper_cli::run;
 
 fn main() -> ExitCode {
     let cli = Cli::parse();

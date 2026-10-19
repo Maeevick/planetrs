@@ -6,10 +6,10 @@
 
 use std::path::PathBuf;
 
-use planetrs_mapclipper::cli::{Command, Drawing, Framing, LabelKind, MarkKind, Outputs};
 use planetrs_mapclipper::error::ClipError;
 use planetrs_mapclipper::harvest::{Harvest, Member, NamedNode, Node, Provenance, Relation, Way, format};
-use planetrs_mapclipper::run::run;
+use planetrs_mapclipper_cli::cli::{Command, Drawing, Framing, LabelKind, MarkKind, Outputs};
+use planetrs_mapclipper_cli::run::run;
 
 const AT: (f64, f64) = (5.269, -4.012);
 
@@ -331,7 +331,7 @@ fn when_a_harvest_is_inspected_then_it_reports_the_planet_it_came_from() {
 
     run(Command::Inspect {
         file: harvest,
-        output: planetrs_mapclipper::cli::Shape::Json,
+        output: planetrs_mapclipper_cli::cli::Shape::Json,
     })
     .expect("the inspection succeeds");
 }

@@ -919,11 +919,20 @@ dependencies = [
 name = "planetrs-mapclipper"
 version = "0.1.0"
 dependencies = [
- "clap",
  "planetrs-geo",
  "planetrs-pbf",
  "rayon",
  "resvg",
+]
+
+[[package]]
+name = "planetrs-mapclipper-cli"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "planetrs-geo",
+ "planetrs-mapclipper",
+ "planetrs-pbf",
 ]
 
 [[package]]

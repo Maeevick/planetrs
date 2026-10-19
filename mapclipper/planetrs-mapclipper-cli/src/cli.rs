@@ -11,9 +11,9 @@ use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
-use crate::error::ClipError;
-use crate::scene::{Canvas, LabelClass, Place, Rules};
-use crate::theme::Theme;
+use planetrs_mapclipper::error::ClipError;
+use planetrs_mapclipper::scene::{Canvas, LabelClass, Place, Rules};
+use planetrs_mapclipper::theme::Theme;
 
 #[derive(Parser, Debug)]
 #[command(
