@@ -8,7 +8,7 @@
 //! ```no_run
 //! use planetrs_geocoder::{Geocoder, Site};
 //!
-//! let geocoder = Geocoder::open("index")?;
+//! let mut geocoder = Geocoder::open("dataset")?;
 //! let site = Site {
 //!     label: String::new(),
 //!     address: "8 Route des Tilleuls".into(),
@@ -16,10 +16,10 @@
 //!     town: "Sens".into(),
 //!     country: "France".into(),
 //! };
-//! if let Some(answer) = geocoder.locate(&site) {
+//! if let Some(answer) = geocoder.locate(&site)? {
 //!     println!("{:.6};{:.6};{}", answer.latitude(), answer.longitude(), answer.precision);
 //! }
-//! # Ok::<(), planetrs_geocoder::OpenError>(())
+//! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 //!
 //! # Every answer says what kind of answer it is
@@ -93,6 +93,6 @@ mod trace;
 
 pub use build::{BuildError, DEFAULT_COUNTRIES, IndexSummary, build_index};
 pub use gazetteer::Basis;
-pub use geocoder::{Geocoder, OpenError};
+pub use geocoder::{Geocoder, LocateError, OpenError};
 pub use locate::{Answer, Precision, Site, refusal_of};
 pub use street::Quality;

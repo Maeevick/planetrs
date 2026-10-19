@@ -18,6 +18,16 @@ pub trait ForReadingFiles {
     fn read(&self, file: &str, range: Range<u64>) -> Result<Vec<u8>, Unreachable>;
 }
 
+impl<Files: ForReadingFiles + ?Sized> ForReadingFiles for Box<Files> {
+    fn length(&self, file: &str) -> Result<u64, Unreachable> {
+        (**self).length(file)
+    }
+
+    fn read(&self, file: &str, range: Range<u64>) -> Result<Vec<u8>, Unreachable> {
+        (**self).read(file, range)
+    }
+}
+
 /// Why a file, or a range of it, could not be read.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]

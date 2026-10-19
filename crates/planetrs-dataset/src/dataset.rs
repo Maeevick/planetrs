@@ -1,6 +1,6 @@
 //! A dataset opened for reading, wherever its files are: the manifest first, then the parts it lists.
 
-use std::ops::Range;
+use std::ops::{Range, RangeInclusive};
 use std::path::{Path, PathBuf};
 
 use crate::directory::MANIFEST;
@@ -146,6 +146,15 @@ pub struct CountryIndex {
     footer: Footer,
 }
 
+/// The entries of the row groups read for one commune, and the communes they span, each read whole.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CommunesRead {
+    /// The commune numbers each row group read spans, every commune in them read whole.
+    pub spans: Vec<RangeInclusive<i64>>,
+    /// Their entries, in file order.
+    pub entries: Vec<geocoder_index::Entry>,
+}
+
 /// How much of a file's end is read first in the hope of finding its whole footer there: a country's
 /// footer of a few hundred kilobytes takes one more read, and a small one takes none.
 const FIRST_TAIL: u64 = 64 * 1024;
@@ -187,6 +196,26 @@ impl<F: ForReadingFiles> Dataset<F> {
             .into_iter()
             .filter(|entry| geocoder_index::commune_of(entry) == Some(relation))
             .collect())
+    }
+
+    /// Every entry of the row groups holding a commune, with the communes those row groups span:
+    /// a commune is fetched with its neighbours in number, which a lookup nearby then finds read.
+    pub fn communes_with(&self, index: &CountryIndex, relation: i64) -> Result<CommunesRead, DatasetError> {
+        let holds = |group: &RowGroupBytes| {
+            group.lowest.is_some_and(|lowest| lowest <= relation)
+                && group.highest.is_some_and(|highest| relation <= highest)
+        };
+        let spans = index
+            .footer
+            .row_groups("commune")
+            .iter()
+            .filter(|group| holds(group))
+            .filter_map(|group| Some(group.lowest?..=group.highest?))
+            .collect();
+        Ok(CommunesRead {
+            spans,
+            entries: self.entries_where(index, holds)?,
+        })
     }
 
     fn entries_where(

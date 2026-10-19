@@ -30,6 +30,14 @@ impl WordRarity {
         }
     }
 
+    /// A table of counts read back: `names` street names counted, each word held by that many.
+    pub(crate) fn counted(names: u64, words: impl IntoIterator<Item = (String, u32)>) -> Self {
+        Self {
+            names: names as f64,
+            names_with: words.into_iter().collect(),
+        }
+    }
+
     /// A table as if `names` street names had been counted, with these words in that many of them.
     #[cfg(test)]
     pub(crate) fn from_counts(names: usize, words: &[(&str, u32)]) -> Self {

@@ -6,7 +6,7 @@
 
 use std::path::PathBuf;
 
-use planetrs_dataset::{Manifest, Part};
+use planetrs_dataset::{DirectoryFiles, Manifest, Part};
 use planetrs_geocoder::{Geocoder, Precision, Site, build_index};
 use planetrs_pbf::testing::{MemberKind, Node, PlanetFile, Relation, Way};
 
@@ -86,7 +86,7 @@ fn scratch(name: &str) -> PathBuf {
     directory
 }
 
-fn indexed(name: &str) -> Result<Geocoder, Box<dyn std::error::Error>> {
+fn indexed(name: &str) -> Result<Geocoder<DirectoryFiles>, Box<dyn std::error::Error>> {
     let directory = scratch(name);
     std::fs::create_dir_all(&directory)?;
     let planet = directory.join("yonne.osm.pbf");
@@ -112,10 +112,10 @@ fn reads_about(found: f64, expected: f64) -> bool {
 
 #[test]
 fn given_a_door_on_a_named_street_when_its_address_is_geocoded_then_the_door_answers() -> Outcome {
-    let geocoder = indexed("door")?;
+    let mut geocoder = indexed("door")?;
 
     let answer = geocoder
-        .locate(&site("", "1 Avenue de la Gare"))
+        .locate(&site("", "1 Avenue de la Gare"))?
         .ok_or("no answer")?;
 
     assert_eq!(answer.precision, Precision::HouseNumber);
@@ -127,9 +127,11 @@ fn given_a_door_on_a_named_street_when_its_address_is_geocoded_then_the_door_ans
 #[test]
 fn given_a_street_the_commune_lacks_when_geocoded_then_the_communes_centre_answers_with_its_area() -> Outcome
 {
-    let geocoder = indexed("centre")?;
+    let mut geocoder = indexed("centre")?;
 
-    let answer = geocoder.locate(&site("", "12 Rue Inconnue")).ok_or("no answer")?;
+    let answer = geocoder
+        .locate(&site("", "12 Rue Inconnue"))?
+        .ok_or("no answer")?;
 
     assert_eq!(answer.precision, Precision::Commune);
     assert!(
@@ -154,9 +156,9 @@ fn given_a_street_the_commune_lacks_when_geocoded_then_the_communes_centre_answe
 
 #[test]
 fn given_the_only_shop_of_a_label_when_its_site_has_no_address_then_the_shop_answers() -> Outcome {
-    let geocoder = indexed("shop")?;
+    let mut geocoder = indexed("shop")?;
 
-    let answer = geocoder.locate(&site("ACME", "")).ok_or("no answer")?;
+    let answer = geocoder.locate(&site("ACME", ""))?.ok_or("no answer")?;
 
     assert_eq!(answer.precision, Precision::Shop);
     assert!(reads_about(answer.latitude(), SHOP.0), "{}", answer.latitude());

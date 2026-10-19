@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use anyhow::{Context as _, Result};
+use planetrs_dataset::DirectoryFiles;
 use planetrs_geocoder::{Geocoder, OpenError};
 
 use crate::ATTRIBUTION;
@@ -60,7 +61,7 @@ impl Context {
     }
 
     /// Opens the index, saying how long it took, or says how to get one.
-    pub fn open_geocoder(&self) -> Result<Geocoder> {
+    pub fn open_geocoder(&self) -> Result<Geocoder<DirectoryFiles>> {
         let directory = self.index_directory();
         let started = Instant::now();
         let geocoder = Geocoder::open(&directory).map_err(|error| match error {

@@ -56,6 +56,11 @@ impl ShopIndex {
         Self { by_commune }
     }
 
+    /// The same index holding the communes of `other` too.
+    pub(crate) fn absorb(&mut self, other: ShopIndex) {
+        self.by_commune.extend(other.by_commune);
+    }
+
     /// The shops of a commune, by its relation.
     pub fn shops_of(&self, commune: i64) -> &[Shop] {
         self.by_commune.get(&commune).map(Vec::as_slice).unwrap_or(&[])

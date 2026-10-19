@@ -1,30 +1,46 @@
-//! An index opened for lookups, which is all a caller needs once the index is built.
+//! A dataset opened for lookups, which is all a caller needs once the dataset is built.
+//!
+//! Opening reads the gazetteer and nothing else. A country's word counts are read the first time a
+//! site in it is looked up, and a commune's streets and shops the first time a lookup needs them,
+//! with the communes stored beside it in the same row group, so that a file of sites in one region
+//! reads the region once.
 
 use std::collections::HashMap;
+use std::ops::RangeInclusive;
 use std::path::{Path, PathBuf};
 
 use planetrs_dataset::directory::MANIFEST;
-use planetrs_dataset::{Dataset, DatasetError, DirectoryFiles, Part, Unreachable};
+use planetrs_dataset::{
+    CountryIndex, Dataset, DatasetError, DirectoryFiles, ForReadingFiles, Unreachable, geocoder_index,
+};
 use thiserror::Error;
 
 use crate::gazetteer::Gazetteer;
-use crate::locate::{Answer, Site, locate};
+use crate::locate::{Answer, Site, locate, settle};
 use crate::parts::{indexes_of, settling_gazetteer};
+use crate::rarity::WordRarity;
 use crate::shops::ShopIndex;
 use crate::street_index::StreetIndex;
 use crate::trace::trace;
 
-/// The communes, streets, doors and shops of a dataset, held in memory for lookups.
-///
-/// Opening reads the gazetteer and every country's geocoder index once; each lookup after that is
-/// pure and touches no disk, and searches the streets and shops of the site's own country.
-pub struct Geocoder {
+/// A dataset opened for lookups: its gazetteer, and of each country what lookups have read so far.
+pub struct Geocoder<F: ForReadingFiles> {
+    dataset: Dataset<F>,
     gazetteer: Gazetteer,
-    countries: HashMap<String, (StreetIndex, ShopIndex)>,
+    countries: HashMap<String, Option<Read>>,
     nowhere: (StreetIndex, ShopIndex),
 }
 
-/// Why an index could not be opened.
+/// A country's index as far as lookups have read it: its word counts, and the streets and shops of
+/// the communes read so far.
+struct Read {
+    index: CountryIndex,
+    streets: StreetIndex,
+    shops: ShopIndex,
+    communes: Vec<RangeInclusive<i64>>,
+}
+
+/// Why a dataset could not be opened.
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum OpenError {
@@ -34,82 +50,145 @@ pub enum OpenError {
         /// The directory that was searched.
         directory: PathBuf,
     },
-    /// A dataset is there but one of its files could not be read.
-    #[error("the index in {} could not be read", directory.display())]
-    Unreadable {
-        /// The directory holding the dataset.
-        directory: PathBuf,
-        /// The file that failed, and how.
-        #[source]
-        source: DatasetError,
-    },
+    /// A dataset is there but its manifest or its gazetteer could not be read.
+    #[error("the dataset could not be read")]
+    Unreadable(#[source] DatasetError),
 }
 
-impl Geocoder {
+/// Why a lookup could not be answered: a part of the dataset it needed could not be read.
+#[derive(Debug, Error)]
+#[non_exhaustive]
+pub enum LocateError {
+    /// What failed, and in which file.
+    #[error("reading the dataset failed")]
+    Unreadable(#[source] DatasetError),
+}
+
+impl Geocoder<DirectoryFiles> {
     /// Opens the dataset in `directory`.
     ///
     /// Only the gazetteer is required. A dataset indexing no country opens all the same, and its
     /// lookups stop at the commune.
     pub fn open(directory: impl AsRef<Path>) -> Result<Self, OpenError> {
         let directory = directory.as_ref();
-        let unreadable = |source| OpenError::Unreadable {
-            directory: directory.to_path_buf(),
-            source,
-        };
         let dataset = Dataset::open(DirectoryFiles::at(directory)).map_err(|source| match source {
             DatasetError::Unreachable(Unreachable::Missing { file }) if file == MANIFEST => {
                 OpenError::NoIndex {
                     directory: directory.to_path_buf(),
                 }
             }
-            other => unreadable(other),
+            other => OpenError::Unreadable(other),
         })?;
-        let gazetteer = settling_gazetteer(dataset.gazetteer().map_err(unreadable)?);
-        let mut indexed = HashMap::new();
-        for entry in &dataset.manifest().files {
-            if let Part::GeocoderIndex { country } = &entry.part {
-                let entries = dataset
-                    .geocoder_index(country)
-                    .map_err(unreadable)?
-                    .unwrap_or_default();
-                indexed.insert(country.clone(), indexes_of(entries));
-            }
-        }
+        Self::over(dataset)
+    }
+}
+
+impl<F: ForReadingFiles> Geocoder<F> {
+    /// A geocoder over an opened dataset, wherever its files are: its gazetteer is read now, and
+    /// every other part when a lookup first needs it.
+    pub fn over(dataset: Dataset<F>) -> Result<Self, OpenError> {
+        let gazetteer = settling_gazetteer(dataset.gazetteer().map_err(OpenError::Unreadable)?);
         Ok(Self {
+            dataset,
             gazetteer,
-            countries: indexed,
+            countries: HashMap::new(),
             nowhere: (StreetIndex::default(), ShopIndex::default()),
         })
-    }
-
-    /// The streets and shops of the country a site names, or none when the dataset does not index it.
-    fn indexes_for(&self, site: &Site) -> &(StreetIndex, ShopIndex) {
-        self.gazetteer
-            .country_code_for(&site.without_parentheses().country)
-            .and_then(|code| self.countries.get(code))
-            .unwrap_or(&self.nowhere)
     }
 
     /// Where the site is and how precisely, or nothing when not even its commune could be settled.
     ///
     /// An answer at a commune's centre is still an answer: [`crate::refusal_of`] says whether a
     /// person should look at it before it is used.
-    pub fn locate(&self, site: &Site) -> Option<Answer> {
-        let (streets, shops) = self.indexes_for(site);
-        locate(&self.gazetteer, streets, shops, site)
+    pub fn locate(&mut self, site: &Site) -> Result<Option<Answer>, LocateError> {
+        let country = self.read_what(site)?;
+        let (streets, shops) = self.read_of(country.as_deref());
+        Ok(locate(&self.gazetteer, streets, shops, site))
     }
 
     /// Every decision [`Geocoder::locate`] takes for the site, one line each, ending with its answer.
-    pub fn trace(&self, site: &Site) -> Vec<String> {
-        let (streets, shops) = self.indexes_for(site);
-        trace(&self.gazetteer, streets, shops, site)
+    pub fn trace(&mut self, site: &Site) -> Result<Vec<String>, LocateError> {
+        let country = self.read_what(site)?;
+        let (streets, shops) = self.read_of(country.as_deref());
+        Ok(trace(&self.gazetteer, streets, shops, site))
     }
+
+    /// Reads whatever of the site's country a lookup of it needs and is not read yet, and names the
+    /// country, or nothing when the site names none the dataset indexes.
+    fn read_what(&mut self, site: &Site) -> Result<Option<String>, LocateError> {
+        let Some(code) = self
+            .gazetteer
+            .country_code_for(&site.without_parentheses().country)
+            .map(str::to_string)
+        else {
+            return Ok(None);
+        };
+        let communes = settle(&self.gazetteer, site)
+            .map(|settled| settled.searched())
+            .unwrap_or_default();
+        if !self.countries.contains_key(&code) {
+            let first = first_read(&self.dataset, &code).map_err(LocateError::Unreadable)?;
+            self.countries.insert(code.clone(), first);
+        }
+        let Some(Some(read)) = self.countries.get_mut(&code) else {
+            return Ok(None);
+        };
+        for commune in communes {
+            if !read.communes.iter().any(|span| span.contains(&commune)) {
+                let found = self
+                    .dataset
+                    .communes_with(&read.index, commune)
+                    .map_err(LocateError::Unreadable)?;
+                let (streets, shops) = indexes_of(found.entries);
+                read.streets.absorb(streets);
+                read.shops.absorb(shops);
+                read.communes.extend(found.spans);
+                read.communes.push(commune..=commune);
+            }
+        }
+        Ok(Some(code))
+    }
+
+    /// The streets and shops read of a country, or none.
+    fn read_of(&self, country: Option<&str>) -> (&StreetIndex, &ShopIndex) {
+        country
+            .and_then(|code| self.countries.get(code))
+            .and_then(Option::as_ref)
+            .map_or((&self.nowhere.0, &self.nowhere.1), |read| {
+                (&read.streets, &read.shops)
+            })
+    }
+}
+
+/// A country's index before any commune of it is read: its footer and its word counts, or nothing
+/// when the dataset does not index it.
+fn first_read<F: ForReadingFiles>(dataset: &Dataset<F>, country: &str) -> Result<Option<Read>, DatasetError> {
+    let Some(index) = dataset.country_index(country)? else {
+        return Ok(None);
+    };
+    let mut names = 0;
+    let mut words = Vec::new();
+    for entry in dataset.word_counts(&index)? {
+        match entry {
+            geocoder_index::Entry::Names { count } => names = count,
+            geocoder_index::Entry::Word { word, count } => {
+                words.push((word, u32::try_from(count).unwrap_or(u32::MAX)))
+            }
+            _ => {}
+        }
+    }
+    Ok(Some(Read {
+        index,
+        streets: StreetIndex::default().with_rarity(WordRarity::counted(names, words)),
+        shops: ShopIndex::default(),
+        communes: Vec::new(),
+    }))
 }
 
 #[cfg(test)]
 mod tests {
     use planetrs_dataset::directory::record;
-    use planetrs_dataset::{Provenance, gazetteer, geocoder_index};
+    use planetrs_dataset::{Part, Provenance, gazetteer};
 
     use super::*;
     use crate::boundary::Country;
@@ -220,6 +299,7 @@ mod tests {
         let found = Geocoder::open(&directory)
             .expect("the index opens")
             .locate(&site("8 Route des Tilleuls"))
+            .expect("the index reads")
             .expect("an answer");
 
         assert_eq!(
@@ -235,6 +315,7 @@ mod tests {
         let found = Geocoder::open(&directory)
             .expect("the index opens")
             .locate(&site("8 Route des Tilleuls"))
+            .expect("the index reads")
             .expect("an answer");
 
         assert_eq!(found.precision, Precision::Commune);
@@ -252,15 +333,23 @@ mod tests {
     }
 
     #[test]
-    fn given_an_index_file_that_does_not_parse_when_opened_then_it_is_unreadable() {
+    fn given_a_countrys_index_that_does_not_parse_when_a_site_in_it_is_looked_up_then_the_lookup_is_unreadable()
+     {
         let directory = written_index("malformed");
-        std::fs::write(directory.join("geocoder-FR.parquet"), "not a parquet file")
-            .expect("the file is spoilt");
+        let spoilt = vec![
+            0u8;
+            std::fs::metadata(directory.join("geocoder-FR.parquet"))
+                .map_or(0, |file| file.len() as usize)
+        ];
+        std::fs::write(directory.join("geocoder-FR.parquet"), spoilt).expect("the file is spoilt");
+        let mut geocoder = Geocoder::open(&directory).expect("the gazetteer still opens");
 
-        assert!(matches!(
-            Geocoder::open(&directory),
-            Err(OpenError::Unreadable { .. })
-        ));
+        let looked_up = geocoder.locate(&site("8 Route des Tilleuls"));
+
+        assert!(
+            matches!(looked_up, Err(LocateError::Unreadable(_))),
+            "{looked_up:?}"
+        );
     }
 
     #[test]
@@ -269,7 +358,8 @@ mod tests {
 
         let written = Geocoder::open(&directory)
             .expect("the index opens")
-            .trace(&site("8 Route des Tilleuls"));
+            .trace(&site("8 Route des Tilleuls"))
+            .expect("the index reads");
 
         assert!(
             written.last().is_some_and(|line| line.contains("HouseNumber")),

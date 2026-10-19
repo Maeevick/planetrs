@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime};
 
 use anyhow::Result;
+use planetrs_dataset::ForReadingFiles;
 use planetrs_geocoder::{Answer, Geocoder, Site, refusal_of};
 
 use super::{Context, UsageError, read_input};
@@ -42,9 +43,9 @@ pub fn run(
 
 fn one_site(context: &Context, text: &str) -> Result<()> {
     let row = read_one_site(text)?;
-    let geocoder = context.open_geocoder()?;
+    let mut geocoder = context.open_geocoder()?;
     let site = row.site();
-    let answer = geocoder.locate(&site);
+    let answer = geocoder.locate(&site)?;
     let mut stdout = std::io::stdout().lock();
     writeln!(stdout, "{ANSWER_HEADER}")?;
     writeln!(stdout, "{}", answer_line(&row, answer.as_ref()))?;
@@ -84,8 +85,8 @@ impl Tally {
     }
 }
 
-fn geocode_rows(
-    geocoder: &Geocoder,
+fn geocode_rows<F: ForReadingFiles>(
+    geocoder: &mut Geocoder<F>,
     rows: &[Row],
     byte_order_mark: bool,
     progress: &Progress,
@@ -98,7 +99,7 @@ fn geocode_rows(
     writeln!(out, "{ANSWER_HEADER}")?;
     for (done, row) in rows.iter().enumerate() {
         let site = row.site();
-        let answer = geocoder.locate(&site);
+        let answer = geocoder.locate(&site)?;
         tally.count(&site, answer.as_ref());
         writeln!(out, "{}", answer_line(row, answer.as_ref()))?;
         progress.sites(done + 1, rows.len());
@@ -117,14 +118,14 @@ fn wanted_output(output: Option<&Path>) -> PathBuf {
 
 fn whole_file(context: &Context, file: &Path, output: Option<&Path>) -> Result<()> {
     let sites = read_site_file(&read_input(file)?)?;
-    let geocoder = context.open_geocoder()?;
+    let mut geocoder = context.open_geocoder()?;
     let progress = Progress::to_stderr(context.quiet);
     let started = Instant::now();
     let to_stdout = output == Some(Path::new("-"));
     let (destination, tally) = if to_stdout {
         let mut stdout = std::io::stdout().lock();
         let tally = geocode_rows(
-            &geocoder,
+            &mut geocoder,
             &sites.rows,
             sites.had_byte_order_mark,
             &progress,
@@ -135,7 +136,13 @@ fn whole_file(context: &Context, file: &Path, output: Option<&Path>) -> Result<(
     } else {
         let wanted = wanted_output(output);
         let (written, tally) = write_new(&wanted, Day::of(SystemTime::now()), |out| {
-            geocode_rows(&geocoder, &sites.rows, sites.had_byte_order_mark, &progress, out)
+            geocode_rows(
+                &mut geocoder,
+                &sites.rows,
+                sites.had_byte_order_mark,
+                &progress,
+                out,
+            )
         })?;
         let written = std::path::absolute(&written).unwrap_or(written);
         (written.display().to_string(), tally)

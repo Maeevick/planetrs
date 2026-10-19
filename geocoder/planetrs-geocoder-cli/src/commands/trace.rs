@@ -15,13 +15,13 @@ pub fn run(context: &Context, arguments: TraceArgs) -> Result<()> {
         (None, Some(file)) => read_site_file(&read_input(&file)?)?.rows,
         (None, None) => Vec::new(),
     };
-    let geocoder = context.open_geocoder()?;
+    let mut geocoder = context.open_geocoder()?;
     let mut stdout = std::io::stdout().lock();
     for row in &rows {
         if row.line > 0 {
             writeln!(stdout, "── line {} ──", row.line)?;
         }
-        for line in geocoder.trace(&row.site()) {
+        for line in geocoder.trace(&row.site())? {
             writeln!(stdout, "{line}")?;
         }
     }

@@ -115,11 +115,15 @@ impl StreetIndex {
         Self { by_commune, rarity }
     }
 
-    /// The same streets weighed against another count of words, for a test that needs a word to be
-    /// as rare as it would be among the millions of names of a real index.
-    #[cfg(test)]
+    /// The same streets weighed against another count of words: a country's own, when only some of
+    /// its communes are held, or the millions of names of a real index in a test.
     pub(crate) fn with_rarity(self, rarity: WordRarity) -> Self {
         Self { rarity, ..self }
+    }
+
+    /// The same index holding the communes of `other` too, still weighed against its own words.
+    pub(crate) fn absorb(&mut self, other: StreetIndex) {
+        self.by_commune.extend(other.by_commune);
     }
 
     pub(crate) fn rarity(&self) -> &WordRarity {
