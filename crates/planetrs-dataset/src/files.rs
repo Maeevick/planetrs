@@ -4,6 +4,8 @@
 //! wants, so that the same reader serves a local directory and a remote one over HTTP range
 //! requests without knowing which.
 
+use std::fs::File;
+use std::io::{self, Read, Seek, SeekFrom};
 use std::ops::Range;
 use std::path::PathBuf;
 
@@ -74,12 +76,39 @@ impl DirectoryFiles {
 
 impl ForReadingFiles for DirectoryFiles {
     fn length(&self, file: &str) -> Result<u64, Unreachable> {
-        Err(Unreachable::Missing {
-            file: format!("{}/{file}", self.root.display()),
-        })
+        std::fs::metadata(self.root.join(file))
+            .map(|metadata| metadata.len())
+            .map_err(|error| unreachable_because(file, &error))
     }
 
-    fn read(&self, file: &str, _range: Range<u64>) -> Result<Vec<u8>, Unreachable> {
-        self.length(file).map(|_| Vec::new())
+    fn read(&self, file: &str, range: Range<u64>) -> Result<Vec<u8>, Unreachable> {
+        let length = self.length(file)?;
+        if range.end > length || range.start > range.end {
+            return Err(Unreachable::PastTheEnd {
+                file: file.to_string(),
+                range,
+                length,
+            });
+        }
+        let mut bytes = vec![0; (range.end - range.start) as usize];
+        File::open(self.root.join(file))
+            .and_then(|mut opened| {
+                opened.seek(SeekFrom::Start(range.start))?;
+                opened.read_exact(&mut bytes)
+            })
+            .map_err(|error| unreachable_because(file, &error))?;
+        Ok(bytes)
+    }
+}
+
+fn unreachable_because(file: &str, error: &io::Error) -> Unreachable {
+    match error.kind() {
+        io::ErrorKind::NotFound => Unreachable::Missing {
+            file: file.to_string(),
+        },
+        _ => Unreachable::Failed {
+            file: file.to_string(),
+            detail: error.to_string(),
+        },
     }
 }
