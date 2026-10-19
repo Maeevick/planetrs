@@ -141,3 +141,32 @@ fn given_a_planet_when_harvested_and_rendered_then_both_runs_end_with_the_attrib
     assert_eq!(text(&harvested.stderr).lines().last(), Some(ATTRIBUTION));
     assert_eq!(text(&rendered.stderr).lines().last(), Some(ATTRIBUTION));
 }
+
+#[test]
+fn given_quiet_before_or_after_the_command_when_harvested_and_rendered_then_stderr_holds_only_the_attribution()
+ {
+    let directory = scratch("quiet");
+
+    let harvested = harvesting(&directory, &["-q"]);
+    let rendered = run(
+        &directory,
+        &[
+            "render",
+            "monaco.mapclip",
+            "--lat",
+            "43.735",
+            "--lon",
+            "7.42",
+            "--width-km",
+            "2",
+            "--height-km",
+            "1.14",
+            "--svg",
+            "map.svg",
+            "--quiet",
+        ],
+    );
+
+    assert_eq!(text(&harvested.stderr), format!("{ATTRIBUTION}\n"));
+    assert_eq!(text(&rendered.stderr), format!("{ATTRIBUTION}\n"));
+}
