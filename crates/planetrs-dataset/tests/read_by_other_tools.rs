@@ -8,6 +8,7 @@ use std::process::Command;
 
 use planetrs_dataset::Provenance;
 use planetrs_dataset::gazetteer::{self, Area};
+use planetrs_dataset::map_index::{self, Element, Grid, Line, Position};
 
 type Outcome = Result<(), Box<dyn std::error::Error>>;
 
@@ -135,5 +136,131 @@ fn given_a_gazetteer_file_when_gdal_reads_it_then_it_sees_one_point_layer_holdin
     assert!(summary.contains("Geometry: Point"), "{summary}");
     assert!(summary.contains("Feature Count: 3"), "{summary}");
     assert!(summary.contains("absorbed_by: Integer64"), "{summary}");
+    Ok(())
+}
+
+fn at(latitude: i64, longitude: i64) -> Option<Position> {
+    Some(Position { latitude, longitude })
+}
+
+/// Monaco's harbour: a named square, a quay leaving the country through a node the planet does not
+/// place, and a basin whose inner member lies out of the country.
+fn harbour() -> Vec<Element> {
+    let quay = Line {
+        id: 10,
+        tags: vec![("man_made".into(), "quay".into())],
+        refs: vec![1, 2, 99],
+        positions: vec![
+            at(43_734_700_000, 7_418_600_000),
+            at(43_735_200_000, 7_421_400_000),
+            None,
+        ],
+    };
+    let island = Line {
+        id: 12,
+        tags: vec![],
+        refs: vec![8, 9, 8],
+        positions: vec![
+            at(43_800_000_000, 7_500_000_000),
+            at(43_810_000_000, 7_510_000_000),
+            at(43_800_000_000, 7_500_000_000),
+        ],
+    };
+    vec![
+        Element::Node {
+            id: 3,
+            at: Position {
+                latitude: 43_735_000_000,
+                longitude: 7_420_000_000,
+            },
+            tags: vec![("name".into(), "Place d'Armes".into())],
+        },
+        Element::Way(quay.clone()),
+        Element::Multipolygon {
+            id: 100,
+            tags: vec![("type".into(), "multipolygon".into())],
+            members: vec![(10, "outer".into()), (12, "inner".into())],
+            ways: vec![quay, island],
+        },
+    ]
+}
+
+fn written_map_index(name: &str) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let path = std::env::temp_dir().join(format!("planetrs-dataset-{name}-{}.parquet", std::process::id()));
+    let grid = Grid {
+        granularity: 100,
+        latitude_offset: 0,
+        longitude_offset: 0,
+    };
+    std::fs::write(&path, map_index::to_parquet("MC", &harbour(), grid, &planet())?)?;
+    Ok(path)
+}
+
+#[test]
+#[ignore = "needs DuckDB on the PATH"]
+fn given_a_map_index_when_duckdb_reads_it_then_every_row_comes_back_with_its_lists_its_geometry_and_its_box()
+-> Outcome {
+    let path = written_map_index("duckdb-map")?;
+    let file = path.display();
+
+    let rows = output_of(
+        "duckdb",
+        &[
+            "-csv",
+            "-c",
+            &format!(
+                "SELECT kind, id, relation, tag_keys, refs, unresolved, member_ways, ST_AsText(geometry), \
+                 bbox.xmin, bbox.ymax FROM read_parquet('{file}') ORDER BY kind, id"
+            ),
+        ],
+    )?;
+
+    assert_eq!(
+        rows,
+        "kind,id,relation,tag_keys,refs,unresolved,member_ways,st_astext(geometry),xmin,ymax\n\
+         member,10,100,[man_made],\"[1, 2, 99]\",[2],[],\"LINESTRING (7.4186 43.7347, 7.4214 43.7352)\",7.4186,43.7352\n\
+         member,12,100,[],\"[8, 9, 8]\",[],[],\"LINESTRING (7.5 43.8, 7.51 43.81, 7.5 43.8)\",7.5,43.81\n\
+         multipolygon,100,NULL,[type],[],[],\"[10, 12]\",GEOMETRYCOLLECTION EMPTY,7.4186,43.81\n\
+         node,3,NULL,[name],[],[],[],POINT (7.42 43.735),7.42,43.735\n\
+         way,10,NULL,[man_made],\"[1, 2, 99]\",[2],[],\"LINESTRING (7.4186 43.7347, 7.4214 43.7352)\",7.4186,43.7352\n"
+    );
+    Ok(())
+}
+
+#[test]
+#[ignore = "needs DuckDB on the PATH"]
+fn given_a_map_index_when_duckdb_reads_its_footer_then_every_row_group_bounds_its_boxes() -> Outcome {
+    let path = written_map_index("duckdb-map-footer")?;
+
+    let bounded = output_of(
+        "duckdb",
+        &[
+            "-csv",
+            "-noheader",
+            "-c",
+            &format!(
+                "SELECT path_in_schema, stats_min_value, stats_max_value FROM parquet_metadata('{}') \
+                 WHERE path_in_schema LIKE 'bbox%' ORDER BY path_in_schema",
+                path.display()
+            ),
+        ],
+    )?;
+
+    assert_eq!(
+        bounded,
+        "\"bbox, xmax\",7.42,7.51\n\"bbox, xmin\",7.4186,7.5\n\"bbox, ymax\",43.735,43.81\n\"bbox, ymin\",43.7347,43.8\n"
+    );
+    Ok(())
+}
+
+#[test]
+#[ignore = "needs GDAL's ogrinfo on the PATH"]
+fn given_a_map_index_when_gdal_reads_it_then_it_sees_one_layer_holding_every_row() -> Outcome {
+    let path = written_map_index("gdal-map")?;
+
+    let summary = output_of("ogrinfo", &["-so", "-al", &path.display().to_string()])?;
+
+    assert!(summary.contains("Feature Count: 5"), "{summary}");
+    assert!(summary.contains("relation: Integer64"), "{summary}");
     Ok(())
 }
