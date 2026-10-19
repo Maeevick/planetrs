@@ -6,7 +6,10 @@
 
 use std::path::{Path, PathBuf};
 
-use planetrs_dataset::map_index::{self, Element};
+use planetrs_dataset::directory::MANIFEST;
+use planetrs_dataset::map_index::{self, Element, Line, Position};
+use planetrs_dataset::{Manifest, Part};
+use planetrs_mapclipper::error::ClipError;
 use planetrs_mapclipper::index::build_map_index;
 use planetrs_pbf::testing::{MemberKind, Node, PlanetFile, Relation, Way};
 
@@ -111,6 +114,17 @@ fn elements_of(dataset: &Path, country: &str) -> Result<Vec<Element>, Box<dyn st
     Ok(map_index::from_parquet(&bytes)?.1)
 }
 
+fn at(latitude: i64, longitude: i64) -> Option<Position> {
+    Some(Position { latitude, longitude })
+}
+
+fn way(elements: &[Element], wanted: i64) -> Option<Line> {
+    elements.iter().find_map(|element| match element {
+        Element::Way(line) if line.id == wanted => Some(line.clone()),
+        _ => None,
+    })
+}
+
 fn nodes(elements: &[Element]) -> Vec<(i64, usize)> {
     let mut found: Vec<(i64, usize)> = elements
         .iter()
@@ -140,5 +154,135 @@ fn given_the_riviera_when_indexed_then_each_country_keeps_its_named_and_lone_nod
         "{france:?}"
     );
     assert!(!france.iter().any(|(id, _)| *id == 3) && !monaco.iter().any(|(id, _)| *id == 1));
+    Ok(())
+}
+
+#[test]
+fn given_a_road_across_a_border_when_indexed_then_both_countries_keep_it_with_every_node_placed() -> Outcome {
+    let dataset = indexed("border")?;
+
+    let in_france = way(&elements_of(&dataset, "FR")?, 10);
+    let in_monaco = way(&elements_of(&dataset, "MC")?, 10);
+
+    let corniche = Line {
+        id: 10,
+        tags: vec![
+            ("highway".into(), "primary".into()),
+            ("name".into(), "Basse Corniche".into()),
+        ],
+        refs: vec![4, 5],
+        positions: vec![
+            at(43_710_000_000, 7_350_000_000),
+            at(43_730_000_000, 7_430_000_000),
+        ],
+    };
+    assert_eq!(in_france, Some(corniche.clone()));
+    assert_eq!(in_monaco, Some(corniche));
+    Ok(())
+}
+
+#[test]
+fn given_a_road_leaving_for_land_no_index_covers_when_indexed_then_its_country_keeps_it_with_the_node_outside_unplaced()
+-> Outcome {
+    let dataset = indexed("leaving")?;
+
+    let road = way(&elements_of(&dataset, "FR")?, 11);
+
+    assert_eq!(
+        road.map(|road| road.positions),
+        Some(vec![at(43_690_000_000, 7_300_000_000), None])
+    );
+    assert!(way(&elements_of(&dataset, "MC")?, 11).is_none());
+    Ok(())
+}
+
+#[test]
+fn given_a_lake_whose_inner_ring_lies_far_away_when_indexed_then_its_country_keeps_both_members_whole_and_placed()
+-> Outcome {
+    let dataset = indexed("lake")?;
+
+    let lake = elements_of(&dataset, "FR")?
+        .into_iter()
+        .find_map(|element| match element {
+            Element::Multipolygon {
+                id: 100,
+                members,
+                ways,
+                ..
+            } => Some((members, ways)),
+            _ => None,
+        });
+
+    let (members, ways) = lake.ok_or("the lake is not in France's map index")?;
+    assert_eq!(
+        members,
+        vec![(12, "outer".to_string()), (14, "inner".to_string())]
+    );
+    assert_eq!(ways.iter().map(|line| line.id).collect::<Vec<_>>(), vec![12, 14]);
+    assert_eq!(
+        ways[1].positions,
+        vec![
+            at(45_000_000_000, 8_000_000_000),
+            at(45_000_000_000, 8_010_000_000),
+            at(45_010_000_000, 8_010_000_000),
+            at(45_000_000_000, 8_000_000_000),
+        ]
+    );
+    Ok(())
+}
+
+#[test]
+fn given_the_riviera_when_indexed_then_the_manifest_lists_both_map_indexes_built_from_it() -> Outcome {
+    let dataset = indexed("manifest")?;
+
+    let manifest = Manifest::from_json(&std::fs::read_to_string(dataset.join(MANIFEST))?)?;
+
+    assert_eq!(
+        manifest
+            .files
+            .iter()
+            .map(|entry| entry.part.clone())
+            .collect::<Vec<_>>(),
+        vec![
+            Part::MapIndex { country: "FR".into() },
+            Part::MapIndex { country: "MC".into() }
+        ]
+    );
+    assert_eq!(manifest.planet.source_name, "riviera.osm.pbf");
+    assert_eq!(manifest.planet.replication_timestamp, 1_788_739_204);
+    Ok(())
+}
+
+#[test]
+fn given_a_country_the_planet_has_no_outline_of_when_indexed_then_the_build_names_it_and_records_nothing()
+-> Outcome {
+    let directory = scratch("unknown");
+    std::fs::create_dir_all(&directory)?;
+    let planet = directory.join("riviera.osm.pbf");
+    riviera().write(&planet)?;
+    let dataset = directory.join("dataset");
+
+    let built = build_map_index(&planet, &dataset, &["FR", "BE"], &|_| {});
+
+    assert!(
+        matches!(&built, Err(ClipError::UnknownCountry { country }) if country == "BE"),
+        "{built:?}"
+    );
+    assert!(!dataset.join(MANIFEST).exists());
+    Ok(())
+}
+
+#[test]
+fn given_the_riviera_indexed_twice_when_the_files_are_compared_then_they_are_identical() -> Outcome {
+    let once = indexed("once")?;
+    let again = indexed("again")?;
+
+    for file in ["map-FR.parquet", "map-MC.parquet"] {
+        assert_eq!(
+            std::fs::read(once.join(file))?,
+            std::fs::read(again.join(file))?,
+            "{file}"
+        );
+    }
     Ok(())
 }
