@@ -17,5 +17,8 @@ planetrs-pbf.workspace = true
 rayon.workspace = true
 thiserror.workspace = true
 
+[dev-dependencies]
+planetrs-pbf = { workspace = true, features = ["testing"] }
+
 [lints]
 workspace = true
