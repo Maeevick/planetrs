@@ -281,4 +281,22 @@ mod tests {
         );
         Ok(())
     }
+
+    #[test]
+    fn given_a_gazetteer_file_when_its_footer_is_read_then_it_names_the_planet_it_came_from_and_the_odbl()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let written = to_parquet(&france_sens_and_a_former_town(), &planet())?;
+
+        let notice = metadata_of(&written, "planetrs")?;
+
+        assert_eq!(notice["file"], "gazetteer");
+        assert_eq!(notice["planet"]["source_name"], "planet-260907.osm.pbf");
+        assert_eq!(notice["planet"]["replication_timestamp"], 1_788_739_204);
+        assert_eq!(notice["licence"], "ODbL-1.0");
+        assert_eq!(
+            notice["attribution"],
+            "© OpenStreetMap contributors, https://www.openstreetmap.org/copyright"
+        );
+        Ok(())
+    }
 }
