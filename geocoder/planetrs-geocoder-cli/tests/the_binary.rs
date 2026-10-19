@@ -4,7 +4,9 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
+use planetrs_dataset::directory::{MANIFEST, record};
 use planetrs_dataset::testing::RangeServer;
+use planetrs_dataset::{Manifest, Part};
 use planetrs_pbf::testing::{MemberKind, Node, PlanetFile, Relation, Way};
 
 const SITE: &str = "Acme;8 Route des Tilleuls;89100;Sens;France";
@@ -373,5 +375,51 @@ fn given_a_file_and_a_command_together_when_run_then_it_fails_with_two_naming_th
         text(&output.stderr).contains("status takes no site"),
         "{}",
         text(&output.stderr)
+    );
+}
+
+fn manifest_of(dataset: &Path) -> Manifest {
+    Manifest::from_json(&std::fs::read_to_string(dataset.join(MANIFEST)).unwrap()).unwrap()
+}
+
+#[test]
+fn given_a_dataset_holding_a_map_index_of_the_same_planet_when_indexed_again_then_the_map_index_is_kept() {
+    let directory = scratch("keeps-the-maps");
+    let dataset = index_in(&directory);
+    let map_of_france = Part::MapIndex { country: "FR".into() };
+    record(
+        &dataset,
+        &manifest_of(&dataset).planet,
+        map_of_france.clone(),
+        "map-FR.parquet",
+        b"a map of France",
+        1,
+    )
+    .unwrap();
+    let planet = directory.join("yonne.osm.pbf").display().to_string();
+
+    let rebuilt = run(
+        &directory,
+        &[
+            "--dataset",
+            &dataset.display().to_string(),
+            "index",
+            "--planet",
+            &planet,
+            "--countries",
+            "FR",
+        ],
+    );
+
+    assert!(rebuilt.status.success(), "{}", text(&rebuilt.stderr));
+    assert!(
+        manifest_of(&dataset)
+            .files
+            .iter()
+            .any(|entry| entry.part == map_of_france)
+    );
+    assert_eq!(
+        std::fs::read(dataset.join("map-FR.parquet")).unwrap(),
+        b"a map of France"
     );
 }
