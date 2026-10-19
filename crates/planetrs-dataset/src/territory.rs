@@ -6,6 +6,10 @@
 
 use planetrs_geo::outline::{Outline, join_into_rings};
 
+/// The countries a dataset is built for when none are named: France and Monaco, the first two the
+/// dataset was proven on.
+pub const DEFAULT_COUNTRIES: [&str; 2] = ["FR", "MC"];
+
 /// The `admin_level` a country's boundary carries.
 const COUNTRY_LEVEL: &str = "2";
 

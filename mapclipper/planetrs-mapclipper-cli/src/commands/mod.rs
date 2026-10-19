@@ -2,6 +2,7 @@
 
 pub mod clip;
 pub mod harvest;
+pub mod index;
 pub mod inspect;
 pub mod render;
 pub mod themes;
@@ -10,38 +11,63 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-use planetrs_cli::{ATTRIBUTION, Day, write_new};
+use planetrs_cli::dataset::{location_of, name_of};
+use planetrs_cli::{ATTRIBUTION, DataDir, Day, write_new};
+use planetrs_dataset::Location;
 use planetrs_mapclipper::error::ClipError;
 use planetrs_pbf::PbfError;
 
 use crate::cli::{Cli, Command, Global};
 
-/// What every command knows before it starts: how much to say.
+/// What every command knows before it starts: where things are, and how much to say.
 pub struct Context {
+    /// Where planets, the dataset and the cache are kept.
+    pub data: DataDir,
+    /// The dataset to read or build: `--dataset`, else `PLANETRS_DATASET`, else the data directory's.
+    pub dataset: Location,
     /// Whether to say anything on stderr beyond errors and the attribution.
     pub quiet: bool,
 }
 
 impl Context {
-    /// Reads the settings every command shares.
-    pub fn of(global: &Global) -> Self {
-        Self { quiet: global.quiet }
+    /// Reads the settings every command shares, the environment standing behind `--data-dir` and
+    /// `--dataset`.
+    pub fn of(global: &Global) -> anyhow::Result<Self> {
+        let data = DataDir::resolve(global.data_dir.as_deref(), |name| std::env::var_os(name))?;
+        let dataset = location_of(global.dataset.as_deref(), &data, |name| std::env::var(name).ok());
+        Ok(Self {
+            data,
+            dataset,
+            quiet: global.quiet,
+        })
+    }
+
+    /// The dataset's location as a person reads it.
+    pub fn dataset_name(&self) -> String {
+        name_of(&self.dataset)
+    }
+
+    /// A line on stderr, unless the run is quiet.
+    pub fn say(&self, line: &str) {
+        if !self.quiet {
+            eprintln!("{line}");
+        }
     }
 }
 
 /// Runs the command the command line asks for, ending with the OpenStreetMap attribution when it
 /// read OpenStreetMap data.
 pub fn run(cli: Cli) -> anyhow::Result<()> {
-    let context = Context::of(&cli.global);
+    let context = Context::of(&cli.global)?;
     let reads_openstreetmap_data = !matches!(cli.command, Command::Themes(_));
     match cli.command {
-        Command::Harvest(arguments) => harvest::run(&context, arguments),
-        Command::Render(arguments) => render::run(&context, arguments),
-        Command::Clip(arguments) => clip::run(&context, arguments),
-        Command::Inspect(arguments) => inspect::run(arguments),
-        Command::Themes(arguments) => themes::run(arguments),
-    }
-    .map_err(explained)?;
+        Command::Harvest(arguments) => harvest::run(&context, arguments).map_err(explained),
+        Command::Render(arguments) => render::run(&context, arguments).map_err(explained),
+        Command::Clip(arguments) => clip::run(&context, arguments).map_err(explained),
+        Command::Inspect(arguments) => inspect::run(arguments).map_err(explained),
+        Command::Themes(arguments) => themes::run(arguments).map_err(explained),
+        Command::Index(arguments) => index::run(&context, arguments),
+    }?;
     if reads_openstreetmap_data {
         eprintln!("{ATTRIBUTION}");
     }
@@ -71,7 +97,7 @@ fn put(path: &Path, contents: &[u8]) -> Result<(PathBuf, u64), ClipError> {
 }
 
 /// A failure, said with what to try next when there is something worth trying.
-fn explained(failure: ClipError) -> anyhow::Error {
+pub(super) fn explained(failure: ClipError) -> anyhow::Error {
     match next_step(&failure) {
         Some(step) => anyhow::anyhow!("{failure}\n  → {step}"),
         None => failure.into(),

@@ -28,6 +28,7 @@ png = ["planetrs-mapclipper/png"]
 
 [dependencies]
 planetrs-cli.workspace = true
+planetrs-dataset.workspace = true
 planetrs-mapclipper.workspace = true
 planetrs-geo.workspace = true
 planetrs-pbf.workspace = true
@@ -35,7 +36,6 @@ anyhow.workspace = true
 clap.workspace = true
 
 [dev-dependencies]
-planetrs-dataset.workspace = true
 planetrs-pbf = { workspace = true, features = ["testing"] }
 
 [lints]

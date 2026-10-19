@@ -154,7 +154,11 @@ fn outputs(geojson: Option<PathBuf>, svg: Option<PathBuf>) -> Outputs {
 /// The command line asking for `command`, quietly, as these tests read files rather than stderr.
 fn quietly(command: Command) -> Cli {
     Cli {
-        global: Global { quiet: true },
+        global: Global {
+            data_dir: None,
+            dataset: None,
+            quiet: true,
+        },
         command,
     }
 }

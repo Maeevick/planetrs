@@ -11,6 +11,7 @@ use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
+use planetrs_dataset::territory::DEFAULT_COUNTRIES;
 use planetrs_mapclipper::error::ClipError;
 use planetrs_mapclipper::scene::{Canvas, LabelClass, Place, Rules};
 use planetrs_mapclipper::theme::Theme;
@@ -47,6 +48,15 @@ pub struct Cli {
 /// Settings every command shares.
 #[derive(Args, Debug)]
 pub struct Global {
+    /// Where planets and the dataset are kept [env: PLANETRS_DATA_DIR]
+    #[arg(long, global = true, value_name = "DIR")]
+    pub data_dir: Option<PathBuf>,
+
+    /// The dataset to read, a directory or a web address, or to build into with index, instead of
+    /// the data directory's [env: PLANETRS_DATASET]
+    #[arg(long, global = true, value_name = "DIR|URL")]
+    pub dataset: Option<String>,
+
     /// Print nothing on stderr but errors and the attribution
     #[arg(short, long, global = true)]
     pub quiet: bool,
@@ -69,6 +79,26 @@ pub enum Command {
 
     /// List the themes built in
     Themes(ThemesArgs),
+
+    /// Build each country's map index from a planet file, into the dataset
+    Index(IndexArgs),
+}
+
+/// What `index` reads, and for which countries.
+#[derive(Args, Debug)]
+pub struct IndexArgs {
+    /// The planet file to read [default: the newest in the data directory]
+    #[arg(long, value_name = "PATH")]
+    pub planet: Option<PathBuf>,
+
+    /// The countries whose map index is built, by ISO code
+    #[arg(
+        long,
+        value_name = "CODES",
+        value_delimiter = ',',
+        default_values = DEFAULT_COUNTRIES
+    )]
+    pub countries: Vec<String>,
 }
 
 /// What `harvest` reads, and where it keeps what it read.
