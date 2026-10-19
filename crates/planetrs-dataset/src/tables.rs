@@ -5,6 +5,7 @@
 //! the row groups, because only the caller knows where a commune or a multipolygon ends, and every
 //! setting that shapes the bytes is pinned here, so that the same table always writes the same file.
 
+use std::io::Write;
 use std::ops::Range;
 use std::sync::Arc;
 
@@ -137,19 +138,29 @@ pub(crate) fn write(
     writer.finish()
 }
 
-/// A Parquet file written a row group at a time, so that a table larger than memory is never held
-/// whole: only the row group being written and the bytes already encoded are.
-pub(crate) struct TableWriter {
+/// A Parquet file written a row group at a time into `W`, so that a table larger than memory is
+/// never held whole: only the row group being encoded is, and none of the file when `W` is on disk.
+pub(crate) struct TableWriter<W: Write + Send> {
+    out: Option<W>,
     metadata: Vec<(String, String)>,
     pruned_by: Vec<String>,
-    open: Option<(ArrowWriter<Vec<u8>>, Arc<Schema>)>,
+    open: Option<(ArrowWriter<W>, Arc<Schema>)>,
 }
 
-impl TableWriter {
-    /// A file to come, with `metadata` among its key-value pairs and statistics on the columns
-    /// `pruned_by` alone.
+impl TableWriter<Vec<u8>> {
+    /// A file to come in memory, with `metadata` among its key-value pairs and statistics on the
+    /// columns `pruned_by` alone.
     pub(crate) fn new(metadata: &[(&str, String)], pruned_by: &[&str]) -> Self {
+        Self::into(Vec::new(), metadata, pruned_by)
+    }
+}
+
+impl<W: Write + Send> TableWriter<W> {
+    /// A file to come into `out`, with `metadata` among its key-value pairs and statistics on the
+    /// columns `pruned_by` alone.
+    pub(crate) fn into(out: W, metadata: &[(&str, String)], pruned_by: &[&str]) -> Self {
         Self {
+            out: Some(out),
             metadata: metadata
                 .iter()
                 .map(|(key, value)| (key.to_string(), value.clone()))
@@ -162,7 +173,11 @@ impl TableWriter {
     /// Writes one row group. The first fixes the columns every later one has.
     pub(crate) fn write(&mut self, columns: &[Column]) -> Result<(), TableError> {
         if self.open.is_none() {
-            self.open = Some(self.opened(columns)?);
+            let out = self
+                .out
+                .take()
+                .ok_or_else(|| unwritable("the file was finished"))?;
+            self.open = Some(self.opened(out, columns)?);
         }
         let Some((writer, schema)) = self.open.as_mut() else {
             return Err(unwritable("the file could not be opened"));
@@ -173,16 +188,22 @@ impl TableWriter {
         writer.flush().map_err(unwritable)
     }
 
-    /// The file's bytes, its footer written after the last row group.
-    pub(crate) fn finish(self) -> Result<Vec<u8>, TableError> {
-        let (writer, _) = match self.open {
+    /// The output, its footer written after the last row group.
+    pub(crate) fn finish(mut self) -> Result<W, TableError> {
+        let (writer, _) = match self.open.take() {
             Some(open) => open,
-            None => self.opened(&[])?,
+            None => {
+                let out = self
+                    .out
+                    .take()
+                    .ok_or_else(|| unwritable("the file was finished"))?;
+                self.opened(out, &[])?
+            }
         };
         writer.into_inner().map_err(unwritable)
     }
 
-    fn opened(&self, columns: &[Column]) -> Result<(ArrowWriter<Vec<u8>>, Arc<Schema>), TableError> {
+    fn opened(&self, out: W, columns: &[Column]) -> Result<(ArrowWriter<W>, Arc<Schema>), TableError> {
         let schema = Arc::new(Schema::new(columns.iter().map(field_of).collect::<Vec<_>>()));
         let properties = WriterProperties::builder()
             .set_created_by(WRITER.to_string())
@@ -209,8 +230,8 @@ impl TableWriter {
         let options = ArrowWriterOptions::new()
             .with_properties(properties)
             .with_skip_arrow_metadata(true);
-        let writer = ArrowWriter::try_new_with_options(Vec::new(), Arc::clone(&schema), options)
-            .map_err(unwritable)?;
+        let writer =
+            ArrowWriter::try_new_with_options(out, Arc::clone(&schema), options).map_err(unwritable)?;
         Ok((writer, schema))
     }
 }

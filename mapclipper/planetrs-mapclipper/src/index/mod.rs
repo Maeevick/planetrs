@@ -9,9 +9,11 @@
 mod countries;
 mod scan;
 
+use std::fs::File;
+use std::io::BufWriter;
 use std::path::Path;
 
-use planetrs_dataset::directory::record;
+use planetrs_dataset::directory::{record_written, written_beside};
 use planetrs_dataset::map_index::{self, Element, Grid, Line, Position, Tags};
 use planetrs_dataset::{Part, Provenance};
 use planetrs_geo::territory::IdentifierSet;
@@ -226,16 +228,24 @@ pub fn build_map_index(
                     .iter()
                     .map(|multipolygon| 1 + member_ways_of(multipolygon).len() as u64)
                     .sum::<u64>();
-            let bytes = map_index::to_parquet_from(code, count, element_at, grid, &source)
-                .map_err(ClipError::Encoding)?;
-            record(
+            let name = format!("map-{code}.parquet");
+            let beside = written_beside(directory, &name);
+            let writing = |failure| ClipError::writing(&beside, failure);
+            std::fs::create_dir_all(directory).map_err(writing)?;
+            let file = File::create(&beside).map_err(writing)?;
+            map_index::write_parquet(BufWriter::new(file), code, count, element_at, grid, &source)
+                .map_err(ClipError::Encoding)?
+                .into_inner()
+                .map_err(|failure| writing(failure.into_error()))?
+                .sync_all()
+                .map_err(writing)?;
+            record_written(
                 directory,
                 &source,
                 Part::MapIndex {
                     country: code.clone(),
                 },
-                &format!("map-{code}.parquet"),
-                &bytes,
+                &name,
                 rows,
             )
             .map_err(|failure| ClipError::Recording {

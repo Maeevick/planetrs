@@ -7,6 +7,8 @@
 //! map never has to fetch a member by its id. Positions come back to the nanodegree, exactly as the
 //! planet stores them.
 
+use std::io::Write;
+
 use planetrs_geo::wkb;
 
 use crate::geoparquet;
@@ -121,7 +123,20 @@ pub fn to_parquet_from(
     grid: Grid,
     planet: &Provenance,
 ) -> Result<Vec<u8>, TableError> {
-    written(country, count, element_at, grid, planet, ROWS_PER_ROW_GROUP)
+    write_parquet(Vec::new(), country, count, element_at, grid, planet)
+}
+
+/// [`to_parquet_from`], written into `out` as it is encoded, so that a country's map index need
+/// never be held in memory, and given back once its footer is written.
+pub fn write_parquet<W: Write + Send>(
+    out: W,
+    country: &str,
+    count: usize,
+    element_at: impl Fn(usize) -> Element + Sync,
+    grid: Grid,
+    planet: &Provenance,
+) -> Result<W, TableError> {
+    written(out, country, count, element_at, grid, planet, ROWS_PER_ROW_GROUP)
 }
 
 /// [`to_parquet`], with row groups of about `rows_per_row_group` rows.
@@ -134,6 +149,7 @@ pub(crate) fn cut_at(
     rows_per_row_group: usize,
 ) -> Result<Vec<u8>, TableError> {
     written(
+        Vec::new(),
         country,
         elements.len(),
         |at| elements[at].clone(),
@@ -143,14 +159,15 @@ pub(crate) fn cut_at(
     )
 }
 
-fn written(
+fn written<W: Write + Send>(
+    out: W,
     country: &str,
     count: usize,
     element_at: impl Fn(usize) -> Element + Sync,
     grid: Grid,
     planet: &Provenance,
     rows_per_row_group: usize,
-) -> Result<Vec<u8>, TableError> {
+) -> Result<W, TableError> {
     let mut placed: Vec<(u64, (u8, i64), usize, usize)> = (0..count)
         .into_par_iter()
         .map(|at| {
@@ -164,7 +181,8 @@ fn written(
         })
         .collect::<Result<_, TableError>>()?;
     placed.par_sort_unstable_by_key(|(key, order, _, _)| (*key, *order));
-    let mut writer = TableWriter::new(
+    let mut writer = TableWriter::into(
+        out,
         &[
             geoparquet::geo_covered_by_bbox(&["Point", "LineString", "GeometryCollection"]),
             manifest::notice("map index", planet),
@@ -199,8 +217,8 @@ fn written(
 }
 
 /// Builds the elements at `group`, in that order, and writes their rows as one row group.
-fn write_group(
-    writer: &mut TableWriter,
+fn write_group<W: Write + Send>(
+    writer: &mut TableWriter<W>,
     group: &[usize],
     element_at: &(impl Fn(usize) -> Element + Sync),
 ) -> Result<(), TableError> {
