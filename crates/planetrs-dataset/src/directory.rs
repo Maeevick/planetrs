@@ -6,7 +6,9 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::manifest::{Manifest, ManifestError, Part, Provenance};
+use sha2::{Digest, Sha256};
+
+use crate::manifest::{Entry, Manifest, ManifestError, Part, Provenance};
 
 /// The manifest's file name, the one a dataset is opened by.
 pub const MANIFEST: &str = "manifest.json";
@@ -54,9 +56,41 @@ pub fn record(
     bytes: &[u8],
     rows: u64,
 ) -> Result<Manifest, RecordError> {
-    let _ = (directory, part, name, bytes, rows);
-    Ok(Manifest {
+    std::fs::create_dir_all(directory).map_err(io_at(directory))?;
+    write_whole(&directory.join(name), bytes)?;
+    let manifest = Manifest {
         planet: planet.clone(),
-        files: Vec::new(),
-    })
+        files: vec![Entry {
+            part,
+            file: name.to_string(),
+            url: None,
+            bytes: bytes.len() as u64,
+            sha256: sha256_of(bytes),
+            rows,
+        }],
+    };
+    write_whole(&directory.join(MANIFEST), manifest.to_json().as_bytes())?;
+    Ok(manifest)
+}
+
+/// Writes a file under a temporary name first, so that it appears whole or not at all.
+fn write_whole(path: &Path, bytes: &[u8]) -> Result<(), RecordError> {
+    let partial = path.with_extension("partial");
+    std::fs::write(&partial, bytes).map_err(io_at(&partial))?;
+    std::fs::rename(&partial, path).map_err(io_at(path))
+}
+
+fn io_at(path: &Path) -> impl FnOnce(std::io::Error) -> RecordError + '_ {
+    move |source| RecordError::Io {
+        path: path.to_path_buf(),
+        source,
+    }
+}
+
+/// The SHA-256 of the bytes, in lower-case hexadecimal as `sha256sum` prints it.
+fn sha256_of(bytes: &[u8]) -> String {
+    Sha256::digest(bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
