@@ -3,6 +3,7 @@
 use std::io::Write;
 
 use anyhow::Result;
+use planetrs_cli::UsageError;
 
 use super::{Context, read_input};
 use crate::cli::TraceArgs;
@@ -11,8 +12,12 @@ use crate::sites::{Row, read_one_site, read_site_file};
 /// Prints the trace of each site the command line names, a file's sites each under its line.
 pub fn run(context: &Context, arguments: TraceArgs) -> Result<()> {
     let rows: Vec<Row> = match (arguments.site, arguments.file) {
-        (Some(site), _) => vec![read_one_site(&site)?],
-        (None, Some(file)) => read_site_file(&read_input(&file)?)?.rows,
+        (Some(site), _) => vec![read_one_site(&site).map_err(UsageError::from)?],
+        (None, Some(file)) => {
+            read_site_file(&read_input(&file)?)
+                .map_err(UsageError::from)?
+                .rows
+        }
         (None, None) => Vec::new(),
     };
     let mut geocoder = context.open_geocoder()?;

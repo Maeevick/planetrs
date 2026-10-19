@@ -1,0 +1,20 @@
+[package]
+name = "planetrs-cli"
+version.workspace = true
+description = "What the planetrs command lines share: the data directory, outputs never written over, the progress line and how a run ends"
+documentation = "https://docs.rs/planetrs-cli"
+readme = "README.md"
+keywords = ["openstreetmap", "cli", "xdg", "atomic-write"]
+categories = ["command-line-interface", "filesystem"]
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

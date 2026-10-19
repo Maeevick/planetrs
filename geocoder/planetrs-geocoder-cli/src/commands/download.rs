@@ -4,14 +4,14 @@ use std::cell::Cell;
 use std::path::Path;
 
 use anyhow::Result;
+use planetrs_cli::Progress;
+use planetrs_cli::data_dir::planet_date;
 
 use super::Context;
 use super::status::size_text;
 use crate::cli::DownloadArgs;
-use crate::data_dir::planet_date;
 use crate::download::http::Http;
 use crate::download::{Event, Outcome, Settings, Surroundings, download};
-use crate::progress::Progress;
 
 fn percent(done: u64, length: u64) -> u64 {
     done.saturating_mul(100).checked_div(length).unwrap_or(100)

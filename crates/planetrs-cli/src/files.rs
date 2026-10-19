@@ -1,8 +1,8 @@
-//! Choosing where an answer file goes, and putting files there whole or not at all.
+//! Choosing where an output goes, and putting files there whole or not at all.
 //!
-//! An answer file is never written over. When the name asked for is taken, today's date is added,
-//! then a counter, and the name finally used is printed. A file appears under its name only once it
-//! is complete: it is written beside it first, as `.partial`, and linked into place at the end.
+//! An output is never written over. When the name asked for is taken, today's date is added, then a
+//! counter, and the name finally used is printed. A file appears under its name only once it is
+//! complete: it is written beside it first, as `.partial`, and linked into place at the end.
 
 use std::fs;
 use std::io::{self, BufWriter, Write};

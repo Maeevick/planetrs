@@ -4,6 +4,7 @@
 //! semicolons, doubled quotes and line breaks. Every field is echoed exactly as it was written and
 //! trimmed only for the lookup, so an answer row can be matched back to its site by eye.
 
+use planetrs_cli::UsageError;
 use planetrs_geocoder::{Answer, Site};
 use thiserror::Error;
 
@@ -94,6 +95,13 @@ pub enum SitesError {
         /// How many fields it has.
         count: usize,
     },
+}
+
+/// Malformed sites are the command asked for wrongly, and exit 2 like a parsing error.
+impl From<SitesError> for UsageError {
+    fn from(error: SitesError) -> Self {
+        UsageError(error.to_string())
+    }
 }
 
 fn describe_bad_rows(rows: &[(usize, usize)]) -> String {

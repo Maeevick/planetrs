@@ -11,25 +11,19 @@ use std::path::Path;
 use std::time::Instant;
 
 use anyhow::{Context as _, Result};
+use planetrs_cli::{ATTRIBUTION, DataDir, UsageError};
 use planetrs_dataset::directory::MANIFEST;
 use planetrs_dataset::{Dataset, DatasetError, ForReadingFiles, Location, Unreachable};
 use planetrs_geocoder::{Geocoder, OpenError};
 
-use crate::ATTRIBUTION;
 use crate::cli::{Cli, Command, Global};
-use crate::data_dir::DataDir;
 
 /// The environment variable naming the dataset when `--dataset` does not.
 pub const DATASET_VARIABLE: &str = "PLANETRS_DATASET";
 
-/// A command asked for in a way it cannot be done, which exits 2 like a parsing error.
-#[derive(Debug, thiserror::Error)]
-#[error("{0}")]
-pub struct UsageError(pub String);
-
 /// What every command knows before it starts: where things are, and how much to say.
 pub struct Context {
-    /// Where planets and the index are kept.
+    /// Where planets, the dataset and the cache are kept.
     pub data: DataDir,
     /// The dataset to read or build: `--dataset`, else `PLANETRS_DATASET`, else the data directory's.
     pub dataset: Location,

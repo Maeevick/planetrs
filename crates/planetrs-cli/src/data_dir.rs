@@ -1,12 +1,13 @@
-//! Where planets and the index are kept between runs.
+//! Where planets and the dataset are kept between runs, by both tools.
 //!
-//! One directory holds both, found in this order: `--data-dir`, then `PLANETRS_DATA_DIR`, then
+//! One directory holds them, found in this order: `--data-dir`, then `PLANETRS_DATA_DIR`, then
 //! `$XDG_DATA_HOME/planetrs`, then `~/.local/share/planetrs`, on macOS as on Linux so that the path
 //! is the same to type everywhere. Inside it:
 //!
 //! ```text
 //! planets/planet-YYMMDD.osm.pbf     what `download` fetches
-//! geocoder/index/                   what `index` builds and every lookup reads
+//! dataset/                          what `index` builds and every lookup reads
+//! cache/                            the ranges read of a remote dataset
 //! ```
 
 use std::ffi::OsString;

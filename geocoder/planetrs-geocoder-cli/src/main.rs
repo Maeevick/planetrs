@@ -4,15 +4,8 @@ use std::process::ExitCode;
 
 use clap::Parser;
 use planetrs_geocoder_cli::cli::Cli;
-use planetrs_geocoder_cli::{exit_code_of, is_broken_pipe, run};
+use planetrs_geocoder_cli::run;
 
 fn main() -> ExitCode {
-    match run(Cli::parse()) {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(error) if is_broken_pipe(&error) => ExitCode::SUCCESS,
-        Err(error) => {
-            eprintln!("error: {error:#}");
-            ExitCode::from(exit_code_of(&error))
-        }
-    }
+    planetrs_cli::finish(run(Cli::parse()))
 }

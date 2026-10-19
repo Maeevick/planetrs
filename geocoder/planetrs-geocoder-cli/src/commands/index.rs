@@ -3,13 +3,13 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result};
+use planetrs_cli::UsageError;
+use planetrs_cli::files::replace_directory;
+use planetrs_dataset::Location;
 use planetrs_geocoder::build_index;
 
-use planetrs_dataset::Location;
-
-use super::{Context, UsageError};
+use super::Context;
 use crate::cli::IndexArgs;
-use crate::files::replace_directory;
 
 /// Planet files from this size on are whole planets or continents, which need the memory said.
 const LARGE_PLANET_BYTES: u64 = 10_000_000_000;

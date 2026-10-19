@@ -6,15 +6,17 @@ use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime};
 
 use anyhow::Result;
+use planetrs_cli::{Day, Progress, UsageError, write_new};
 use planetrs_dataset::ForReadingFiles;
 use planetrs_geocoder::{Answer, Geocoder, Site, refusal_of};
 
-use super::{Context, UsageError, read_input};
-use crate::files::{Day, write_new};
-use crate::progress::Progress;
+use super::{Context, read_input};
 use crate::sites::{ANSWER_HEADER, NOT_FOUND, Row, answer_line, read_one_site, read_site_file};
 
 const DEFAULT_OUTPUT: &str = "output.csv";
+/// How many sites pass between two redraws of the progress line: a few times a second at worst,
+/// which costs nothing beside the lookups.
+const SITES_BETWEEN_REDRAWS: usize = 250;
 const PRECISIONS: [&str; 6] = [
     "HouseNumber",
     "NearestHouseNumber",
@@ -42,7 +44,7 @@ pub fn run(
 }
 
 fn one_site(context: &Context, text: &str) -> Result<()> {
-    let row = read_one_site(text)?;
+    let row = read_one_site(text).map_err(UsageError::from)?;
     let mut geocoder = context.open_geocoder()?;
     let site = row.site();
     let answer = geocoder.locate(&site)?;
@@ -102,9 +104,24 @@ fn geocode_rows<F: ForReadingFiles>(
         let answer = geocoder.locate(&site)?;
         tally.count(&site, answer.as_ref());
         writeln!(out, "{}", answer_line(row, answer.as_ref()))?;
-        progress.sites(done + 1, rows.len());
+        show_sites_done(progress, done + 1, rows.len());
     }
     Ok(tally)
+}
+
+/// Says how many of the sites are done, every few hundred and at the last one.
+fn show_sites_done(progress: &Progress, done: usize, total: usize) {
+    if is_worth_drawing(done, total) {
+        progress.note(&sites_line(done, total));
+    }
+}
+
+fn is_worth_drawing(done: usize, total: usize) -> bool {
+    done.is_multiple_of(SITES_BETWEEN_REDRAWS) || done == total
+}
+
+fn sites_line(done: usize, total: usize) -> String {
+    format!("geocoding {done} / {total} sites")
 }
 
 /// Where answers go when `-o` names a directory, or nothing at all.
@@ -117,7 +134,7 @@ fn wanted_output(output: Option<&Path>) -> PathBuf {
 }
 
 fn whole_file(context: &Context, file: &Path, output: Option<&Path>) -> Result<()> {
-    let sites = read_site_file(&read_input(file)?)?;
+    let sites = read_site_file(&read_input(file)?).map_err(UsageError::from)?;
     let mut geocoder = context.open_geocoder()?;
     let progress = Progress::to_stderr(context.quiet);
     let started = Instant::now();
@@ -219,6 +236,21 @@ mod tests {
         let directory = std::env::temp_dir();
 
         assert_eq!(wanted_output(Some(&directory)), directory.join("output.csv"));
+    }
+
+    #[test]
+    fn given_a_count_between_two_redraws_when_asked_then_it_is_not_drawn() {
+        assert!(!is_worth_drawing(251, 3_805));
+    }
+
+    #[test]
+    fn given_the_last_site_when_asked_then_it_is_drawn_whatever_the_count() {
+        assert!(is_worth_drawing(3_805, 3_805));
+    }
+
+    #[test]
+    fn given_a_count_when_written_then_it_reads_done_of_total() {
+        assert_eq!(sites_line(500, 3_805), "geocoding 500 / 3805 sites");
     }
 
     #[test]

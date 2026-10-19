@@ -5,12 +5,11 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, UNIX_EPOCH};
 
 use anyhow::Result;
-
+use planetrs_cli::Day;
+use planetrs_cli::data_dir::planet_date;
 use planetrs_dataset::{Dataset, Manifest, Part};
 
 use super::Context;
-use crate::data_dir::planet_date;
-use crate::files::Day;
 
 /// A size as a reader compares it, in decimal units: `94.7 GB`.
 pub fn size_text(bytes: u64) -> String {
