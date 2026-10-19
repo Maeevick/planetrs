@@ -14,7 +14,7 @@ use crate::manifest::{self, Provenance};
 use rayon::prelude::*;
 
 use crate::tables::{
-    self, Column, TableError, TableWriter, Tail, Values, boxes, bytes, integer_lists, integers,
+    self, Column, Footer, TableError, TableWriter, Tail, Values, boxes, bytes, integer_lists, integers,
     optional_integers, small_integer_lists, text_lists, texts,
 };
 
@@ -240,11 +240,7 @@ pub fn from_parquet(bytes: &[u8]) -> Result<(Grid, Vec<Element>), TableError> {
     let Tail::Footer(footer) = tables::footer_from_tail(bytes, bytes.len() as u64)? else {
         return Err(unexpected("footer"));
     };
-    let grid = footer
-        .metadata_value(GRID)
-        .as_deref()
-        .and_then(grid_of)
-        .ok_or_else(|| unexpected(GRID))?;
+    let grid = grid_in(&footer).ok_or_else(|| unexpected(GRID))?;
     Ok((grid, elements_of(&tables::read(bytes)?)?))
 }
 
@@ -535,6 +531,11 @@ fn elements_of(columns: &[Column]) -> Result<Vec<Element>, TableError> {
         }
     }
     Ok(elements)
+}
+
+/// The grid a map index file's footer states its positions were read on.
+pub(crate) fn grid_in(footer: &Footer) -> Option<Grid> {
+    footer.metadata_value(GRID).as_deref().and_then(grid_of)
 }
 
 fn grid_of(text: &str) -> Option<Grid> {

@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use crate::directory::MANIFEST;
 use crate::files::{ForReadingFiles, Unreachable};
 use crate::manifest::{Entry, Manifest, ManifestError, Part};
+use crate::map_index::{Element, Grid};
 use crate::tables::{self, Column, Footer, RowGroupBytes, TableError, Tail};
 use crate::{gazetteer, geocoder_index};
 
@@ -284,6 +285,41 @@ impl<F: ForReadingFiles> Dataset<F> {
     }
 }
 
+/// One country's map index with only its footer read: its elements are fetched a row group at a
+/// time, the row groups near a box.
+#[derive(Debug, Clone)]
+pub struct MapIndex {
+    country: String,
+    entry: Entry,
+    footer: Footer,
+}
+
+impl MapIndex {
+    /// The country it is the map index of.
+    pub fn country(&self) -> &str {
+        &self.country
+    }
+
+    /// The grid its positions were read on, as its footer states it.
+    pub fn grid(&self) -> Option<Grid> {
+        crate::map_index::grid_in(&self.footer)
+    }
+}
+
+impl<F: ForReadingFiles> Dataset<F> {
+    /// The map index of every country the dataset holds one of, each with only its footer read.
+    pub fn map_indexes(&self) -> Result<Vec<MapIndex>, DatasetError> {
+        Ok(Vec::new())
+    }
+
+    /// The elements of every row group of `index` whose rows' boxes may touch `bounds`, as west,
+    /// south, east and north in degrees.
+    pub fn elements_near(&self, index: &MapIndex, bounds: [f64; 4]) -> Result<Vec<Element>, DatasetError> {
+        let _ = (&index.entry, bounds);
+        Ok(Vec::new())
+    }
+}
+
 fn table_error(entry: &Entry, source: TableError) -> DatasetError {
     DatasetError::Table {
         file: entry.file.clone(),
@@ -541,6 +577,87 @@ mod tests {
         let france = dataset.country_index("FR")?.ok_or("France is indexed")?;
 
         assert_eq!(france.reach_metres(), 12_345.6);
+        Ok(())
+    }
+
+    /// Files that count how many ranges are read of them.
+    struct Counting {
+        files: FilesInMemory,
+        reads: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    }
+
+    impl ForReadingFiles for Counting {
+        fn length(&self, file: &str) -> Result<u64, Unreachable> {
+            self.files.length(file)
+        }
+
+        fn read(&self, file: &str, range: Range<u64>) -> Result<Vec<u8>, Unreachable> {
+            self.reads.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            self.files.read(file, range)
+        }
+    }
+
+    fn town(id: i64, latitude: i64, longitude: i64) -> crate::map_index::Element {
+        crate::map_index::Element::Node {
+            id,
+            at: crate::map_index::Position { latitude, longitude },
+            tags: vec![("name".into(), format!("town {id}"))],
+        }
+    }
+
+    /// Monaco, Sens and Paris, a row group each, so that a box near one of them can be read alone.
+    fn three_towns() -> Vec<crate::map_index::Element> {
+        vec![
+            town(1, 43_738_400_000, 7_424_600_000),
+            town(2, 48_197_855_900, 3_282_606_000),
+            town(3, 48_856_600_000, 2_352_200_000),
+        ]
+    }
+
+    fn holding_three_towns(
+        reads: &std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    ) -> Result<Counting, TableError> {
+        let grid = Grid {
+            granularity: 100,
+            latitude_offset: 0,
+            longitude_offset: 0,
+        };
+        let map = crate::map_index::cut_at("FR", &three_towns(), grid, &planet(), 1)?;
+        let manifest = Manifest {
+            planet: planet(),
+            files: vec![Entry {
+                part: Part::MapIndex { country: "FR".into() },
+                file: "map-FR.parquet".into(),
+                url: None,
+                bytes: map.len() as u64,
+                sha256: String::new(),
+                rows: 3,
+            }],
+        };
+        Ok(Counting {
+            files: FilesInMemory::default()
+                .with(MANIFEST, manifest.to_json().as_bytes())
+                .with("map-FR.parquet", &map),
+            reads: std::sync::Arc::clone(reads),
+        })
+    }
+
+    #[test]
+    fn given_a_map_index_of_three_towns_when_the_elements_near_monaco_are_read_then_only_monacos_row_group_is_fetched()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let reads = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let dataset = Dataset::open(holding_three_towns(&reads)?)?;
+        let indexes = dataset.map_indexes()?;
+        let before = reads.load(std::sync::atomic::Ordering::Relaxed);
+
+        let near = indexes
+            .iter()
+            .map(|index| dataset.elements_near(index, [7.40, 43.72, 7.44, 43.75]))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let fetched = reads.load(std::sync::atomic::Ordering::Relaxed) - before;
+        assert_eq!(near.concat(), vec![three_towns()[0].clone()]);
+        assert_eq!(fetched, 1, "one row group read");
         Ok(())
     }
 }
