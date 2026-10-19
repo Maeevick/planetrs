@@ -5,6 +5,8 @@ use std::process::{Command, Output};
 
 use planetrs_pbf::testing::{Node, PlanetFile, Way};
 
+const ATTRIBUTION: &str =
+    "Data © OpenStreetMap contributors, ODbL 1.0: https://www.openstreetmap.org/copyright";
 const FRAME: [&str; 8] = [
     "--lat",
     "43.735",
@@ -56,19 +58,38 @@ fn text(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).into_owned()
 }
 
-/// A harvest of the frame, cut by the binary itself from the fixture planet.
-fn harvest_in(directory: &Path) -> String {
+/// The binary harvesting the frame from the fixture planet into `monaco.mapclip`.
+fn harvesting(directory: &Path, options: &[&str]) -> Output {
     let planet = directory.join("monaco.osm.pbf");
     monaco().write(&planet).unwrap();
     let planet = planet.display().to_string();
-    let arguments: Vec<&str> = ["harvest", planet.as_str()]
-        .into_iter()
+    let arguments: Vec<&str> = options
+        .iter()
+        .copied()
+        .chain(["harvest", planet.as_str()])
         .chain(FRAME)
         .chain(["--out", "monaco.mapclip"])
         .collect();
-    let harvested = run(directory, &arguments);
+    run(directory, &arguments)
+}
+
+/// A harvest of the frame, cut by the binary itself from the fixture planet.
+fn harvest_in(directory: &Path) -> String {
+    let harvested = harvesting(directory, &[]);
     assert!(harvested.status.success(), "{}", text(&harvested.stderr));
     "monaco.mapclip".to_string()
+}
+
+/// The binary drawing a harvest of the frame into `map.svg`.
+fn rendering(directory: &Path, harvest: &str, options: &[&str]) -> Output {
+    let arguments: Vec<&str> = options
+        .iter()
+        .copied()
+        .chain(["render", harvest])
+        .chain(FRAME)
+        .chain(["--svg", "map.svg"])
+        .collect();
+    run(directory, &arguments)
 }
 
 #[test]
@@ -107,4 +128,16 @@ fn given_a_harvest_too_small_for_the_frame_when_rendered_then_it_fails_with_one_
         errors.contains("\n  → harvest a wider area, or lower --margin, then render again"),
         "{errors}"
     );
+}
+
+#[test]
+fn given_a_planet_when_harvested_and_rendered_then_both_runs_end_with_the_attribution_on_stderr() {
+    let directory = scratch("attribution");
+
+    let harvested = harvesting(&directory, &[]);
+    let rendered = rendering(&directory, "monaco.mapclip", &[]);
+
+    assert!(rendered.status.success(), "{}", text(&rendered.stderr));
+    assert_eq!(text(&harvested.stderr).lines().last(), Some(ATTRIBUTION));
+    assert_eq!(text(&rendered.stderr).lines().last(), Some(ATTRIBUTION));
 }
