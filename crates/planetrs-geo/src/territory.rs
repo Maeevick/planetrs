@@ -170,16 +170,40 @@ impl Coverage {
     }
 
     /// The coverage as text, as a map index's footer keeps it: the cell size, then each row with
-    /// its runs of columns, `0.01;4372:740-743,750-751;4373:740-743`.
+    /// its runs of columns, `0.01;4372:740..743,750..751;-1:-5..-3`.
     pub fn to_text(&self) -> String {
-        let _ = self;
-        String::new()
+        std::iter::once(COVERAGE_DEGREES.to_string())
+            .chain(self.rows.iter().map(|(row, runs)| {
+                let runs: Vec<String> = runs
+                    .iter()
+                    .map(|(first, last)| format!("{first}..{last}"))
+                    .collect();
+                format!("{row}:{}", runs.join(","))
+            }))
+            .collect::<Vec<_>>()
+            .join(";")
     }
 
     /// The coverage text stands for, or nothing when it is not one, or one of another cell size.
     pub fn from_text(text: &str) -> Option<Coverage> {
-        let _ = text;
-        None
+        let mut parts = text.split(';');
+        if parts.next()?.parse::<f64>().ok()? != COVERAGE_DEGREES {
+            return None;
+        }
+        let rows = parts
+            .map(|part| {
+                let (row, runs) = part.split_once(':')?;
+                let runs = runs
+                    .split(',')
+                    .map(|run| {
+                        let (first, last) = run.split_once("..")?;
+                        Some((first.parse().ok()?, last.parse().ok()?))
+                    })
+                    .collect::<Option<Vec<(i32, i32)>>>()?;
+                Some((row.parse().ok()?, runs))
+            })
+            .collect::<Option<BTreeMap<i32, Vec<(i32, i32)>>>>()?;
+        Some(Coverage { rows })
     }
 
     fn holds(&self, row: i32, column: i32) -> bool {
@@ -378,7 +402,14 @@ mod tests {
     #[test]
     fn given_a_coverage_when_written_as_text_and_read_back_then_it_is_the_same_coverage() {
         let (france, monaco) = riviera();
-        let coverages = Coverage::of_each(&[&france, &monaco]);
+        let west_of_greenwich = Outline::of(vec![vec![
+            [-4.10, -0.20],
+            [-3.90, -0.20],
+            [-3.90, 0.10],
+            [-4.10, 0.10],
+            [-4.10, -0.20],
+        ]]);
+        let coverages = Coverage::of_each(&[&france, &monaco, &west_of_greenwich]);
 
         let read: Vec<Option<Coverage>> = coverages
             .iter()
@@ -386,6 +417,6 @@ mod tests {
             .collect();
 
         assert_eq!(read, coverages.into_iter().map(Some).collect::<Vec<_>>());
-        assert_eq!(Coverage::from_text("0.05;1:1-2"), None, "another cell size");
+        assert_eq!(Coverage::from_text("0.05;1:1..2"), None, "another cell size");
     }
 }
