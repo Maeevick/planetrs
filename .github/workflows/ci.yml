@@ -57,6 +57,10 @@ jobs:
           toolchain: stable
       - uses: Swatinem/rust-cache@63fed3e2fecf6f7b51dc6f043341b79ef82a9ae7 # v2.9.2
       - run: cargo test --workspace --locked
+      - name: Test each command line on its own, as cargo install builds it
+        run: |
+          cargo test -p planetrs-geocoder-cli --tests --locked
+          cargo test -p planetrs-mapclipper-cli --tests --locked
 
   msrv:
     name: Rust 1.88
