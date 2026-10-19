@@ -12,6 +12,10 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 
+[features]
+# The fake files and the contract every way of reading files honours, for the tests of their users.
+testing = []
+
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
