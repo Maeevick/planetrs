@@ -9,8 +9,6 @@
 //! machine has. That is equally true of a browser. When a run has to be defensible afterwards, keep
 //! the SVG and the harvest, and treat the PNG as a picture of them.
 
-use std::path::Path;
-
 use resvg::tiny_skia;
 use resvg::usvg;
 
@@ -46,15 +44,6 @@ pub fn render(svg: &str, scale: f32) -> Result<Vec<u8>, ClipError> {
     pixmap.encode_png().map_err(|error| ClipError::Raster {
         detail: error.to_string(),
     })
-}
-
-pub fn write(path: &Path, svg: &str, scale: f32) -> Result<u64, ClipError> {
-    let bytes = render(svg, scale)?;
-    if let Some(parent) = path.parent().filter(|parent| !parent.as_os_str().is_empty()) {
-        std::fs::create_dir_all(parent).map_err(|error| ClipError::writing(path, error))?;
-    }
-    std::fs::write(path, &bytes).map_err(|error| ClipError::writing(path, error))?;
-    Ok(bytes.len() as u64)
 }
 
 #[cfg(test)]

@@ -1,7 +1,5 @@
 //! Drawing a harvest, at any framing it covers, in any theme.
 
-use std::io::Write;
-use std::path::Path;
 use std::time::Instant;
 
 use planetrs_mapclipper::error::ClipError;
@@ -12,7 +10,7 @@ use planetrs_mapclipper::scene::{self, Scene};
 use planetrs_mapclipper::theme::Theme;
 
 use super::harvest::describe_harvest;
-use super::{Context, extent_of};
+use super::{Context, extent_of, put};
 use crate::cli::{Drawing, Framing, MarkKind, Outputs, RenderArgs};
 use crate::report::{Report, bytes, seconds, thousands};
 
@@ -27,24 +25,6 @@ pub fn run(context: &Context, arguments: RenderArgs) -> Result<(), ClipError> {
         &arguments.outputs,
         None,
     )
-}
-
-/// Writes to a path, or to stdout when the path is `-`.
-fn put(path: &Path, contents: &str) -> Result<u64, ClipError> {
-    if path.as_os_str() == "-" {
-        let mut stdout = std::io::stdout().lock();
-        stdout
-            .write_all(contents.as_bytes())
-            .map_err(|error| ClipError::writing(path, error))?;
-        let _ = stdout.flush();
-        return Ok(contents.len() as u64);
-    }
-
-    if let Some(parent) = path.parent().filter(|parent| !parent.as_os_str().is_empty()) {
-        std::fs::create_dir_all(parent).map_err(|error| ClipError::writing(path, error))?;
-    }
-    std::fs::write(path, contents).map_err(|error| ClipError::writing(path, error))?;
-    Ok(contents.len() as u64)
 }
 
 pub(super) fn draw(
@@ -87,8 +67,8 @@ pub(super) fn draw(
     }
 
     if let Some(path) = &outputs.geojson {
-        let size = put(path, &geojson::write(&scene))?;
-        report.line("geojson", format!("{} ({})", path.display(), bytes(size)));
+        let (written, size) = put(path, geojson::write(&scene).as_bytes())?;
+        report.line("geojson", format!("{} ({})", written.display(), bytes(size)));
     }
 
     let labels = drawing.label_classes();
@@ -96,14 +76,14 @@ pub(super) fn draw(
         .then(|| svg::write(&scene, &theme, &marker, &labels));
 
     if let (Some(path), Some(drawn)) = (&outputs.svg, drawn.as_ref()) {
-        let size = put(path, drawn)?;
-        report.line("svg", format!("{} ({})", path.display(), bytes(size)));
+        let (written, size) = put(path, drawn.as_bytes())?;
+        report.line("svg", format!("{} ({})", written.display(), bytes(size)));
     }
 
     if let Some(path) = &outputs.png {
         let drawn = drawn.as_ref().expect("the svg is drawn whenever a png is wanted");
-        let size = rasterise(path, drawn, outputs.scale)?;
-        report.line("png", format!("{} ({})", path.display(), bytes(size)));
+        let (written, size) = put(path, &rasterise(drawn, outputs.scale)?)?;
+        report.line("png", format!("{} ({})", written.display(), bytes(size)));
     }
 
     report.to_stderr();
@@ -111,12 +91,12 @@ pub(super) fn draw(
 }
 
 #[cfg(feature = "png")]
-fn rasterise(path: &Path, drawn: &str, scale: f64) -> Result<u64, ClipError> {
-    planetrs_mapclipper::output::png::write(path, drawn, scale as f32)
+fn rasterise(drawn: &str, scale: f64) -> Result<Vec<u8>, ClipError> {
+    planetrs_mapclipper::output::png::render(drawn, scale as f32)
 }
 
 #[cfg(not(feature = "png"))]
-fn rasterise(_path: &Path, _drawn: &str, _scale: f64) -> Result<u64, ClipError> {
+fn rasterise(_drawn: &str, _scale: f64) -> Result<Vec<u8>, ClipError> {
     Err(ClipError::Raster {
         detail: "this build was made without the png feature; write --svg and rasterise it".into(),
     })

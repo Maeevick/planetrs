@@ -3,9 +3,9 @@
 use planetrs_mapclipper::error::ClipError;
 use planetrs_mapclipper::harvest::format;
 
-use super::Context;
 use super::harvest::read_planet;
 use super::render::draw;
+use super::{Context, put};
 use crate::cli::ClipArgs;
 use crate::report::{Report, bytes};
 
@@ -23,9 +23,9 @@ pub fn run(context: &Context, arguments: ClipArgs) -> Result<(), ClipError> {
     let (held, pass_report) = read_planet(context, &planet, &area, index.as_deref())?;
 
     if let Some(path) = &keep_harvest {
-        let size = format::write(path, &held)?;
+        let (written, size) = put(path, &format::to_bytes(&held))?;
         let mut kept = Report::new(context.quiet);
-        kept.line("harvest", format!("{} ({})", path.display(), bytes(size)));
+        kept.line("harvest", format!("{} ({})", written.display(), bytes(size)));
         kept.to_stderr();
     }
 

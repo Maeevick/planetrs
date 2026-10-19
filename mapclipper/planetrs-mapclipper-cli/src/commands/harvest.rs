@@ -9,7 +9,7 @@ use planetrs_mapclipper::harvest::passes::{HarvestReport, harvest_area};
 use planetrs_mapclipper::harvest::{Harvest, format};
 use planetrs_pbf::{IdIndex, Planet};
 
-use super::{Context, extent_of};
+use super::{Context, extent_of, put};
 use crate::cli::HarvestArgs;
 use crate::report::{Report, bytes, seconds, thousands};
 
@@ -23,15 +23,15 @@ pub fn run(context: &Context, arguments: HarvestArgs) -> Result<(), ClipError> {
     } = arguments;
     let area = framing.area()?;
     let (harvest, pass_report) = read_planet(context, &planet, &area, index.as_deref())?;
-    let size = format::write(&out, &harvest)?;
+    let (written, size) = put(&out, &format::to_bytes(&harvest))?;
 
     let mut report = Report::new(context.quiet);
     describe_harvest(&mut report, &harvest, &pass_report);
-    report.line("written", format!("{} ({})", out.display(), bytes(size)));
+    report.line("written", format!("{} ({})", written.display(), bytes(size)));
     report.blank();
     report.note(format!(
         "→ draw it:  planetrs-mapclipper render {} --lat {} --lon {} --width-km {} --height-km {} --svg map.svg",
-        out.display(), framing.lat, framing.lon, framing.width_km, framing.height_km
+        written.display(), framing.lat, framing.lon, framing.width_km, framing.height_km
     ));
     report.to_stderr();
     Ok(())

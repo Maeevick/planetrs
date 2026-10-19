@@ -6,7 +6,11 @@ pub mod inspect;
 pub mod render;
 pub mod themes;
 
-use planetrs_cli::ATTRIBUTION;
+use std::io::{self, Write};
+use std::path::{Path, PathBuf};
+use std::time::SystemTime;
+
+use planetrs_cli::{ATTRIBUTION, Day, write_new};
 use planetrs_mapclipper::error::ClipError;
 use planetrs_pbf::PbfError;
 
@@ -42,6 +46,28 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
         eprintln!("{ATTRIBUTION}");
     }
     Ok(())
+}
+
+/// Writes an output to stdout when its path is `-`, else to a new file under the first free name
+/// for its path, never over another, and gives back the name it took and its size.
+fn put(path: &Path, contents: &[u8]) -> Result<(PathBuf, u64), ClipError> {
+    let size = contents.len() as u64;
+    let writing = |error| ClipError::writing(path, error);
+    if path.as_os_str() == "-" {
+        let mut stdout = io::stdout().lock();
+        stdout
+            .write_all(contents)
+            .and_then(|()| stdout.flush())
+            .map_err(writing)?;
+        return Ok((path.to_path_buf(), size));
+    }
+    if let Some(parent) = path.parent().filter(|parent| !parent.as_os_str().is_empty()) {
+        std::fs::create_dir_all(parent).map_err(writing)?;
+    }
+    let (written, ()) =
+        write_new::<_, io::Error>(path, Day::of(SystemTime::now()), |out| out.write_all(contents))
+            .map_err(writing)?;
+    Ok((written, size))
 }
 
 /// A failure, said with what to try next when there is something worth trying.
