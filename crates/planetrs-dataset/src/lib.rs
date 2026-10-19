@@ -15,5 +15,5 @@ pub mod manifest;
 #[cfg(any(test, feature = "testing"))]
 pub mod testing;
 
-pub use files::{ForReadingFiles, Unreachable};
+pub use files::{DirectoryFiles, ForReadingFiles, Unreachable};
 pub use manifest::{Entry, Manifest, ManifestError, Part, Provenance};

@@ -5,6 +5,7 @@
 //! requests without knowing which.
 
 use std::ops::Range;
+use std::path::PathBuf;
 
 /// What a dataset needs from wherever its files are: a file's length and any range of its bytes.
 pub trait ForReadingFiles {
@@ -57,3 +58,28 @@ impl std::fmt::Display for Unreachable {
 }
 
 impl std::error::Error for Unreachable {}
+
+/// A dataset's files in a directory on this machine.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DirectoryFiles {
+    root: PathBuf,
+}
+
+impl DirectoryFiles {
+    /// The files of the dataset in `root`, by name relative to it.
+    pub fn at(root: impl Into<PathBuf>) -> Self {
+        Self { root: root.into() }
+    }
+}
+
+impl ForReadingFiles for DirectoryFiles {
+    fn length(&self, file: &str) -> Result<u64, Unreachable> {
+        Err(Unreachable::Missing {
+            file: format!("{}/{file}", self.root.display()),
+        })
+    }
+
+    fn read(&self, file: &str, _range: Range<u64>) -> Result<Vec<u8>, Unreachable> {
+        self.length(file).map(|_| Vec::new())
+    }
+}

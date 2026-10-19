@@ -20,5 +20,8 @@ testing = []
 serde.workspace = true
 serde_json.workspace = true
 
+[dev-dependencies]
+planetrs-dataset = { path = ".", features = ["testing"] }
+
 [lints]
 workspace = true
