@@ -194,8 +194,32 @@ pub(crate) struct RowGroupSpan {
 /// Every row group of a file, with the span of the integer column `name`.
 #[cfg(test)]
 pub(crate) fn row_groups(bytes: &[u8], name: &str) -> Result<Vec<RowGroupSpan>, TableError> {
-    let _ = (bytes, name);
-    Ok(Vec::new())
+    use parquet::file::statistics::Statistics;
+    let builder =
+        ParquetRecordBatchReaderBuilder::try_new(Bytes::copy_from_slice(bytes)).map_err(unreadable)?;
+    let metadata = builder.metadata();
+    let column = metadata
+        .file_metadata()
+        .schema_descr()
+        .columns()
+        .iter()
+        .position(|column| column.name() == name)
+        .ok_or_else(|| kind_mismatch(name))?;
+    metadata
+        .row_groups()
+        .iter()
+        .map(|group| match group.column(column).statistics() {
+            Some(Statistics::Int64(span)) => match (span.min_opt(), span.max_opt()) {
+                (Some(lowest), Some(highest)) => Ok(RowGroupSpan {
+                    rows: group.num_rows(),
+                    lowest: *lowest,
+                    highest: *highest,
+                }),
+                _ => Err(kind_mismatch(name)),
+            },
+            _ => Err(kind_mismatch(name)),
+        })
+        .collect()
 }
 
 fn field_of(column: &Column) -> Field {

@@ -80,14 +80,56 @@ fn cut_at(
     planet: &Provenance,
     per_row_group: usize,
 ) -> Result<Vec<u8>, TableError> {
-    let _ = per_row_group;
+    let row_groups: Vec<Vec<Column>> = row_groups_of(entries, per_row_group)
+        .into_iter()
+        .map(columns_of)
+        .collect();
     tables::write(
-        &[columns_of(entries)],
+        &row_groups,
         &[
             geoparquet::geo(&["Point"]),
             manifest::notice(&format!("geocoder-{country}"), planet),
         ],
     )
+}
+
+/// The entries cut into row groups: the word counts on their own, then whole communes packed up to
+/// `per_row_group` entries, a commune holding more standing alone.
+fn row_groups_of(entries: &[Entry], per_row_group: usize) -> Vec<&[Entry]> {
+    let words = entries
+        .iter()
+        .take_while(|entry| commune_of(entry).is_none())
+        .count();
+    let (counts, communes) = entries.split_at(words);
+    let mut groups: Vec<&[Entry]> = counts.chunks(per_row_group.max(1)).collect();
+    let mut start = 0;
+    let mut end = 0;
+    while end < communes.len() {
+        let commune = commune_of(&communes[end]);
+        let next = end
+            + communes[end..]
+                .iter()
+                .take_while(|entry| commune_of(entry) == commune)
+                .count();
+        if next - start > per_row_group && end > start {
+            groups.push(&communes[start..end]);
+            start = end;
+        }
+        end = next;
+    }
+    if end > start {
+        groups.push(&communes[start..end]);
+    }
+    groups
+}
+
+fn commune_of(entry: &Entry) -> Option<i64> {
+    match entry {
+        Entry::Names { .. } | Entry::Word { .. } => None,
+        Entry::Door { commune, .. } | Entry::Middle { commune, .. } | Entry::Shop { commune, .. } => {
+            Some(*commune)
+        }
+    }
 }
 
 /// The entries of a geocoder index file, in its order.
