@@ -10,6 +10,7 @@
 //! byte-deterministic: two runs over the same planet and the same area must produce the same bytes,
 //! or a checksum over the result says nothing.
 
+pub mod dataset;
 pub mod format;
 mod id_filter;
 pub mod passes;
