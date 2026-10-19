@@ -11,15 +11,15 @@ use std::path::{Path, PathBuf};
 
 use planetrs_dataset::directory::MANIFEST;
 use planetrs_dataset::{
-    CountryIndex, Dataset, DatasetError, DirectoryFiles, ForReadingFiles, Unreachable, geocoder_index,
+    CountryIndex, Dataset, DatasetError, DirectoryFiles, ForReadingFiles, Part, Unreachable, geocoder_index,
 };
 use thiserror::Error;
 
-use crate::gazetteer::Gazetteer;
+use crate::gazetteer::{Gazetteer, MUNICIPALITY_LEVELS};
 use crate::locate::{Answer, Site, locate, settle};
 use crate::parts::{indexes_of, settling_gazetteer};
 use crate::rarity::WordRarity;
-use crate::shops::ShopIndex;
+use crate::shops::{ShopIndex, metres_between};
 use crate::street_index::StreetIndex;
 use crate::trace::trace;
 
@@ -107,10 +107,93 @@ impl<F: ForReadingFiles> Geocoder<F> {
     }
 
     /// Every decision [`Geocoder::locate`] takes for the site, one line each, ending with its answer.
+    ///
+    /// Its streets of the same name within 20 km come from every country the dataset indexes, as a
+    /// border is no reason for a street a few hundred metres away to go unmentioned.
     pub fn trace(&mut self, site: &Site) -> Result<Vec<String>, LocateError> {
         let country = self.read_what(site)?;
+        let searched = settle(&self.gazetteer, site)
+            .map(|settled| settled.searched())
+            .unwrap_or_default();
+        let neighbours = self.read_neighbours(site)?;
         let (streets, shops) = self.read_of(country.as_deref());
-        Ok(trace(&self.gazetteer, streets, shops, site))
+        let mut seen = streets.only(searched.iter().copied());
+        for (code, commune) in &neighbours {
+            let (theirs, _) = self.read_of(Some(code));
+            seen.absorb(theirs.only([*commune]));
+        }
+        Ok(trace(&self.gazetteer, &seen, shops, site))
+    }
+
+    /// Reads every commune of an indexed country close enough to the site's for one of its streets
+    /// to lie within 20 km of it, and names them with their country.
+    fn read_neighbours(&mut self, site: &Site) -> Result<Vec<(String, i64)>, LocateError> {
+        let Some(settled) = settle(&self.gazetteer, site) else {
+            return Ok(Vec::new());
+        };
+        let origin = settled.located.position;
+        let indexed: Vec<String> = self
+            .dataset
+            .manifest()
+            .files
+            .iter()
+            .filter_map(|entry| match &entry.part {
+                Part::GeocoderIndex { country } => Some(country.clone()),
+                _ => None,
+            })
+            .collect();
+        let mut reaches = HashMap::new();
+        for code in &indexed {
+            self.read_country(code)?;
+            if let Some(Some(read)) = self.countries.get(code) {
+                reaches.insert(code.clone(), read.index.reach_metres());
+            }
+        }
+        let near: Vec<(String, i64)> = self
+            .gazetteer
+            .communes()
+            .iter()
+            .filter(|commune| MUNICIPALITY_LEVELS.contains(&commune.level))
+            .filter_map(|commune| {
+                let code = commune.country.as_ref()?;
+                let reach = reaches.get(code)?;
+                let centre = commune.centre?;
+                (metres_between(centre, origin) < WITHIN_TWENTY_KILOMETRES + reach + ROUNDING_ALLOWANCE)
+                    .then(|| (code.clone(), commune.relation))
+            })
+            .collect();
+        for (code, commune) in &near {
+            self.read_commune(code, *commune)?;
+        }
+        Ok(near)
+    }
+
+    /// Reads a country's footer and word counts, once.
+    fn read_country(&mut self, code: &str) -> Result<(), LocateError> {
+        if !self.countries.contains_key(code) {
+            let first = first_read(&self.dataset, code).map_err(LocateError::Unreadable)?;
+            self.countries.insert(code.to_string(), first);
+        }
+        Ok(())
+    }
+
+    /// Reads a commune of a country, with its row group's neighbours, once.
+    fn read_commune(&mut self, code: &str, commune: i64) -> Result<(), LocateError> {
+        let Some(Some(read)) = self.countries.get_mut(code) else {
+            return Ok(());
+        };
+        if !read.communes.iter().any(|span| span.contains(&commune)) {
+            let found = self
+                .dataset
+                .communes_with(&read.index, commune)
+                .map_err(LocateError::Unreadable)?;
+            let (streets, shops) = indexes_of(found.entries);
+            read.streets.absorb(streets);
+            read.shops.absorb(shops);
+            read.communes.extend(found.spans);
+            read.communes.push(commune..=commune);
+        }
+        Ok(())
     }
 
     /// Reads whatever of the site's country a lookup of it needs and is not read yet, and names the
@@ -126,25 +209,9 @@ impl<F: ForReadingFiles> Geocoder<F> {
         let communes = settle(&self.gazetteer, site)
             .map(|settled| settled.searched())
             .unwrap_or_default();
-        if !self.countries.contains_key(&code) {
-            let first = first_read(&self.dataset, &code).map_err(LocateError::Unreadable)?;
-            self.countries.insert(code.clone(), first);
-        }
-        let Some(Some(read)) = self.countries.get_mut(&code) else {
-            return Ok(None);
-        };
+        self.read_country(&code)?;
         for commune in communes {
-            if !read.communes.iter().any(|span| span.contains(&commune)) {
-                let found = self
-                    .dataset
-                    .communes_with(&read.index, commune)
-                    .map_err(LocateError::Unreadable)?;
-                let (streets, shops) = indexes_of(found.entries);
-                read.streets.absorb(streets);
-                read.shops.absorb(shops);
-                read.communes.extend(found.spans);
-                read.communes.push(commune..=commune);
-            }
+            self.read_commune(&code, commune)?;
         }
         Ok(Some(code))
     }
@@ -159,6 +226,13 @@ impl<F: ForReadingFiles> Geocoder<F> {
             })
     }
 }
+
+/// How far from the settled commune a trace looks for streets of the asked name.
+const WITHIN_TWENTY_KILOMETRES: f64 = 20_000.0;
+
+/// A metre's slack on the reach, so that rounding in two great-circle distances never leaves out a
+/// commune whose street lies right at the edge.
+const ROUNDING_ALLOWANCE: f64 = 1.0;
 
 /// A country's index before any commune of it is read: its footer and its word counts, or nothing
 /// when the dataset does not index it.

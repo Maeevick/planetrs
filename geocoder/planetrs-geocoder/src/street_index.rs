@@ -121,6 +121,21 @@ impl StreetIndex {
         Self { rarity, ..self }
     }
 
+    /// A copy holding only the given communes, weighed against the same words.
+    pub(crate) fn only(&self, communes: impl IntoIterator<Item = i64>) -> StreetIndex {
+        Self {
+            by_commune: communes
+                .into_iter()
+                .filter_map(|commune| {
+                    self.by_commune
+                        .get(&commune)
+                        .map(|streets| (commune, streets.clone()))
+                })
+                .collect(),
+            rarity: self.rarity.clone(),
+        }
+    }
+
     /// The same index holding the communes of `other` too, still weighed against its own words.
     pub(crate) fn absorb(&mut self, other: StreetIndex) {
         self.by_commune.extend(other.by_commune);
