@@ -17,6 +17,32 @@ pub fn point(longitude: f64, latitude: f64) -> Vec<u8> {
     .concat()
 }
 
+/// Why bytes could not be read as the geometry asked for.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WkbError {
+    /// The bytes are not little-endian two-dimensional WKB of the kind asked for.
+    NotA {
+        /// The kind asked for.
+        kind: &'static str,
+    },
+}
+
+impl std::fmt::Display for WkbError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NotA { kind } => write!(formatter, "the bytes are not a little-endian WKB {kind}"),
+        }
+    }
+}
+
+impl std::error::Error for WkbError {}
+
+/// The longitude and latitude of a WKB point.
+pub fn read_point(bytes: &[u8]) -> Result<(f64, f64), WkbError> {
+    let _ = bytes;
+    Err(WkbError::NotA { kind: "point" })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -33,5 +59,15 @@ mod tests {
         ]
         .concat();
         assert_eq!(written, expected);
+    }
+
+    #[test]
+    fn given_a_point_written_as_wkb_when_read_back_then_the_same_longitude_and_latitude_come_back_to_the_bit()
+    {
+        let written = point(3.268_240_2, 48.198_06);
+
+        let read = read_point(&written);
+
+        assert_eq!(read, Ok((3.268_240_2, 48.198_06)));
     }
 }
