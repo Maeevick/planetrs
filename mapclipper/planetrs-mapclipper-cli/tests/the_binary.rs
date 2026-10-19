@@ -291,3 +291,31 @@ fn given_a_planet_when_indexed_then_the_dataset_holds_its_countrys_map_index_and
     );
     assert_eq!(text(&indexed.stderr).lines().last(), Some(ATTRIBUTION));
 }
+
+#[test]
+fn given_a_dataset_of_monaco_when_a_box_inside_it_is_harvested_without_a_planet_then_it_is_the_planets_harvest_to_the_byte()
+ {
+    let directory = scratch("from-the-dataset");
+    let indexed = indexing(&directory, "dataset");
+    assert!(indexed.status.success(), "{}", text(&indexed.stderr));
+    let planet = directory.join("monaco.osm.pbf").display().to_string();
+    let harvest = |options: &[&str], out: &str| {
+        let arguments: Vec<&str> = ["--dataset", "dataset", "harvest"]
+            .into_iter()
+            .chain(options.iter().copied())
+            .chain(FRAME)
+            .chain(["--out", out])
+            .collect();
+        run(&directory, &arguments)
+    };
+
+    let from_dataset = harvest(&[], "from-dataset.mapclip");
+    let from_planet = harvest(&["--planet", &planet], "from-planet.mapclip");
+
+    assert!(from_dataset.status.success(), "{}", text(&from_dataset.stderr));
+    assert!(from_planet.status.success(), "{}", text(&from_planet.stderr));
+    assert_eq!(
+        std::fs::read(directory.join("from-dataset.mapclip")).unwrap(),
+        std::fs::read(directory.join("from-planet.mapclip")).unwrap()
+    );
+}
