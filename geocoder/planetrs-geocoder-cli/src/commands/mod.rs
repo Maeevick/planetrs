@@ -7,16 +7,20 @@ pub mod status;
 pub mod trace;
 
 use std::io::Read;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::Instant;
 
 use anyhow::{Context as _, Result};
-use planetrs_dataset::DirectoryFiles;
+use planetrs_dataset::directory::MANIFEST;
+use planetrs_dataset::{Dataset, DatasetError, ForReadingFiles, Location, Unreachable};
 use planetrs_geocoder::{Geocoder, OpenError};
 
 use crate::ATTRIBUTION;
 use crate::cli::{Cli, Command, Global};
 use crate::data_dir::DataDir;
+
+/// The environment variable naming the dataset when `--dataset` does not.
+pub const DATASET_VARIABLE: &str = "PLANETRS_DATASET";
 
 /// A command asked for in a way it cannot be done, which exits 2 like a parsing error.
 #[derive(Debug, thiserror::Error)]
@@ -27,8 +31,8 @@ pub struct UsageError(pub String);
 pub struct Context {
     /// Where planets and the index are kept.
     pub data: DataDir,
-    /// The index `--index` names, when it does.
-    pub index: Option<PathBuf>,
+    /// The dataset to read or build: `--dataset`, else `PLANETRS_DATASET`, else the data directory's.
+    pub dataset: Location,
     /// Whether to say anything on stderr beyond errors and the attribution.
     pub quiet: bool,
 }
@@ -37,49 +41,59 @@ impl Context {
     /// Reads the shared settings, the environment standing behind `--data-dir`.
     pub fn of(global: &Global) -> Result<Self> {
         let data = DataDir::resolve(global.data_dir.as_deref(), |name| std::env::var_os(name))?;
-        let index = match global.index.as_deref() {
-            Some(remote) if remote.starts_with("http://") || remote.starts_with("https://") => {
-                return Err(UsageError(format!(
-                    "remote indexes are not supported yet: {remote}\n  \
-                     → build one locally: planetrs-geocoder download, then planetrs-geocoder index"
-                ))
-                .into());
-            }
-            Some(local) => Some(PathBuf::from(local)),
-            None => None,
-        };
+        let named = global.dataset.clone().or_else(|| {
+            std::env::var(DATASET_VARIABLE)
+                .ok()
+                .filter(|named| !named.is_empty())
+        });
+        let dataset = named.map_or_else(
+            || Location::Directory(data.dataset()),
+            |named| Location::of(&named),
+        );
         Ok(Self {
             data,
-            index,
+            dataset,
             quiet: global.quiet,
         })
     }
 
-    /// The index to read or build: `--index` when given, the data directory's otherwise.
-    pub fn index_directory(&self) -> PathBuf {
-        self.index.clone().unwrap_or_else(|| self.data.index())
+    /// The dataset's location as a person reads it.
+    pub fn dataset_name(&self) -> String {
+        match &self.dataset {
+            Location::Directory(directory) => directory.display().to_string(),
+            Location::Address(address) => address.clone(),
+        }
     }
 
-    /// Opens the index, saying how long it took, or says how to get one.
-    pub fn open_geocoder(&self) -> Result<Geocoder<DirectoryFiles>> {
-        let directory = self.index_directory();
+    /// Opens the dataset, saying how long it took, or says how to get one. A remote dataset keeps
+    /// what it reads in the data directory's cache.
+    pub fn open_geocoder(&self) -> Result<Geocoder<Box<dyn ForReadingFiles>>> {
         let started = Instant::now();
-        let geocoder = Geocoder::open(&directory).map_err(|error| match error {
-            OpenError::NoIndex { directory } => anyhow::anyhow!(
-                "no index in {}\n  \
+        let files = self.dataset.files().map_err(anyhow::Error::new)?;
+        let dataset = Dataset::open(files).map_err(|error| match error {
+            DatasetError::Unreachable(Unreachable::Missing { file }) if file == MANIFEST => anyhow::anyhow!(
+                "no dataset in {}\n  \
                  → build one:        planetrs-geocoder download, then planetrs-geocoder index\n  \
                  → from a planet:    planetrs-geocoder index --planet PATH\n  \
-                 → or read another:  --index DIR",
-                directory.display()
+                 → or read another:  --dataset DIR|URL",
+                self.dataset_name()
             ),
-            other => {
-                let failure = anyhow::Error::new(other);
-                anyhow::anyhow!("{failure:#}\n  → rebuild it: planetrs-geocoder index")
-            }
+            other => anyhow::Error::new(other).context(format!(
+                "the dataset in {} could not be read",
+                self.dataset_name()
+            )),
+        })?;
+        let dataset = match self.dataset {
+            Location::Address(_) => dataset.cached_in(self.data.cache()),
+            Location::Directory(_) => dataset,
+        };
+        let geocoder = Geocoder::over(dataset).map_err(|error| match error {
+            OpenError::NoIndex { directory } => anyhow::anyhow!("no dataset in {}", directory.display()),
+            other => anyhow::Error::new(other).context("→ rebuild it: planetrs-geocoder index"),
         })?;
         self.say(&format!(
-            "loaded the index {} in {:.1}s",
-            directory.display(),
+            "opened the dataset {} in {:.1}s",
+            self.dataset_name(),
             started.elapsed().as_secs_f64()
         ));
         Ok(geocoder)

@@ -5,7 +5,9 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context as _, Result};
 use planetrs_geocoder::build_index;
 
-use super::Context;
+use planetrs_dataset::Location;
+
+use super::{Context, UsageError};
 use crate::cli::IndexArgs;
 use crate::files::replace_directory;
 
@@ -61,7 +63,14 @@ fn planet_to_read(context: &Context, asked: Option<PathBuf>) -> Result<PathBuf> 
 pub fn run(context: &Context, arguments: IndexArgs) -> Result<()> {
     let planet = planet_to_read(context, arguments.planet)?;
     let codes = country_codes(&arguments.countries);
-    let destination = context.index_directory();
+    let Location::Directory(destination) = context.dataset.clone() else {
+        return Err(UsageError(format!(
+            "a dataset is built into a directory, and {} is a web address\n  \
+             → build into the data directory's: drop --dataset, or name a directory with --dataset DIR",
+            context.dataset_name()
+        ))
+        .into());
+    };
     let building = building_beside(&destination);
     if building.exists() {
         std::fs::remove_dir_all(&building)

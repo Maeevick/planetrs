@@ -146,9 +146,10 @@ pub struct Global {
     #[arg(long, global = true, value_name = "DIR")]
     pub data_dir: Option<PathBuf>,
 
-    /// The index to read, or to build with index, instead of the data directory's
-    #[arg(long = "index", id = "index_directory", global = true, value_name = "DIR")]
-    pub index: Option<String>,
+    /// The dataset to read, a directory or a web address, or to build into with index, instead of
+    /// the data directory's [env: PLANETRS_DATASET]
+    #[arg(long, global = true, value_name = "DIR|URL")]
+    pub dataset: Option<String>,
 
     /// Print nothing on stderr but errors and the attribution
     #[arg(short, long, global = true)]
@@ -288,9 +289,9 @@ mod tests {
 
     /// A shared setting given before the command must leave the command a command, not a site.
     #[test]
-    fn given_the_index_option_before_any_command_when_parsed_then_the_command_is_still_a_command() {
+    fn given_the_dataset_option_before_any_command_when_parsed_then_the_command_is_still_a_command() {
         assert!(matches!(
-            parsed(&["--index", "/index", "trace", SITE]).unwrap().command,
+            parsed(&["--dataset", "/dataset", "trace", SITE]).unwrap().command,
             Some(Command::Trace(_))
         ));
         assert!(matches!(
@@ -302,13 +303,13 @@ mod tests {
     #[test]
     fn given_shared_settings_before_or_after_a_command_when_parsed_then_both_places_work() {
         let before = parsed(&["--data-dir", "/data", "-q", "status"]).unwrap();
-        let after = parsed(&["status", "--data-dir", "/data", "--index", "/index"]).unwrap();
+        let after = parsed(&["status", "--data-dir", "/data", "--dataset", "/dataset"]).unwrap();
 
         assert!(matches!(before.command, Some(Command::Status)) && before.site.is_none());
         assert_eq!(before.global.data_dir, Some(PathBuf::from("/data")));
         assert!(before.global.quiet);
         assert!(matches!(after.command, Some(Command::Status)));
-        assert_eq!(after.global.index.as_deref(), Some("/index"));
+        assert_eq!(after.global.dataset.as_deref(), Some("/dataset"));
     }
 
     #[test]

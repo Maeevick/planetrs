@@ -90,9 +90,14 @@ impl DataDir {
         self.path.join("planets")
     }
 
-    /// Where the index is built and read, unless `--index` says otherwise.
-    pub fn index(&self) -> PathBuf {
-        self.path.join("geocoder").join("index")
+    /// Where the dataset is built and read, unless `--dataset` or `PLANETRS_DATASET` says otherwise.
+    pub fn dataset(&self) -> PathBuf {
+        self.path.join("dataset")
+    }
+
+    /// Where the ranges read of a remote dataset are kept, so that a second run reads none again.
+    pub fn cache(&self) -> PathBuf {
+        self.path.join("cache")
     }
 
     /// The newest planet in [`DataDir::planets`], if any.
@@ -200,14 +205,15 @@ mod tests {
     }
 
     #[test]
-    fn given_a_data_directory_when_asked_then_planets_and_the_index_have_their_own_places() {
+    fn given_a_data_directory_when_asked_then_planets_the_dataset_and_the_cache_have_their_own_places() {
         let data = DataDir::of("/data".into(), Source::Flag);
 
         assert_eq!(
-            (data.planets(), data.index()),
+            (data.planets(), data.dataset(), data.cache()),
             (
                 PathBuf::from("/data/planets"),
-                PathBuf::from("/data/geocoder/index")
+                PathBuf::from("/data/dataset"),
+                PathBuf::from("/data/cache")
             )
         );
     }

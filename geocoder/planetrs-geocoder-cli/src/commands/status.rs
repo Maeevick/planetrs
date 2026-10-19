@@ -6,8 +6,7 @@ use std::time::{Duration, UNIX_EPOCH};
 
 use anyhow::Result;
 
-use planetrs_dataset::directory::MANIFEST;
-use planetrs_dataset::{Manifest, Part};
+use planetrs_dataset::{Dataset, Manifest, Part};
 
 use super::Context;
 use crate::data_dir::planet_date;
@@ -110,26 +109,26 @@ pub fn run(context: &Context) -> Result<()> {
         )?;
     }
 
-    let index = context.index_directory();
-    let manifest = std::fs::read_to_string(index.join(MANIFEST))
+    let manifest = context
+        .dataset
+        .files()
         .ok()
-        .and_then(|text| Manifest::from_json(&text).ok());
+        .and_then(|files| Dataset::open(files).ok())
+        .map(|dataset| dataset.manifest().clone());
+    let place = context.dataset_name();
     match manifest {
         Some(manifest) => writeln!(
             stdout,
-            "index           {}\n                built {}",
-            index.display(),
+            "dataset         {place}\n                built {}",
             built_from(&manifest)
         )?,
         None if planets.is_empty() => writeln!(
             stdout,
-            "index           none in {}\n                → planetrs-geocoder download, then planetrs-geocoder index",
-            index.display()
+            "dataset         none in {place}\n                → planetrs-geocoder download, then planetrs-geocoder index"
         )?,
         None => writeln!(
             stdout,
-            "index           none in {}\n                → planetrs-geocoder index",
-            index.display()
+            "dataset         none in {place}\n                → planetrs-geocoder index"
         )?,
     }
     stdout.flush()?;

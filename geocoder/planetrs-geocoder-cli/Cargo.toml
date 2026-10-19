@@ -19,7 +19,7 @@ path = "src/main.rs"
 doc = false
 
 [dependencies]
-planetrs-dataset.workspace = true
+planetrs-dataset = { workspace = true, features = ["remote"] }
 planetrs-geocoder.workspace = true
 anyhow.workspace = true
 clap.workspace = true
