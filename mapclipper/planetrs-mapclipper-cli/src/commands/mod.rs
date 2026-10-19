@@ -6,13 +6,16 @@ pub mod inspect;
 pub mod render;
 pub mod themes;
 
+use planetrs_cli::ATTRIBUTION;
 use planetrs_mapclipper::error::ClipError;
 use planetrs_pbf::PbfError;
 
 use crate::cli::Command;
 
-/// Runs the command the command line asks for.
+/// Runs the command the command line asks for, ending with the OpenStreetMap attribution when it
+/// read OpenStreetMap data.
 pub fn run(command: Command) -> anyhow::Result<()> {
+    let reads_openstreetmap_data = !matches!(command, Command::Themes(_));
     match command {
         Command::Harvest(arguments) => harvest::run(arguments),
         Command::Render(arguments) => render::run(arguments),
@@ -20,7 +23,11 @@ pub fn run(command: Command) -> anyhow::Result<()> {
         Command::Inspect(arguments) => inspect::run(arguments),
         Command::Themes(arguments) => themes::run(arguments),
     }
-    .map_err(explained)
+    .map_err(explained)?;
+    if reads_openstreetmap_data {
+        eprintln!("{ATTRIBUTION}");
+    }
+    Ok(())
 }
 
 /// A failure, said with what to try next when there is something worth trying.
