@@ -8,6 +8,7 @@
 mod area;
 mod bounds;
 mod window;
+pub mod wkb;
 
 pub use area::{Area, GeoError};
 pub use bounds::{BoundingBox, metres_per_degree};
