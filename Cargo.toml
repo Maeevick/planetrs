@@ -36,6 +36,7 @@ parquet = { version = "60", default-features = false, features = ["arrow", "flat
 arrow-array = "60"
 arrow-schema = "60"
 bytes = "1"
+sha2 = "0.11"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

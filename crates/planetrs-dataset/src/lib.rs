@@ -10,6 +10,7 @@
 
 #![warn(missing_docs)]
 
+pub mod directory;
 pub mod files;
 pub mod gazetteer;
 mod geoparquet;
