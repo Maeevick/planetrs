@@ -31,6 +31,7 @@ planetrs-cli.workspace = true
 planetrs-mapclipper = { workspace = true, default-features = false }
 planetrs-geo.workspace = true
 planetrs-pbf.workspace = true
+anyhow.workspace = true
 clap.workspace = true
 
 [dev-dependencies]

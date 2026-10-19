@@ -6,7 +6,6 @@
 
 use std::path::PathBuf;
 
-use planetrs_mapclipper::error::ClipError;
 use planetrs_mapclipper::harvest::{Harvest, Member, NamedNode, Node, Provenance, Relation, Way, format};
 use planetrs_mapclipper_cli::cli::{
     Command, Drawing, Framing, InspectArgs, LabelKind, MarkKind, Outputs, RenderArgs, Shape,
@@ -252,8 +251,12 @@ fn when_a_frame_reaches_past_the_harvest_then_it_is_refused_with_both_extents_na
     }))
     .unwrap_err();
 
-    assert!(matches!(refused, ClipError::HarvestTooSmall { .. }));
-    assert!(refused.next_step().is_some(), "a refusal has to say what to try");
+    let said = refused.to_string();
+    assert!(said.contains("the harvest covers"), "{said}");
+    assert!(
+        said.contains("\n  → "),
+        "a refusal has to say what to try: {said}"
+    );
 }
 
 #[test]
@@ -268,7 +271,10 @@ fn when_a_theme_is_not_known_then_the_render_is_refused_rather_than_drawn_plain(
     }))
     .unwrap_err();
 
-    assert!(matches!(refused, ClipError::UnknownTheme { .. }));
+    assert!(
+        refused.to_string().contains("no theme called chartreuse"),
+        "{refused}"
+    );
 }
 
 #[test]
@@ -284,7 +290,10 @@ fn when_a_file_is_not_a_harvest_then_the_render_says_so_rather_than_misreading_i
     }))
     .unwrap_err();
 
-    assert!(matches!(refused, ClipError::NotAHarvest));
+    assert!(
+        refused.to_string().contains("this file is not a harvest"),
+        "{refused}"
+    );
 }
 
 /// A theme decides only what things look like, so the same harvest under two themes has to draw the

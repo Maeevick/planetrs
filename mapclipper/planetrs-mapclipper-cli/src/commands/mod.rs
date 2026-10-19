@@ -11,13 +11,22 @@ use planetrs_mapclipper::error::ClipError;
 use crate::cli::Command;
 
 /// Runs the command the command line asks for.
-pub fn run(command: Command) -> Result<(), ClipError> {
+pub fn run(command: Command) -> anyhow::Result<()> {
     match command {
         Command::Harvest(arguments) => harvest::run(arguments),
         Command::Render(arguments) => render::run(arguments),
         Command::Clip(arguments) => clip::run(arguments),
         Command::Inspect(arguments) => inspect::run(arguments),
         Command::Themes(arguments) => themes::run(arguments),
+    }
+    .map_err(explained)
+}
+
+/// A failure, said with what to try next when there is something worth trying.
+fn explained(failure: ClipError) -> anyhow::Error {
+    match failure.next_step() {
+        Some(step) => anyhow::anyhow!("{failure}\n  → {step}"),
+        None => failure.into(),
     }
 }
 

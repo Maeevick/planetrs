@@ -930,6 +930,7 @@ dependencies = [
 name = "planetrs-mapclipper-cli"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "clap",
  "planetrs-cli",
  "planetrs-geo",
