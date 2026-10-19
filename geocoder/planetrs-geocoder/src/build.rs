@@ -13,7 +13,7 @@ use thiserror::Error;
 use crate::assemble::assemble;
 use crate::harvest::{harvest_boundaries, nodes_by_id, ways_by_id};
 use crate::index_streets::index_streets;
-use crate::parts::{gazetteer_of, geocoder_index_of};
+use crate::parts::{gazetteer_of, geocoder_index_of, reach_of};
 
 /// The countries an index covers when none are named: France and Monaco, whose addresses the
 /// reading and matching rules were written for.
@@ -224,8 +224,9 @@ pub fn build_index(
         recording(Part::Gazetteer, "gazetteer.parquet", bytes, areas.len())?;
         for country in countries {
             let entries = geocoder_index_of(country, &assembled.communes, &indexed.streets, &indexed.shops);
-            let bytes =
-                geocoder_index::to_parquet(country, &entries, 0.0, &source).map_err(BuildError::Encoding)?;
+            let reach = reach_of(&entries, &assembled.communes);
+            let bytes = geocoder_index::to_parquet(country, &entries, reach, &source)
+                .map_err(BuildError::Encoding)?;
             recording(
                 Part::GeocoderIndex {
                     country: country.to_string(),

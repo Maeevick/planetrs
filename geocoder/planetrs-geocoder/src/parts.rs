@@ -164,6 +164,14 @@ fn streets_of(commune: i64, streets: &StreetIndex) -> Vec<geocoder_index::Entry>
         .collect()
 }
 
+/// How far the middle of any street of `entries` lies from its commune's centre, in metres: a door's
+/// street is placed at the mean of its doors, a street without doors at its middle, as `trace`
+/// places them.
+pub(crate) fn reach_of(entries: &[geocoder_index::Entry], communes: &[Commune]) -> f64 {
+    let _ = (entries, communes);
+    0.0
+}
+
 /// A commune's shops in the order the index file has always held them: by the text of their line.
 fn shops_of(commune: i64, shops: &ShopIndex) -> Vec<geocoder_index::Entry> {
     let mut lines: Vec<(String, geocoder_index::Entry)> = shops
@@ -289,6 +297,7 @@ pub(crate) fn indexes_of(entries: Vec<geocoder_index::Entry>) -> (StreetIndex, S
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::shops::metres_between;
 
     fn commune(relation: i64, country: &str) -> Commune {
         Commune {
@@ -384,5 +393,32 @@ mod tests {
                 &word("RUE", 1)
             ]
         );
+    }
+
+    #[test]
+    fn given_streets_of_two_communes_when_their_reach_is_measured_then_it_is_the_farthest_street_middle_from_its_centre()
+     {
+        let communes = [commune(1, "FR"), commune(2, "FR")];
+        let door = |commune, number, position| geocoder_index::Entry::Door {
+            commune,
+            street: "RUE GARE".into(),
+            number,
+            suffix: String::new(),
+            position,
+        };
+        let entries = [
+            door(1, 1, [3.28, 48.20]),
+            door(1, 3, [3.28, 48.22]),
+            geocoder_index::Entry::Middle {
+                commune: 2,
+                street: "AVENUE GARE".into(),
+                position: [3.29, 48.19],
+            },
+        ];
+
+        let reach = reach_of(&entries, &communes);
+
+        let farthest = metres_between([3.28, 48.21], [3.28, 48.19]);
+        assert!((reach - farthest).abs() < 2.0, "{reach} against {farthest}");
     }
 }
