@@ -57,6 +57,12 @@ planetrs-mapclipper clip --lat 43.7375 --lon 7.4210 \
 locally or over HTTP with `--dataset URL`. For any box inside the countries indexed, the harvest is
 the planet's own to the byte; `--planet PATH` reads the planet instead, for anywhere else.
 
+Each map index records the ground it answers for: the cells of a hundredth of a degree, about a
+kilometre, that lie wholly inside the countries indexed, a border between two of them counting as
+inside. A box that comes within a cell of a border with a country not indexed is refused rather than
+cut with holes, and the error says what to do instead: read the planet with `--planet PATH`, or index
+the countries the box reaches as well.
+
 ## A harvest is a thing you can give away
 
 A `.mapclip` is a few tens of megabytes and holds everything the planet has for one area. It is
