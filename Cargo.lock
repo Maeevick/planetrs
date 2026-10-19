@@ -880,6 +880,7 @@ dependencies = [
  "parquet",
  "planetrs-dataset",
  "planetrs-geo",
+ "planetrs-pbf",
  "serde",
  "serde_json",
  "sha2",

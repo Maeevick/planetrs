@@ -57,7 +57,7 @@ pub fn build_map_index(
 ) -> Result<Vec<CountryIndexed>, ClipError> {
     let path = planet;
     let planet = Planet::open(path)?;
-    let source = provenance_of(path, &planet);
+    let source = Provenance::of(path, &planet);
     let sections = planet.sections()?;
     let territory = countries_in(&planet, &sections, countries, progress)?;
     let codes: Vec<String> = territory.codes().map(str::to_string).collect();
@@ -579,20 +579,4 @@ fn named_tags(tags: Vec<(&[u8], &[u8])>) -> Tags {
 /// Text from the planet's bytes, as a harvest reads it: invalid UTF-8 replaced rather than refused.
 fn text(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).into_owned()
-}
-
-/// The planet a map index answers for, stated as the geocoder's build states it, so both tools'
-/// parts of a dataset name the same planet.
-fn provenance_of(path: &Path, planet: &Planet) -> Provenance {
-    Provenance {
-        source_name: path
-            .file_name()
-            .map(|name| name.to_string_lossy().into_owned())
-            .unwrap_or_default(),
-        file_size: planet.file_size,
-        blob_count: planet.blobs.len() as u64,
-        replication_timestamp: planet.header.replication_timestamp.unwrap_or_default(),
-        replication_sequence: planet.header.replication_sequence.unwrap_or_default(),
-        writing_program: planet.header.writing_program.clone().unwrap_or_default(),
-    }
 }

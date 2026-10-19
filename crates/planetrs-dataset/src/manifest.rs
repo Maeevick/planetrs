@@ -3,6 +3,9 @@
 //! The manifest names the planet every file was built from and lists each file with its size and
 //! checksum, so a reader can tell a whole dataset from a mixed one and a copy from a corrupted one.
 
+use std::path::Path;
+
+use planetrs_pbf::Planet;
 use serde::{Deserialize, Serialize};
 
 /// The format a manifest is written in, so that a reader can tell it from anything else.
@@ -29,6 +32,24 @@ pub struct Provenance {
     pub replication_sequence: i64,
     /// The program that wrote the planet file.
     pub writing_program: String,
+}
+
+impl Provenance {
+    /// The provenance of the planet file at `path`, as every build of a part states it, so that the
+    /// parts two tools build from one planet name the same planet.
+    pub fn of(path: &Path, planet: &Planet) -> Self {
+        Self {
+            source_name: path
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_default(),
+            file_size: planet.file_size,
+            blob_count: planet.blobs.len() as u64,
+            replication_timestamp: planet.header.replication_timestamp.unwrap_or_default(),
+            replication_sequence: planet.header.replication_sequence.unwrap_or_default(),
+            writing_program: planet.header.writing_program.clone().unwrap_or_default(),
+        }
+    }
 }
 
 /// Which part of the dataset a file is, ordered as a manifest lists them: the gazetteer first, then
