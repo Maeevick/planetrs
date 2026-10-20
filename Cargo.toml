@@ -12,7 +12,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.88"
 license = "MIT"
@@ -20,12 +20,12 @@ repository = "https://github.com/maeevick/planetrs"
 homepage = "https://github.com/maeevick/planetrs"
 
 [workspace.dependencies]
-planetrs-pbf = { path = "crates/planetrs-pbf", version = "0.1.0" }
-planetrs-geo = { path = "crates/planetrs-geo", version = "0.1.0" }
-planetrs-dataset = { path = "crates/planetrs-dataset", version = "0.1.0" }
-planetrs-cli = { path = "crates/planetrs-cli", version = "0.1.0" }
-planetrs-geocoder = { path = "geocoder/planetrs-geocoder", version = "0.1.0" }
-planetrs-mapclipper = { path = "mapclipper/planetrs-mapclipper", version = "0.1.0", default-features = false }
+planetrs-pbf = { path = "crates/planetrs-pbf", version = "0.2.0" }
+planetrs-geo = { path = "crates/planetrs-geo", version = "0.2.0" }
+planetrs-dataset = { path = "crates/planetrs-dataset", version = "0.2.0" }
+planetrs-cli = { path = "crates/planetrs-cli", version = "0.2.0" }
+planetrs-geocoder = { path = "geocoder/planetrs-geocoder", version = "0.2.0" }
+planetrs-mapclipper = { path = "mapclipper/planetrs-mapclipper", version = "0.2.0", default-features = false }
 flate2 = { version = "1.1", default-features = false, features = ["zlib-rs"] }
 rayon = "1.12"
 thiserror = "2"

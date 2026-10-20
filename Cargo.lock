@@ -863,7 +863,7 @@ checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
 name = "planetrs-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "planetrs-dataset",
@@ -872,7 +872,7 @@ dependencies = [
 
 [[package]]
 name = "planetrs-dataset"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "arrow-array",
  "arrow-schema",
@@ -890,11 +890,11 @@ dependencies = [
 
 [[package]]
 name = "planetrs-geo"
-version = "0.1.0"
+version = "0.2.0"
 
 [[package]]
 name = "planetrs-geocoder"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "planetrs-dataset",
  "planetrs-geo",
@@ -905,7 +905,7 @@ dependencies = [
 
 [[package]]
 name = "planetrs-geocoder-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -921,7 +921,7 @@ dependencies = [
 
 [[package]]
 name = "planetrs-mapclipper"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "planetrs-dataset",
  "planetrs-geo",
@@ -933,7 +933,7 @@ dependencies = [
 
 [[package]]
 name = "planetrs-mapclipper-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -946,7 +946,7 @@ dependencies = [
 
 [[package]]
 name = "planetrs-pbf"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "flate2",
 ]
