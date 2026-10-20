@@ -85,11 +85,11 @@ label;address;postal code;city;country;lat;lon;precision
 Musée océanographique;Avenue Saint-Martin;98000;Monaco;Monaco;43.731809;7.427267;Street
 ```
 
-The map above came out of the same file, indexed once and then cut from the dataset:
+The map above came out of the same file. A dataset of Monaco alone answers only for boxes inside the
+principality, and this one takes in the French streets around it, so it is cut from the file itself:
 
 ```sh
-planetrs-mapclipper index --planet ~/.local/share/planetrs/planets/monaco-latest.osm.pbf --countries MC
-planetrs-mapclipper clip \
+planetrs-mapclipper clip --planet ~/.local/share/planetrs/planets/monaco-latest.osm.pbf \
   --lat 43.7375 --lon 7.4210 --width-km 3 --height-km 2 --width-px 900 --height-px 600 \
   --theme atlas --labels settlements --marker name --name "en=Monaco" --png monaco.png
 ```
