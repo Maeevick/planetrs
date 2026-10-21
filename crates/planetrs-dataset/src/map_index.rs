@@ -35,6 +35,9 @@ const GRID: &str = "planetrs.grid";
 /// The footer key holding the country the file is the map index of.
 const COUNTRY: &str = "planetrs.country";
 
+/// The footer key naming the tile a file is, as level, column and row.
+const TILE: &str = "planetrs.tile";
+
 /// The footer key holding the ground where a box cut from the file lacks nothing the planet holds.
 const COVERAGE: &str = "planetrs.coverage";
 
@@ -147,9 +150,23 @@ impl Tile {
     }
 }
 
-/// A map index cut into tiles.
+/// A map index cut into tiles: its elements in the order they are written, and each tile's run of
+/// them.
 pub struct Tiling {
-    tiles: Vec<Tile>,
+    placed: Vec<Placed>,
+    tiles: Vec<(Tile, Range<usize>)>,
+}
+
+/// A tile written: where it went, how many rows it holds and the box around its elements, which a
+/// dataset's manifest keeps so that a reader opens only the tiles near its own box.
+#[derive(Debug)]
+pub struct TileWritten<W> {
+    /// Where the tile was written.
+    pub out: W,
+    /// How many rows it holds.
+    pub rows: u64,
+    /// The box around its elements, as west, south, east and north in degrees.
+    pub bbox: [f64; 4],
 }
 
 impl Tiling {
@@ -168,20 +185,61 @@ impl Tiling {
             .map(|(level, run)| {
                 let (x, y) = cell_of_centre(box_of(&element_at(placed[run.start].at))?);
                 let shift = HILBERT_ORDER - level;
-                Ok(Tile {
+                let tile = Tile {
                     level: level as u8,
                     x: x >> shift,
                     y: y >> shift,
-                })
+                };
+                Ok((tile, run))
             })
             .collect::<Result<_, TableError>>()?;
-        Ok(Self { tiles })
+        Ok(Self { placed, tiles })
     }
 
     /// The tiles, along the Hilbert curve.
     pub fn tiles(&self) -> Vec<Tile> {
-        self.tiles.clone()
+        self.tiles.iter().map(|(tile, _)| *tile).collect()
     }
+
+    /// Writes the tile at `which` of [`Tiling::tiles`] into `out`, building its elements with
+    /// `element_at` again, in row groups that never part a multipolygon from its members.
+    pub fn write<W: Write + Send>(
+        &self,
+        which: usize,
+        out: W,
+        element_at: impl Fn(usize) -> Element + Sync,
+        grid: Grid,
+    ) -> Result<TileWritten<W>, TableError> {
+        let (tile, _) = &self.tiles[which];
+        let (out, rows, bbox) = write_placed(
+            out,
+            &tile_stated(*tile, grid),
+            &self.placed,
+            &element_at,
+            ROWS_PER_ROW_GROUP,
+        )?;
+        let bbox = bbox.ok_or_else(|| TableError::Unwritable {
+            detail: format!("the tile {} holds no element", tile.file_name()),
+        })?;
+        Ok(TileWritten { out, rows, bbox })
+    }
+}
+
+/// What a tile's footer states beside its rows: the GeoParquet declaration, the licence, the grid
+/// its positions were read on and the tile it is.
+fn tile_stated(tile: Tile, grid: Grid) -> Vec<(&'static str, String)> {
+    vec![
+        geoparquet::geo_covered_by_bbox(&["Point", "LineString", "GeometryCollection"]),
+        manifest::notice("map tile"),
+        (
+            GRID,
+            format!(
+                "{},{},{}",
+                grid.granularity, grid.latitude_offset, grid.longitude_offset
+            ),
+        ),
+        (TILE, format!("{}/{}/{}", tile.level, tile.x, tile.y)),
+    ]
 }
 
 /// One element as a map index places it: where its box's centre falls along the Hilbert curve, its
@@ -329,40 +387,67 @@ fn written<W: Write + Send>(
     rows_per_row_group: usize,
 ) -> Result<W, TableError> {
     let placed = placed_of(count, &element_at)?;
-    let mut writer = TableWriter::into(out, &stated, &BOX_FIELDS)
+    write_placed(out, &stated, &placed, &element_at, rows_per_row_group).map(|(out, _, _)| out)
+}
+
+/// Writes the elements `placed` names, built by `element_at`, in row groups of about
+/// `rows_per_row_group` rows, and gives back `out`, how many rows went in and the box around them.
+fn write_placed<W: Write + Send>(
+    out: W,
+    stated: &[(&'static str, String)],
+    placed: &[Placed],
+    element_at: &(impl Fn(usize) -> Element + Sync),
+    rows_per_row_group: usize,
+) -> Result<(W, u64, Option<[f64; 4]>), TableError> {
+    let mut writer = TableWriter::into(out, stated, &BOX_FIELDS)
         .with_close_integers(&["refs.list.item", "unresolved.list.item", "member_ways.list.item"])
         .with_split_reals(&BOX_FIELDS)
         .with_unique_values(&["geometry"]);
     let mut group: Vec<usize> = Vec::new();
     let mut rows = 0;
     let mut groups_written = 0;
-    for element in &placed {
+    let mut written_rows = 0u64;
+    let mut around: Option<[f64; 4]> = None;
+    let mut flush = |writer: &mut TableWriter<W>, group: &[usize], rows: usize| -> Result<(), TableError> {
+        if let Some(bbox) = write_group(writer, group, element_at)? {
+            around = Some(around.map_or(bbox, |around| union(around, bbox)));
+        }
+        written_rows += rows as u64;
+        Ok(())
+    };
+    for element in placed {
         group.push(element.at);
         rows += element.rows;
         if rows >= rows_per_row_group {
-            write_group(&mut writer, &group, &element_at)?;
+            flush(&mut writer, &group, rows)?;
             groups_written += 1;
             group.clear();
             rows = 0;
         }
     }
     if !group.is_empty() || groups_written == 0 {
-        write_group(&mut writer, &group, &element_at)?;
+        flush(&mut writer, &group, rows)?;
     }
-    writer.finish()
+    Ok((writer.finish()?, written_rows, around))
 }
 
-/// Builds the elements at `group`, in that order, and writes their rows as one row group.
+/// Builds the elements at `group`, in that order, writes their rows as one row group, and gives back
+/// the box around them.
 fn write_group<W: Write + Send>(
     writer: &mut TableWriter<W>,
     group: &[usize],
     element_at: &(impl Fn(usize) -> Element + Sync),
-) -> Result<(), TableError> {
-    let rows: Vec<Vec<Row>> = group
+) -> Result<Option<[f64; 4]>, TableError> {
+    let rows: Vec<Row> = group
         .par_iter()
         .map(|at| rows_of(&element_at(*at)))
-        .collect::<Result<_, TableError>>()?;
-    writer.write(&columns_of(rows.into_iter().flatten().collect()))
+        .collect::<Result<Vec<Vec<Row>>, TableError>>()?
+        .into_iter()
+        .flatten()
+        .collect();
+    let around = rows.iter().map(|row| row.bbox).reduce(union);
+    writer.write(&columns_of(rows))?;
+    Ok(around)
 }
 
 /// The box of an element's own row: a node's point, a way's placed nodes, a multipolygon's members.
@@ -856,6 +941,60 @@ mod tests {
         assert_eq!(
             tiles,
             vec![Tile { level: 1, x: 0, y: 1 }, Tile { level: 1, x: 1, y: 1 }]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn given_a_harbour_in_monaco_and_a_quay_in_abidjan_in_two_tiles_when_written_then_each_holds_its_own_elements_rows_and_the_box_around_them()
+    -> Result<(), TableError> {
+        let (monaco, abidjan) = (harbour(), abidjan_quay());
+        let elements = [monaco.clone(), abidjan.clone()].concat();
+        let tiling = Tiling::of(
+            elements.len(),
+            |at| elements[at].clone(),
+            weight(&monaco).max(weight(&abidjan)),
+        )?;
+
+        let written = (0..tiling.tiles().len())
+            .map(|which| tiling.write(which, Vec::new(), |at| elements[at].clone(), grid()))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let held = |tile: Tile| -> Result<(Vec<Element>, u64, [f64; 4]), TableError> {
+            let at = tiling
+                .tiles()
+                .iter()
+                .position(|each| *each == tile)
+                .unwrap_or(usize::MAX);
+            let written = &written[at];
+            Ok((by_id(from_parquet(&written.out)?.1), written.rows, written.bbox))
+        };
+        let degrees = |nanodegrees: i64| nanodegrees as f64 / 1e9;
+        assert_eq!(
+            held(Tile { level: 1, x: 0, y: 1 })?,
+            (
+                abidjan,
+                1,
+                [
+                    degrees(-4_012_000_000),
+                    degrees(5_269_000_000),
+                    degrees(-4_010_000_000),
+                    degrees(5_270_000_000)
+                ]
+            )
+        );
+        assert_eq!(
+            held(Tile { level: 1, x: 1, y: 1 })?,
+            (
+                by_id(monaco),
+                6,
+                [
+                    degrees(7_418_600_000),
+                    degrees(43_734_700_000),
+                    degrees(7_510_000_000),
+                    degrees(43_810_000_000)
+                ]
+            )
         );
         Ok(())
     }
