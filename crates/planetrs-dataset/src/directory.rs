@@ -181,12 +181,50 @@ pub struct Written {
 pub fn record_all_written(
     directory: &Path,
     planet: &Provenance,
-    _family: impl Fn(&Part) -> bool,
+    family: impl Fn(&Part) -> bool,
     written: Vec<Written>,
 ) -> Result<Manifest, RecordError> {
-    let mut manifest = of_the_same_planet(directory, planet)?;
+    let recorded = match of_the_same_planet(directory, planet) {
+        Ok(recorded) => recorded,
+        Err(refused) => {
+            for part in &written {
+                let _ = std::fs::remove_file(written_beside(directory, &part.name));
+            }
+            return Err(refused);
+        }
+    };
+    let mut entries = Vec::with_capacity(written.len());
     for part in written {
-        manifest = record_written(directory, planet, part.part, &part.name, part.rows)?;
+        let beside = written_beside(directory, &part.name);
+        let (bytes, sha256) = measured(&beside)?;
+        std::fs::rename(&beside, directory.join(&part.name)).map_err(io_at(&beside))?;
+        entries.push(Entry {
+            part: part.part,
+            file: part.name,
+            url: None,
+            bytes,
+            sha256,
+            rows: part.rows,
+            bbox: part.bbox,
+        });
+    }
+    let (replaced, kept): (Vec<Entry>, Vec<Entry>) =
+        recorded.files.into_iter().partition(|entry| family(&entry.part));
+    let gone: Vec<String> = replaced
+        .into_iter()
+        .map(|entry| entry.file)
+        .filter(|file| !entries.iter().any(|entry| entry.file == *file))
+        .collect();
+    let mut files: Vec<Entry> = kept.into_iter().chain(entries).collect();
+    files.sort_by(|left, right| left.part.cmp(&right.part));
+    let manifest = Manifest {
+        planet: recorded.planet,
+        files,
+    };
+    write_whole(&directory.join(MANIFEST), manifest.to_json().as_bytes())?;
+    for file in gone {
+        let path = directory.join(file);
+        std::fs::remove_file(&path).map_err(io_at(&path))?;
     }
     Ok(manifest)
 }
