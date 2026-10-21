@@ -7,7 +7,7 @@ use anyhow::Result;
 use planetrs_cli::dataset::{country_codes, rebuild};
 use planetrs_cli::{Progress, UsageError};
 use planetrs_dataset::directory::CarriedOver;
-use planetrs_dataset::map_index::TILE_WEIGHT;
+use planetrs_dataset::map_index::{Scope, TILE_WEIGHT};
 use planetrs_dataset::{Location, Part};
 use planetrs_mapclipper::index::build_map_index;
 
@@ -32,10 +32,10 @@ pub fn run(context: &Context, arguments: IndexArgs) -> Result<()> {
         codes.join(","),
         destination.display()
     ));
-    let country_refs: Vec<&str> = codes.iter().map(String::as_str).collect();
+    let scope = Scope::Countries(codes.clone());
     let progress = Progress::to_stderr(context.quiet);
     let (indexed, carried) = rebuild(&destination, is_the_geocoders, |building| {
-        let built = build_map_index(&planet, building, &country_refs, TILE_WEIGHT, &|line| {
+        let built = build_map_index(&planet, building, &scope, TILE_WEIGHT, &|line| {
             progress.note(line)
         });
         progress.clear();
@@ -44,13 +44,13 @@ pub fn run(context: &Context, arguments: IndexArgs) -> Result<()> {
     for line in carried_lines(&carried) {
         context.say(&line);
     }
+    let whom = match &indexed.scope {
+        Scope::Planet => "the planet".to_string(),
+        Scope::Countries(countries) => countries.join(", "),
+    };
     context.say(&format!(
-        "indexed {}: {} nodes, {} ways and {} multipolygons, in {} tiles",
-        indexed.countries.join(", "),
-        indexed.nodes,
-        indexed.ways,
-        indexed.multipolygons,
-        indexed.tiles
+        "indexed {whom}: {} nodes, {} ways and {} multipolygons, in {} tiles",
+        indexed.nodes, indexed.ways, indexed.multipolygons, indexed.tiles
     ));
     Ok(())
 }

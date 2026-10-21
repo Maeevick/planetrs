@@ -8,7 +8,7 @@
 use std::path::{Path, PathBuf};
 
 use planetrs_dataset::directory::MANIFEST;
-use planetrs_dataset::map_index::{self, Element, Line, Position, TILE_WEIGHT};
+use planetrs_dataset::map_index::{self, Element, Line, Position, Scope, TILE_WEIGHT};
 use planetrs_dataset::{Manifest, Part};
 use planetrs_mapclipper::error::ClipError;
 use planetrs_mapclipper::index::build_map_index;
@@ -39,8 +39,12 @@ fn indexed_in_tiles_of(name: &str, tile_weight: u64) -> Result<PathBuf, Box<dyn 
     let planet = directory.join("riviera.osm.pbf");
     riviera().write(&planet)?;
     let dataset = directory.join("dataset");
-    build_map_index(&planet, &dataset, &["FR", "MC"], tile_weight, &|_| {})?;
+    build_map_index(&planet, &dataset, &france_and_monaco(), tile_weight, &|_| {})?;
     Ok(dataset)
+}
+
+fn france_and_monaco() -> Scope {
+    Scope::Countries(vec!["FR".into(), "MC".into()])
 }
 
 fn manifest_of(dataset: &Path) -> Result<Manifest, Box<dyn std::error::Error>> {
@@ -213,7 +217,13 @@ fn given_a_country_the_planet_has_no_outline_of_when_indexed_then_the_build_name
     riviera().write(&planet)?;
     let dataset = directory.join("dataset");
 
-    let built = build_map_index(&planet, &dataset, &["FR", "BE"], TILE_WEIGHT, &|_| {});
+    let built = build_map_index(
+        &planet,
+        &dataset,
+        &Scope::Countries(vec!["FR".into(), "BE".into()]),
+        TILE_WEIGHT,
+        &|_| {},
+    );
 
     assert!(
         matches!(&built, Err(ClipError::UnknownCountry { country }) if country == "BE"),

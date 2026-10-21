@@ -48,8 +48,8 @@ const RUN_BYTES: usize = 1 << 31;
 /// What a map index holds, once built.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MapIndexed {
-    /// The countries it was built for, by ISO 3166-1 code.
-    pub countries: Vec<String>,
+    /// Whom it was built for: the planet, or the countries asked for.
+    pub scope: Scope,
     /// Nodes kept for a name or for standing alone.
     pub nodes: usize,
     /// Ways with a node in one of the countries.
@@ -60,8 +60,9 @@ pub struct MapIndexed {
     pub tiles: usize,
 }
 
-/// Builds the map index of the countries `countries` from the planet file at `planet`, cut into
-/// tiles, and records it in the dataset in `directory` in place of any map index it held.
+/// Builds the map index `scope` asks for, of the whole planet or of countries, from the planet file
+/// at `planet`, cut into tiles, and records it in the dataset in `directory` in place of any map
+/// index it held.
 ///
 /// Its tiles weigh at most `tile_weight` each (see [`planetrs_dataset::map_index::TILE_WEIGHT`]),
 /// but where one cell of the finest tiling weighs more. The build's work files go beside the dataset
@@ -70,7 +71,7 @@ pub struct MapIndexed {
 pub fn build_map_index(
     planet: &Path,
     directory: &Path,
-    countries: &[&str],
+    scope: &Scope,
     tile_weight: u64,
     progress: &(dyn Fn(&str) + Sync),
 ) -> Result<MapIndexed, ClipError> {
@@ -78,7 +79,11 @@ pub fn build_map_index(
     let planet = Planet::open(path)?;
     let source = Provenance::of(path, &planet);
     let sections = planet.sections()?;
-    let territory = countries_in(&planet, &sections, countries, progress)?;
+    let countries: Vec<&str> = match scope {
+        Scope::Planet => Vec::new(),
+        Scope::Countries(codes) => codes.iter().map(String::as_str).collect(),
+    };
+    let territory = countries_in(&planet, &sections, &countries, progress)?;
     let codes: Vec<String> = territory.codes().map(str::to_string).collect();
     let coverage = territory.coverage();
     std::fs::create_dir_all(directory).map_err(|failure| ClipError::writing(directory, failure))?;
@@ -257,7 +262,7 @@ pub fn build_map_index(
         }
     })?;
     Ok(MapIndexed {
-        countries: codes,
+        scope: Scope::Countries(codes),
         nodes: nodes_kept.into_inner(),
         ways: ways_kept.into_inner(),
         multipolygons: multipolygons_kept,

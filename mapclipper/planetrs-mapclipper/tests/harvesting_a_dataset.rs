@@ -6,7 +6,7 @@
 
 use std::path::PathBuf;
 
-use planetrs_dataset::map_index::TILE_WEIGHT;
+use planetrs_dataset::map_index::{Scope, TILE_WEIGHT};
 use planetrs_dataset::{Dataset, DirectoryFiles};
 use planetrs_geo::{Area, BoundingBox};
 use planetrs_mapclipper::error::ClipError;
@@ -24,6 +24,14 @@ type Outcome = Result<(), Box<dyn std::error::Error>>;
 /// The riviera written as a planet and indexed for France and Monaco, both in one scratch
 /// directory.
 fn planet_and_dataset(name: &str) -> Result<(PathBuf, PathBuf), Box<dyn std::error::Error>> {
+    planet_and_dataset_of(name, &Scope::Countries(vec!["FR".into(), "MC".into()]))
+}
+
+/// The riviera written as a planet and indexed as `scope` asks.
+fn planet_and_dataset_of(
+    name: &str,
+    scope: &Scope,
+) -> Result<(PathBuf, PathBuf), Box<dyn std::error::Error>> {
     let directory = std::env::temp_dir().join(format!(
         "planetrs-mapclipper-harvesting-dataset-{name}-{}",
         std::process::id()
@@ -33,13 +41,23 @@ fn planet_and_dataset(name: &str) -> Result<(PathBuf, PathBuf), Box<dyn std::err
     let planet = directory.join("riviera.osm.pbf");
     riviera().write(&planet)?;
     let dataset = directory.join("dataset");
-    build_map_index(&planet, &dataset, &["FR", "MC"], TILE_WEIGHT, &|_| {})?;
+    build_map_index(&planet, &dataset, scope, TILE_WEIGHT, &|_| {})?;
     Ok((planet, dataset))
 }
 
 /// The bytes of the harvest of `box_`, cut from the planet and from the dataset.
 fn both_harvests(name: &str, box_: BoundingBox) -> Result<(Vec<u8>, Vec<u8>), Box<dyn std::error::Error>> {
-    let (planet, dataset) = planet_and_dataset(name)?;
+    both_harvests_of(name, box_, &Scope::Countries(vec!["FR".into(), "MC".into()]))
+}
+
+/// The bytes of the harvest of `box_`, cut from the planet and from the dataset indexed as `scope`
+/// asks.
+fn both_harvests_of(
+    name: &str,
+    box_: BoundingBox,
+    scope: &Scope,
+) -> Result<(Vec<u8>, Vec<u8>), Box<dyn std::error::Error>> {
+    let (planet, dataset) = planet_and_dataset_of(name, scope)?;
     let area = Area::new(box_, 0.0)?;
     let (from_planet, _) = harvest_area(&Planet::open(&planet)?, "riviera.osm.pbf", &area, &|_| {})?;
     let from_dataset = harvest_from_dataset(&Dataset::open(DirectoryFiles::at(&dataset))?, &area)?;
@@ -120,5 +138,23 @@ fn given_a_box_reaching_beyond_the_countries_indexed_when_harvested_from_the_dat
         matches!(&refused, Err(ClipError::OutsideTheDataset { countries }) if countries == &["FR", "MC"]),
         "{refused:?}"
     );
+    Ok(())
+}
+
+#[test]
+fn given_the_riviera_indexed_as_a_whole_planet_when_a_box_beyond_its_countries_is_harvested_from_the_dataset_then_it_is_the_planets_harvest_to_the_byte()
+-> Outcome {
+    let (from_planet, from_dataset) = both_harvests_of(
+        "planet",
+        BoundingBox {
+            west: 7.98,
+            south: 44.98,
+            east: 8.03,
+            north: 45.03,
+        },
+        &Scope::Planet,
+    )?;
+
+    assert_eq!(from_dataset, from_planet);
     Ok(())
 }
