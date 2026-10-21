@@ -210,11 +210,11 @@ impl Tiling {
         element_at: impl Fn(usize) -> Element + Sync,
         grid: Grid,
     ) -> Result<TileWritten<W>, TableError> {
-        let (tile, _) = &self.tiles[which];
+        let (tile, run) = &self.tiles[which];
         let (out, rows, bbox) = write_placed(
             out,
             &tile_stated(*tile, grid),
-            &self.placed,
+            &self.placed[run.clone()],
             &element_at,
             ROWS_PER_ROW_GROUP,
         )?;
