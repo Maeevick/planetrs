@@ -7,6 +7,8 @@
 //! multipolygon with a member among those ways, each member way whole with every node placed.
 
 mod countries;
+#[allow(dead_code)]
+mod positions;
 mod scan;
 
 use std::fs::File;
