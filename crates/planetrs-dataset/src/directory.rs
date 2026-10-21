@@ -82,6 +82,7 @@ pub fn record(
             bytes: bytes.len() as u64,
             sha256: sha256_of(bytes),
             rows,
+            bbox: None,
         },
     )
 }
@@ -154,6 +155,7 @@ pub fn record_written(
             bytes,
             sha256,
             rows,
+            bbox: None,
         },
     )
 }

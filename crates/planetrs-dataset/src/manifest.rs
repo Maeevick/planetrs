@@ -53,7 +53,7 @@ impl Provenance {
 }
 
 /// Which part of the dataset a file is, ordered as a manifest lists them: the gazetteer first, then
-/// the geocoder indexes, then the map indexes, each by country.
+/// the geocoder indexes by country, then the map index: its summary, then its tiles.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(tag = "part", rename_all = "kebab-case")]
 pub enum Part {
@@ -69,10 +69,23 @@ pub enum Part {
         /// The country's ISO 3166-1 code.
         country: String,
     },
+    /// What the map index says as a whole: the countries it was built for, or the whole planet, the
+    /// grid of its positions and the ground it covers, read before any of its tiles.
+    MapSummary,
+    /// One tile of the map index: the cell of a quadtree over the planet holding the centres of its
+    /// elements' boxes.
+    MapTile {
+        /// How many times the planet was cut in four to reach it.
+        level: u8,
+        /// Its column, from 180°W.
+        x: u32,
+        /// Its row, from 90°S.
+        y: u32,
+    },
 }
 
 /// One file of the dataset.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Entry {
     /// What the file is.
     #[serde(flatten)]
@@ -88,10 +101,14 @@ pub struct Entry {
     pub sha256: String,
     /// How many rows it holds.
     pub rows: u64,
+    /// For a tile of the map index, the box around its elements, as west, south, east and north in
+    /// degrees, by which a reader picks the tiles near its own box.
+    #[serde(skip)]
+    pub bbox: Option<[f64; 4]>,
 }
 
 /// The table of contents of a dataset.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Manifest {
     /// The planet every file was built from.
     pub planet: Provenance,
@@ -209,6 +226,7 @@ mod tests {
                     bytes: 9_812_345,
                     sha256: "3f".repeat(32),
                     rows: 750_027,
+                    bbox: None,
                 },
                 Entry {
                     part: Part::GeocoderIndex { country: "MC".into() },
@@ -217,13 +235,32 @@ mod tests {
                     bytes: 61_234,
                     sha256: "a0".repeat(32),
                     rows: 2_345,
+                    bbox: None,
+                },
+                Entry {
+                    part: Part::MapSummary,
+                    file: "map-summary.json".into(),
+                    url: None,
+                    bytes: 1_204,
+                    sha256: "5c".repeat(32),
+                    rows: 1,
+                    bbox: None,
+                },
+                Entry {
+                    part: Part::MapTile { level: 0, x: 0, y: 0 },
+                    file: "map-0-0-0.parquet".into(),
+                    url: None,
+                    bytes: 971_748,
+                    sha256: "e7".repeat(32),
+                    rows: 8_587,
+                    bbox: Some([7.390203, 43.518709, 7.499393, 43.7562]),
                 },
             ],
         }
     }
 
     #[test]
-    fn given_a_manifest_when_written_as_json_and_read_back_then_it_is_the_same_manifest() {
+    fn given_a_manifest_listing_a_map_index_in_tiles_when_written_as_json_and_read_back_then_it_is_the_same_manifest_boxes_included() {
         let manifest = monaco();
 
         let read_back = Manifest::from_json(&manifest.to_json());

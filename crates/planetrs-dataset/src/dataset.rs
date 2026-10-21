@@ -425,6 +425,7 @@ mod tests {
                 bytes: gazetteer.len() as u64,
                 sha256: String::new(),
                 rows: 1,
+                bbox: None,
             }],
         };
         Ok(FilesInMemory::default()
@@ -453,6 +454,7 @@ mod tests {
             bytes: bytes.len() as u64,
             sha256: String::new(),
             rows: 1,
+            bbox: None,
         };
         let manifest = Manifest {
             planet: planet(),
@@ -542,6 +544,7 @@ mod tests {
                 bytes: index.len() as u64,
                 sha256: String::new(),
                 rows: 6,
+                bbox: None,
             }],
         };
         Ok(FilesInMemory::default()
@@ -605,6 +608,7 @@ mod tests {
                 bytes: index.len() as u64,
                 sha256: String::new(),
                 rows: 2,
+                bbox: None,
             }],
         };
         let files = FilesInMemory::default()
@@ -670,6 +674,7 @@ mod tests {
                 bytes: map.len() as u64,
                 sha256: String::new(),
                 rows: 3,
+                bbox: None,
             }],
         };
         Ok(Counting {

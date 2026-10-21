@@ -179,6 +179,7 @@ mod tests {
             bytes: 1,
             sha256: String::new(),
             rows: 1,
+            bbox: None,
         };
         Manifest {
             planet: Provenance {

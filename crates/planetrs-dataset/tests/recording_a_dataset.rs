@@ -59,6 +59,7 @@ fn given_an_empty_directory_when_a_gazetteer_is_recorded_then_the_file_and_a_man
                 bytes: 21,
                 sha256: "6b4914a574a6da19a6a71157fc79486645632c732add132be96f06417c5179ae".into(),
                 rows: 3,
+                bbox: None,
             }],
         }
     );
@@ -351,6 +352,7 @@ fn given_a_part_written_beside_the_dataset_when_recorded_then_it_takes_its_name_
             bytes: 21,
             sha256: "6b4914a574a6da19a6a71157fc79486645632c732add132be96f06417c5179ae".into(),
             rows: 3,
+            bbox: None,
         }]
     );
     Ok(())
