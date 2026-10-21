@@ -166,6 +166,11 @@ impl Coverage {
             .collect()
     }
 
+    /// The coverage of a dataset built from the whole planet, which answers for every box.
+    pub fn everywhere() -> Coverage {
+        Coverage::default()
+    }
+
     /// Whether every cell `box_` touches is covered by one of `coverages`.
     pub fn cover(coverages: &[Coverage], box_: &BoundingBox) -> bool {
         (cell_of_coverage(box_.south)..=cell_of_coverage(box_.north)).all(|row| {
@@ -434,6 +439,17 @@ mod tests {
             !Coverage::cover(&coverages, &box_(-0.10, 48.991, 0.10, 48.999)),
             "the cells along the border"
         );
+    }
+
+    #[test]
+    fn given_a_dataset_of_the_whole_planet_when_covered_then_every_box_is_covered_and_its_text_says_so() {
+        let everywhere = Coverage::everywhere();
+
+        assert!(Coverage::cover(
+            std::slice::from_ref(&everywhere),
+            &box_(-179.99, -89.99, 179.99, 89.99)
+        ));
+        assert_eq!(Coverage::from_text(&everywhere.to_text()), Some(everywhere));
     }
 
     #[test]
