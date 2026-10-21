@@ -103,7 +103,7 @@ pub struct Entry {
     pub rows: u64,
     /// For a tile of the map index, the box around its elements, as west, south, east and north in
     /// degrees, by which a reader picks the tiles near its own box.
-    #[serde(skip)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bbox: Option<[f64; 4]>,
 }
 
@@ -260,7 +260,8 @@ mod tests {
     }
 
     #[test]
-    fn given_a_manifest_listing_a_map_index_in_tiles_when_written_as_json_and_read_back_then_it_is_the_same_manifest_boxes_included() {
+    fn given_a_manifest_listing_a_map_index_in_tiles_when_written_as_json_and_read_back_then_it_is_the_same_manifest_boxes_included()
+     {
         let manifest = monaco();
 
         let read_back = Manifest::from_json(&manifest.to_json());
