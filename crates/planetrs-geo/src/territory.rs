@@ -188,7 +188,17 @@ impl Coverage {
 
     /// The coverage of `outlines` indexed together, as one: every cell one of them covers.
     pub fn of(outlines: &[&Outline]) -> Coverage {
-        Coverage::of_each(outlines).into_iter().next().unwrap_or_default()
+        let mut rows: BTreeMap<i32, Vec<(i32, i32)>> = BTreeMap::new();
+        for coverage in Coverage::of_each(outlines) {
+            if let Ground::Cells(each) = coverage.ground {
+                for (row, runs) in each {
+                    rows.entry(row).or_default().extend(runs);
+                }
+            }
+        }
+        Coverage {
+            ground: Ground::Cells(rows.into_iter().map(|(row, runs)| (row, merged(runs))).collect()),
+        }
     }
 
     /// The coverage of a dataset built from the whole planet, which answers for every box.
@@ -267,6 +277,19 @@ impl Coverage {
 /// The cell of coverage a longitude or a latitude falls in.
 fn cell_of_coverage(degrees: f64) -> i32 {
     (degrees / COVERAGE_DEGREES).floor() as i32
+}
+
+/// Runs of columns as the fewest runs covering the same columns, in order.
+fn merged(mut runs: Vec<(i32, i32)>) -> Vec<(i32, i32)> {
+    runs.sort_unstable();
+    let mut joined: Vec<(i32, i32)> = Vec::with_capacity(runs.len());
+    for (first, last) in runs {
+        match joined.last_mut() {
+            Some((_, end)) if first <= *end + 1 => *end = (*end).max(last),
+            _ => joined.push((first, last)),
+        }
+    }
+    joined
 }
 
 /// Sorted, distinct columns as runs of neighbours, each as its first and last.
@@ -490,9 +513,15 @@ mod tests {
 
         let covered = |box_: BoundingBox| Coverage::cover(std::slice::from_ref(&together), &box_);
         assert!(covered(box_(7.10, 43.65, 7.20, 43.70)), "inside France");
-        assert!(covered(box_(7.35, 43.70, 7.43, 43.75)), "across the shared border");
+        assert!(
+            covered(box_(7.35, 43.70, 7.43, 43.75)),
+            "across the shared border"
+        );
         assert!(covered(box_(7.41, 43.62, 7.43, 43.66)), "inside Monaco");
-        assert!(!covered(box_(7.42, 43.70, 7.47, 43.75)), "across Monaco's outer border");
+        assert!(
+            !covered(box_(7.42, 43.70, 7.47, 43.75)),
+            "across Monaco's outer border"
+        );
     }
 
     #[test]
