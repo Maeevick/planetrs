@@ -14,7 +14,7 @@
 
 use std::io::Write;
 use std::ops::Range;
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use planetrs_geo::territory::Coverage;
 use planetrs_geo::wkb;
@@ -44,6 +44,10 @@ pub const TILE_WEIGHT: u64 = 1_000_000_000;
 
 /// The footer key naming the tile a file is, as level, column and row.
 const TILE: &str = "planetrs.tile";
+
+/// The deepest level a tile is cut to: cells of 360/4096 by 180/4096 degrees, a few kilometres
+/// across, far finer than a tile of a gigabyte needs anywhere on the planet.
+const DEEPEST_TILE_LEVEL: u32 = 12;
 
 /// How finely the Hilbert curve orders boxes: a cell of 2^16 to a side over the whole planet is
 /// about 600 metres, finer than any row group.
@@ -325,20 +329,97 @@ pub struct TileWeights {
 }
 
 impl TileWeights {
-    /// No weight yet.
+    /// No weight yet, for cells across the whole planet.
     pub fn new() -> Self {
-        Self { cells: Vec::new() }
+        Self {
+            cells: (0..1usize << (2 * DEEPEST_TILE_LEVEL))
+                .map(|_| AtomicU64::new(0))
+                .collect(),
+        }
     }
 
-    /// Adds the weight of an element whose placement has `key`.
-    pub fn add(&self, _key: u64, _weight: u64) {}
+    /// Adds the weight of an element whose placement has `key`, from any thread.
+    pub fn add(&self, key: u64, weight: u64) {
+        let cell = key >> (2 * (HILBERT_ORDER - DEEPEST_TILE_LEVEL));
+        self.cells[cell as usize].fetch_add(weight, Ordering::Relaxed);
+    }
 
     /// The tiles cut from the weights as [`Tiling::of`] cuts them, each with the run of keys its
     /// elements have.
-    pub fn tiles(&self, _target: u64) -> Vec<(Tile, Range<u64>)> {
-        let _ = &self.cells;
-        Vec::new()
+    pub fn tiles(&self, target: u64) -> Vec<(Tile, Range<u64>)> {
+        let mut sums = Vec::with_capacity(self.cells.len() + 1);
+        sums.push(0u64);
+        for cell in &self.cells {
+            let before = sums.last().copied().unwrap_or_default();
+            sums.push(before + cell.load(Ordering::Relaxed));
+        }
+        let weight_of = |level: u32, prefix: u64| {
+            let shift = 2 * (DEEPEST_TILE_LEVEL - level);
+            sums[((prefix + 1) << shift) as usize] - sums[(prefix << shift) as usize]
+        };
+        let mut cells = Vec::new();
+        cut_by_weight(0, 0, &weight_of, target, &mut cells);
+        cells
+            .into_iter()
+            .map(|(level, prefix)| {
+                let (x, y) = cell_at(prefix, level);
+                let shift = 2 * (HILBERT_ORDER - level);
+                let tile = Tile {
+                    level: level as u8,
+                    x,
+                    y,
+                };
+                (tile, (prefix << shift)..((prefix + 1) << shift))
+            })
+            .collect()
     }
+}
+
+/// Cuts the cell at `level` whose index along the curve of that level is `prefix` into the quarters
+/// weighing no more than `target`, by the weights `weight_of` gives each cell, each as its level and
+/// its index.
+fn cut_by_weight(
+    level: u32,
+    prefix: u64,
+    weight_of: &impl Fn(u32, u64) -> u64,
+    target: u64,
+    cells: &mut Vec<(u32, u64)>,
+) {
+    let weight = weight_of(level, prefix);
+    if weight == 0 {
+        return;
+    }
+    if weight <= target || level == DEEPEST_TILE_LEVEL {
+        cells.push((level, prefix));
+        return;
+    }
+    for quarter in 4 * prefix..4 * prefix + 4 {
+        cut_by_weight(level + 1, quarter, weight_of, target, cells);
+    }
+}
+
+/// The column and row at `level` of the cell whose index along the Hilbert curve of that level is
+/// `index`: the curve's own inverse, a quadrant at a time from the smallest.
+fn cell_at(index: u64, level: u32) -> (u32, u32) {
+    let (mut x, mut y) = (0u64, 0u64);
+    let mut rest = index;
+    let mut side = 1u64;
+    while side < 1u64 << level {
+        let right = 1 & (rest / 2);
+        let up = 1 & (rest ^ right);
+        if up == 0 {
+            if right == 1 {
+                x = side - 1 - x;
+                y = side - 1 - y;
+            }
+            std::mem::swap(&mut x, &mut y);
+        }
+        x += side * right;
+        y += side * up;
+        rest /= 4;
+        side *= 2;
+    }
+    (x as u32, y as u32)
 }
 
 impl Default for TileWeights {
@@ -521,7 +602,7 @@ fn cut(
         return;
     }
     let weight: u64 = placed[run.clone()].iter().map(|placed| placed.weight).sum();
-    if weight <= target || level == HILBERT_ORDER {
+    if weight <= target || level == DEEPEST_TILE_LEVEL {
         cells.push((level, run));
         return;
     }
