@@ -388,7 +388,7 @@ impl<F: ForReadingFiles> Dataset<F> {
     /// The tiles of the map index whose elements' box touches `bounds`, as west, south, east and
     /// north in degrees, each with only its footer read. A tile the manifest gives no box is
     /// opened, since it cannot be ruled out.
-    pub fn map_tiles_near(&self, _bounds: [f64; 4]) -> Result<Vec<MapTile>, DatasetError> {
+    pub fn map_tiles_near(&self, bounds: [f64; 4]) -> Result<Vec<MapTile>, DatasetError> {
         self.manifest
             .files
             .iter()
@@ -396,6 +396,7 @@ impl<F: ForReadingFiles> Dataset<F> {
                 Part::MapTile { level, x, y } => Some((Tile { level, x, y }, entry)),
                 _ => None,
             })
+            .filter(|(_, entry)| entry.bbox.is_none_or(|around| touch(around, bounds)))
             .map(|(tile, entry)| {
                 self.footer_of(entry).map(|footer| MapTile {
                     tile,
