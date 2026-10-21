@@ -10,6 +10,8 @@ mod countries;
 #[allow(dead_code)]
 mod positions;
 mod scan;
+#[allow(dead_code)]
+mod spill;
 
 use std::fs::File;
 use std::io::BufWriter;
