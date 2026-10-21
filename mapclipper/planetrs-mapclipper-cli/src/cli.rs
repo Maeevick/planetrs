@@ -35,6 +35,7 @@ and replaces it only once complete.
 Examples:
   planetrs-mapclipper index
   planetrs-mapclipper index --planet planet-260907.osm.pbf --countries FR,MC,BE
+  planetrs-mapclipper index --world
 
 Data © OpenStreetMap contributors, ODbL 1.0: https://www.openstreetmap.org/copyright";
 
@@ -138,6 +139,10 @@ pub struct IndexArgs {
         default_values = DEFAULT_COUNTRIES
     )]
     pub countries: Vec<String>,
+
+    /// Build the map index of the whole planet instead, every box answered
+    #[arg(long, conflicts_with = "countries")]
+    pub world: bool,
 }
 
 /// What `harvest` reads, and where it keeps what it read.

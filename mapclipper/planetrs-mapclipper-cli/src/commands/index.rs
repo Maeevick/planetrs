@@ -26,13 +26,17 @@ pub fn run(context: &Context, arguments: IndexArgs) -> Result<()> {
         ))
         .into());
     };
+    let scope = if arguments.world {
+        Scope::Planet
+    } else {
+        Scope::Countries(codes)
+    };
     context.say(&format!(
         "indexing {} for {} into {}",
         planet.display(),
-        codes.join(","),
+        whom(&scope),
         destination.display()
     ));
-    let scope = Scope::Countries(codes.clone());
     let progress = Progress::to_stderr(context.quiet);
     let (indexed, carried) = rebuild(&destination, is_the_geocoders, |building| {
         let built = build_map_index(&planet, building, &scope, TILE_WEIGHT, &|line| {
@@ -44,15 +48,23 @@ pub fn run(context: &Context, arguments: IndexArgs) -> Result<()> {
     for line in carried_lines(&carried) {
         context.say(&line);
     }
-    let whom = match &indexed.scope {
-        Scope::Planet => "the planet".to_string(),
-        Scope::Countries(countries) => countries.join(", "),
-    };
     context.say(&format!(
-        "indexed {whom}: {} nodes, {} ways and {} multipolygons, in {} tiles",
-        indexed.nodes, indexed.ways, indexed.multipolygons, indexed.tiles
+        "indexed {}: {} nodes, {} ways and {} multipolygons, in {} tiles",
+        whom(&indexed.scope),
+        indexed.nodes,
+        indexed.ways,
+        indexed.multipolygons,
+        indexed.tiles
     ));
     Ok(())
+}
+
+/// Whom a map index is built for, as the command line says it.
+fn whom(scope: &Scope) -> String {
+    match scope {
+        Scope::Planet => "the planet".to_string(),
+        Scope::Countries(countries) => countries.join(","),
+    }
 }
 
 fn planet_to_read(context: &Context, asked: Option<PathBuf>) -> Result<PathBuf> {
