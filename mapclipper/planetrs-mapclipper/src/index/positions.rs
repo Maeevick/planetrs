@@ -98,6 +98,15 @@ impl NodePositions {
     }
 }
 
+impl NodePositions {
+    /// Hands every node the file holds to `visit`, with its position, reading the file a slice at a
+    /// time across threads.
+    pub(super) fn visit_each(&self, visit: impl Fn(i64, i32, i32) + Sync) -> io::Result<()> {
+        let _ = visit;
+        Ok(())
+    }
+}
+
 /// A coordinate as the file keeps it.
 fn lifted(units: i32) -> u32 {
     (i64::from(units) + LIFT) as u32
@@ -194,6 +203,31 @@ mod tests {
                 Some((0, 0)),
                 Some((437_347_000, 74_186_000)),
                 None,
+            ]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn given_nodes_written_in_two_blocks_when_each_is_visited_then_every_node_held_is_visited_once_with_its_position()
+    -> io::Result<()> {
+        let positions = NodePositions::create(&scratch("each"), 3_000)?;
+        positions.write(&[(1, 437_347_000, 74_186_000), (3, 437_352_000, 74_214_000)])?;
+        positions.write(&[(2_999, -52_690_000, -40_120_000)])?;
+        let visited = std::sync::Mutex::new(Vec::new());
+
+        positions.visit_each(|id, latitude, longitude| {
+            visited.lock().unwrap().push((id, latitude, longitude));
+        })?;
+
+        let mut visited = visited.into_inner().unwrap();
+        visited.sort_unstable();
+        assert_eq!(
+            visited,
+            vec![
+                (1, 437_347_000, 74_186_000),
+                (3, 437_352_000, 74_214_000),
+                (2_999, -52_690_000, -40_120_000),
             ]
         );
         Ok(())
