@@ -186,6 +186,11 @@ impl Coverage {
             .collect()
     }
 
+    /// The coverage of `outlines` indexed together, as one: every cell one of them covers.
+    pub fn of(outlines: &[&Outline]) -> Coverage {
+        Coverage::of_each(outlines).into_iter().next().unwrap_or_default()
+    }
+
     /// The coverage of a dataset built from the whole planet, which answers for every box.
     pub fn everywhere() -> Coverage {
         Coverage {
@@ -474,6 +479,20 @@ mod tests {
             !Coverage::cover(&coverages, &box_(-0.10, 48.991, 0.10, 48.999)),
             "the cells along the border"
         );
+    }
+
+    #[test]
+    fn given_two_countries_indexed_together_when_covered_as_one_then_it_covers_what_each_covers_and_their_shared_border()
+     {
+        let (france, monaco) = riviera();
+
+        let together = Coverage::of(&[&france, &monaco]);
+
+        let covered = |box_: BoundingBox| Coverage::cover(std::slice::from_ref(&together), &box_);
+        assert!(covered(box_(7.10, 43.65, 7.20, 43.70)), "inside France");
+        assert!(covered(box_(7.35, 43.70, 7.43, 43.75)), "across the shared border");
+        assert!(covered(box_(7.41, 43.62, 7.43, 43.66)), "inside Monaco");
+        assert!(!covered(box_(7.42, 43.70, 7.47, 43.75)), "across Monaco's outer border");
     }
 
     #[test]
