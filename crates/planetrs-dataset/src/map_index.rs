@@ -201,6 +201,62 @@ impl Element {
     }
 }
 
+/// Where an element is written in a map index, and what it brings there.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Placement {
+    /// Its index along the Hilbert curve through the centre of its box, which elements are written
+    /// in the order of.
+    pub key: u64,
+    /// Its order among elements of the same key: nodes, then ways, then multipolygons, each by id.
+    pub order: (u8, i64),
+    /// Its weight (see [`Element::weight`]).
+    pub weight: u64,
+    /// How many rows it is written as.
+    pub rows: usize,
+}
+
+impl Element {
+    /// Where the element is written, refused for a way or a multipolygon no node of which the
+    /// planet places, since it has no box.
+    pub fn placement(&self) -> Result<Placement, TableError> {
+        Ok(Placement {
+            key: hilbert_key(box_of(self)?),
+            order: order_of(self),
+            weight: self.weight(),
+            rows: rows_in(self),
+        })
+    }
+}
+
+/// One tile written element by element, in the order of their placements, a row group at a time,
+/// for elements too many to hold at once.
+pub struct TileWriter<W: Write + Send> {
+    out: W,
+    tile: Tile,
+}
+
+impl<W: Write + Send> TileWriter<W> {
+    /// A writer of the tile `tile` into `out`, its positions read on `grid`.
+    pub fn new(out: W, tile: Tile, _grid: Grid) -> Self {
+        Self { out, tile }
+    }
+
+    /// Adds the next element.
+    pub fn add(&mut self, _element: Element) -> Result<(), TableError> {
+        Ok(())
+    }
+
+    /// Writes what is left and the footer, and gives back the tile written.
+    pub fn finish(self) -> Result<TileWritten<W>, TableError> {
+        let _ = self.tile;
+        Ok(TileWritten {
+            out: self.out,
+            rows: 0,
+            bbox: [0.0; 4],
+        })
+    }
+}
+
 /// The weight of a way's row.
 fn weight_of(line: &Line) -> u64 {
     let placed = line.positions.iter().flatten().count() as u64;
@@ -1037,6 +1093,35 @@ mod tests {
         let read_back = [&countries, &planet].map(|summary| Summary::from_json(&summary.to_json()));
 
         assert_eq!(read_back, [Some(countries.clone()), Some(planet.clone())]);
+    }
+
+    #[test]
+    fn given_elements_added_one_by_one_in_the_order_of_their_placements_when_written_as_a_tile_then_it_is_the_tile_the_tiling_writes()
+    -> Result<(), TableError> {
+        let elements = [harbour(), abidjan_quay()].concat();
+        let tiling = Tiling::of(elements.len(), |at| elements[at].clone(), u64::MAX)?;
+        let expected = tiling.write(0, Vec::new(), |at| elements[at].clone(), grid())?;
+        let mut placed = elements
+            .iter()
+            .map(|element| {
+                element
+                    .placement()
+                    .map(|placement| (placement.key, placement.order, element.clone()))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        placed.sort_by_key(|(key, order, _)| (*key, *order));
+
+        let mut writer = TileWriter::new(Vec::new(), Tile { level: 0, x: 0, y: 0 }, grid());
+        for (_, _, element) in placed {
+            writer.add(element)?;
+        }
+        let written = writer.finish()?;
+
+        assert_eq!(
+            (written.out, written.rows, written.bbox),
+            (expected.out, expected.rows, expected.bbox)
+        );
+        Ok(())
     }
 
     #[test]
