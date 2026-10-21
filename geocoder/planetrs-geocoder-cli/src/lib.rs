@@ -5,7 +5,6 @@
 
 pub mod cli;
 pub mod commands;
-pub mod download;
 pub mod sites;
 
 pub use commands::run;

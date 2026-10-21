@@ -190,7 +190,7 @@ impl Command {
 #[derive(Debug, Args)]
 pub struct DownloadArgs {
     /// A planet or an extract, published with its .md5 beside it
-    #[arg(long, value_name = "URL", default_value = crate::download::DEFAULT_SOURCE)]
+    #[arg(long, value_name = "URL", default_value = planetrs_cli::download::DEFAULT_SOURCE)]
     pub from: String,
 }
 

@@ -866,8 +866,11 @@ name = "planetrs-cli"
 version = "0.2.0"
 dependencies = [
  "anyhow",
+ "fs4",
+ "md-5",
  "planetrs-dataset",
  "thiserror",
+ "ureq",
 ]
 
 [[package]]
@@ -909,14 +912,11 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap",
- "fs4",
- "md-5",
  "planetrs-cli",
  "planetrs-dataset",
  "planetrs-geocoder",
  "planetrs-pbf",
  "thiserror",
- "ureq",
 ]
 
 [[package]]

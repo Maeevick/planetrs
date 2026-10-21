@@ -8,6 +8,7 @@
 
 pub mod data_dir;
 pub mod dataset;
+pub mod download;
 pub mod files;
 pub mod progress;
 
@@ -17,6 +18,22 @@ use std::process::ExitCode;
 pub use data_dir::{DataDir, NoDataDir};
 pub use files::{Day, write_new};
 pub use progress::Progress;
+
+/// A size in bytes as a person reads it, in powers of a thousand to one decimal: `94.7 GB`.
+pub fn size_text(bytes: u64) -> String {
+    let units = ["bytes", "kB", "MB", "GB", "TB"];
+    let mut size = bytes as f64;
+    let mut unit = 0;
+    while size >= 1000.0 && unit + 1 < units.len() {
+        size /= 1000.0;
+        unit += 1;
+    }
+    if unit == 0 {
+        format!("{bytes} bytes")
+    } else {
+        format!("{size:.1} {}", units[unit])
+    }
+}
 
 /// The line every run that reads OpenStreetMap data ends with, on stderr.
 pub const ATTRIBUTION: &str =
@@ -78,6 +95,13 @@ mod tests {
 
         assert!(is_broken_pipe(&error));
         assert!(!is_broken_pipe(&anyhow::anyhow!("no dataset")));
+    }
+
+    #[test]
+    fn given_sizes_from_bytes_to_a_planet_when_written_then_they_read_in_powers_of_a_thousand() {
+        assert_eq!(size_text(512), "512 bytes");
+        assert_eq!(size_text(1_536), "1.5 kB");
+        assert_eq!(size_text(94_746_421_723), "94.7 GB");
     }
 
     #[test]

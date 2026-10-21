@@ -5,27 +5,11 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, UNIX_EPOCH};
 
 use anyhow::Result;
-use planetrs_cli::Day;
 use planetrs_cli::data_dir::planet_date;
+use planetrs_cli::{Day, size_text};
 use planetrs_dataset::{Dataset, Manifest, Part};
 
 use super::Context;
-
-/// A size as a reader compares it, in decimal units: `94.7 GB`.
-pub fn size_text(bytes: u64) -> String {
-    let units = ["bytes", "kB", "MB", "GB", "TB"];
-    let mut size = bytes as f64;
-    let mut unit = 0;
-    while size >= 1000.0 && unit + 1 < units.len() {
-        size /= 1000.0;
-        unit += 1;
-    }
-    if unit == 0 {
-        format!("{bytes} bytes")
-    } else {
-        format!("{size:.1} {}", units[unit])
-    }
-}
 
 /// What a dataset's manifest says about how it was built: from which planet, and for which
 /// countries its streets were indexed.
@@ -139,13 +123,6 @@ mod tests {
     use planetrs_dataset::{Entry, Provenance};
 
     use super::*;
-
-    #[test]
-    fn given_sizes_across_the_units_when_written_then_each_reads_in_its_own() {
-        assert_eq!(size_text(512), "512 bytes");
-        assert_eq!(size_text(1_536), "1.5 kB");
-        assert_eq!(size_text(94_746_421_723), "94.7 GB");
-    }
 
     #[test]
     fn given_planets_and_extracts_when_ordered_then_dated_planets_come_first_newest_first() {

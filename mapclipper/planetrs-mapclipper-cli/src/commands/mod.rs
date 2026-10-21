@@ -1,6 +1,7 @@
 //! What each command does, given a parsed command line.
 
 pub mod clip;
+pub mod download;
 pub mod harvest;
 pub mod index;
 pub mod inspect;
@@ -68,6 +69,7 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
         Command::Inspect(arguments) => inspect::run(arguments).map_err(explained),
         Command::Themes(arguments) => themes::run(arguments).map_err(explained),
         Command::Index(arguments) => index::run(&context, arguments),
+        Command::Download(arguments) => download::run(&context, arguments),
     }?;
     if reads_openstreetmap_data {
         eprintln!("{ATTRIBUTION}");

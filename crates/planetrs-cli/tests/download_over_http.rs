@@ -8,9 +8,9 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use planetrs_geocoder_cli::download::checksum::md5_of;
-use planetrs_geocoder_cli::download::http::{Http, USER_AGENT};
-use planetrs_geocoder_cli::download::{Outcome, Settings, Surroundings, download};
+use planetrs_cli::download::checksum::md5_of;
+use planetrs_cli::download::http::{Http, USER_AGENT};
+use planetrs_cli::download::{Outcome, Settings, Surroundings, download};
 
 const ETAG: &str = "\"v1\"";
 

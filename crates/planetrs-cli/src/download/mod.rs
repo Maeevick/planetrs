@@ -390,12 +390,96 @@ pub fn download(
     Ok(Outcome::Downloaded(destination))
 }
 
+/// Downloads the planet at `from` into `directory` as both command lines do: saying through `say`
+/// where it starts, when it retries and what it got, drawing its progress on stderr unless `quiet`,
+/// and giving back where the planet lies, verified.
+pub fn fetch_planet(
+    from: &str,
+    directory: &Path,
+    quiet: bool,
+    say: &dyn Fn(&str),
+) -> anyhow::Result<PathBuf> {
+    let progress = crate::Progress::to_stderr(quiet);
+    let last_percent = std::cell::Cell::new(None);
+    let report = |event: &Event| match event {
+        Event::Starting {
+            url,
+            length,
+            resumed_at,
+        } => {
+            let resuming = if *resumed_at > 0 {
+                format!(", resuming at {}", crate::size_text(*resumed_at))
+            } else {
+                String::new()
+            };
+            say(&format!(
+                "downloading {url}, {}{resuming}",
+                crate::size_text(*length)
+            ));
+        }
+        Event::Fetched { done, length } => {
+            progress.note(&format!(
+                "downloaded {} of {} ({}%)",
+                crate::size_text(*done),
+                crate::size_text(*length),
+                percent(*done, *length)
+            ));
+        }
+        Event::Retrying { failures, reason } => {
+            progress.clear();
+            say(&format!("retrying after failure {failures}: {reason}"));
+        }
+        Event::Verifying { done, length } => {
+            let now = percent(*done, *length);
+            if last_percent.replace(Some(now)) != Some(now) {
+                progress.note(&format!("checking the md5: {now}%"));
+            }
+        }
+    };
+    let surroundings = Surroundings {
+        free_space: &|path| fs4::available_space(path),
+        pause: &std::thread::sleep,
+        report: &report,
+    };
+    let outcome = download(
+        &http::Http::new(),
+        from,
+        directory,
+        &Settings::default(),
+        &surroundings,
+    );
+    progress.clear();
+    Ok(match outcome? {
+        Outcome::Downloaded(planet) => {
+            say(&format!("downloaded and verified {}", planet.display()));
+            planet
+        }
+        Outcome::AlreadyThere(planet) => {
+            say(&format!(
+                "{} is already downloaded and verified",
+                planet.display()
+            ));
+            planet
+        }
+    })
+}
+
+/// How much of a file is done, in whole percent rounded down.
+fn percent(done: u64, length: u64) -> u64 {
+    done.saturating_mul(100).checked_div(length).unwrap_or(100)
+}
+
 #[cfg(test)]
 mod tests {
     use std::cell::RefCell;
     use std::collections::VecDeque;
 
     use super::*;
+
+    #[test]
+    fn given_bytes_of_a_file_when_counted_then_the_percentage_rounds_down() {
+        assert_eq!((percent(0, 200), percent(199, 200), percent(5, 0)), (0, 99, 100));
+    }
 
     const LATEST: &str = "https://planet.example.org/pbf/planet-latest.osm.pbf";
     const DATED: &str = "https://planet.example.org/pbf/planet-260907.osm.pbf";

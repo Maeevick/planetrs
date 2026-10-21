@@ -28,9 +28,6 @@ planetrs-geocoder.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 thiserror.workspace = true
-ureq.workspace = true
-md-5.workspace = true
-fs4.workspace = true
 
 [dev-dependencies]
 planetrs-dataset = { workspace = true, features = ["testing"] }

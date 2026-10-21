@@ -16,6 +16,17 @@ use planetrs_mapclipper::error::ClipError;
 use planetrs_mapclipper::scene::{Canvas, LabelClass, Place, Rules};
 use planetrs_mapclipper::theme::Theme;
 
+const DOWNLOAD_FOOTER: &str = "\
+The planet is about 90 GB and goes to planets/ in the data directory. A broken download resumes
+where it stopped when run again, and the file takes its name only once its md5 matches the published
+one. Mirrors carry the same files: https://wiki.openstreetmap.org/wiki/Planet.osm
+
+Examples:
+  planetrs-mapclipper download
+  planetrs-mapclipper download --from https://download.geofabrik.de/europe/monaco-latest.osm.pbf
+
+Data © OpenStreetMap contributors, ODbL 1.0: https://www.openstreetmap.org/copyright";
+
 const INDEX_FOOTER: &str = "\
 The planet is read several times; France and Monaco take about ten minutes and 46 GB of memory.
 The dataset is rebuilt beside the old one, keeping the geocoder's parts built from the same planet,
@@ -80,7 +91,7 @@ pub struct Global {
 /// What to do.
 #[derive(Subcommand, Debug)]
 pub enum Command {
-    /// Read the planet for one area and keep it, so drawing never reads the planet again
+    /// Cut one area out of the dataset, or out of the planet, and keep it, so drawing reads neither again
     Harvest(HarvestArgs),
 
     /// Draw a harvest, at any framing it covers, in any theme
@@ -95,9 +106,21 @@ pub enum Command {
     /// List the themes built in
     Themes(ThemesArgs),
 
-    /// Build each country's map index from a planet file, into the dataset
+    /// Build the map index of the countries asked for from a planet file, into the dataset
     #[command(after_help = INDEX_FOOTER)]
     Index(IndexArgs),
+
+    /// Download the latest planet into the data directory, resuming a broken download
+    #[command(after_help = DOWNLOAD_FOOTER)]
+    Download(DownloadArgs),
+}
+
+/// Where `download` fetches from.
+#[derive(Args, Debug)]
+pub struct DownloadArgs {
+    /// A planet or an extract, published with its .md5 beside it
+    #[arg(long, value_name = "URL", default_value = planetrs_cli::download::DEFAULT_SOURCE)]
+    pub from: String,
 }
 
 /// What `index` reads, and for which countries.

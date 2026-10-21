@@ -61,7 +61,7 @@ fn planet_to_read(context: &Context, asked: Option<PathBuf>) -> Result<PathBuf> 
         None => context.data.newest_planet().ok_or_else(|| {
             anyhow::anyhow!(
                 "no planet file in {}\n  \
-                 → download one:  planetrs-geocoder download\n  \
+                 → download one:  planetrs-mapclipper download\n  \
                  → or name one:   planetrs-mapclipper index --planet PATH",
                 context.data.planets().display()
             )

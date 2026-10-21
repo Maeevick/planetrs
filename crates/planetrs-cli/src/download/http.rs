@@ -11,7 +11,7 @@ use super::{Remote, Reply, Source};
 
 /// Who is asking, as the OpenStreetMap Foundation's usage policy wants every client to say.
 pub const USER_AGENT: &str = concat!(
-    "planetrs-geocoder/",
+    "planetrs/",
     env!("CARGO_PKG_VERSION"),
     " (+https://github.com/maeevick/planetrs)"
 );

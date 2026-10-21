@@ -16,6 +16,9 @@ homepage.workspace = true
 planetrs-dataset.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
+ureq.workspace = true
+md-5.workspace = true
+fs4.workspace = true
 
 [lints]
 workspace = true
