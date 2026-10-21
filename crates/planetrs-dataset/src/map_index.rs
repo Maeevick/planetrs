@@ -107,6 +107,57 @@ pub enum Element {
     },
 }
 
+impl Element {
+    /// About the bytes the element takes once encoded, the measure a map index is cut into tiles by.
+    pub fn weight(&self) -> u64 {
+        0
+    }
+}
+
+/// A tile of a map index: the cell of a quadtree over the planet holding the centres of its
+/// elements' boxes. A cell at `level` spans 360/2^level degrees of longitude counted from 180°W and
+/// 180/2^level degrees of latitude counted from 90°S.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Tile {
+    /// How many times the planet was cut in four to reach it.
+    pub level: u8,
+    /// Its column, from 180°W.
+    pub x: u32,
+    /// Its row, from 90°S.
+    pub y: u32,
+}
+
+impl Tile {
+    /// The tile's file in a dataset.
+    pub fn file_name(&self) -> String {
+        format!("map-{}-{}-{}.parquet", self.level, self.x, self.y)
+    }
+}
+
+/// A map index cut into tiles.
+pub struct Tiling {
+    tiles: Vec<Tile>,
+}
+
+impl Tiling {
+    /// The tiles of `count` elements built by `element_at`, a cell being cut in four while its
+    /// elements weigh more than `target`.
+    pub fn of(
+        _count: usize,
+        _element_at: impl Fn(usize) -> Element + Sync,
+        _target: u64,
+    ) -> Result<Self, TableError> {
+        Ok(Self {
+            tiles: vec![Tile { level: 0, x: 0, y: 0 }],
+        })
+    }
+
+    /// The tiles, along the Hilbert curve.
+    pub fn tiles(&self) -> Vec<Tile> {
+        self.tiles.clone()
+    }
+}
+
 /// The map index of `country` as a GeoParquet file, answering for the boxes inside `coverage`.
 ///
 /// Elements are ordered along a Hilbert curve through the centres of their boxes, so the rows of one
@@ -675,6 +726,44 @@ mod tests {
         };
         elements.sort_by_key(key);
         elements
+    }
+
+    /// A quay of the port of Abidjan, a long way from Monaco.
+    fn abidjan_quay() -> Vec<Element> {
+        vec![Element::Way(Line {
+            id: 20,
+            tags: tags(&[("man_made", "quay")]),
+            refs: vec![21, 22],
+            positions: vec![
+                Some(at(5_269_000_000, -4_012_000_000)),
+                Some(at(5_270_000_000, -4_010_000_000)),
+            ],
+        })]
+    }
+
+    fn weight(elements: &[Element]) -> u64 {
+        elements.iter().map(Element::weight).sum()
+    }
+
+    #[test]
+    fn given_a_harbour_in_monaco_and_a_quay_in_abidjan_heavier_together_than_the_target_when_tiled_then_each_falls_in_the_tile_of_its_own_cell()
+    -> Result<(), TableError> {
+        let (monaco, abidjan) = (harbour(), abidjan_quay());
+        let elements = [monaco.clone(), abidjan.clone()].concat();
+
+        let tiling = Tiling::of(
+            elements.len(),
+            |at| elements[at].clone(),
+            weight(&monaco).max(weight(&abidjan)),
+        )?;
+
+        let mut tiles = tiling.tiles();
+        tiles.sort();
+        assert_eq!(
+            tiles,
+            vec![Tile { level: 1, x: 0, y: 1 }, Tile { level: 1, x: 1, y: 1 }]
+        );
+        Ok(())
     }
 
     #[test]
