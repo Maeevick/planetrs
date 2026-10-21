@@ -2,33 +2,37 @@
 //! that a map of any box inside them is cut from the dataset rather than from the planet.
 //!
 //! The map index holds what passes one to five of a harvest would take out of the planet for any box
-//! inside the countries: every way with a node in one of them, whole; every node of theirs that
-//! carries a name or that no way runs through, the others standing in their ways; and every
-//! multipolygon with a member among those ways, each member way whole with every node placed.
+//! inside the countries: every way with a node in one of them, whole, with every node the planet
+//! places; every node of theirs that carries a name or that no way runs through, the others standing
+//! in their ways; and every multipolygon with a member among those ways, each member way whole.
+//!
+//! The build holds little in memory, so that it scales to the whole planet: every node's position goes
+//! into a file indexed by id, every element is set down on disk as it is built, and the tiles are
+//! written from the elements merged back in the order of their placements.
 
 mod countries;
-#[allow(dead_code)]
 mod positions;
 mod scan;
-#[allow(dead_code)]
 mod spill;
 
 use std::fs::File;
-use std::io::BufWriter;
-use std::path::Path;
+use std::io::{self, BufWriter};
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use planetrs_dataset::directory::{Written, record_all_written, written_beside};
-use planetrs_dataset::map_index::{Element, Grid, Line, Position, Scope, Summary, Tags, Tiling};
+use planetrs_dataset::map_index::{
+    Element, Grid, Line, Placement, Position, Scope, Summary, Tags, TileWeights, TileWriter,
+};
 use planetrs_dataset::{Part, Provenance};
 use planetrs_geo::territory::IdentifierSet;
-use planetrs_pbf::{
-    Block, IdIndex, IdSpan, PbfError, Planet, Section, block, dense_group, id_span, visit_relations,
-    visit_ways,
-};
-use rayon::prelude::*;
+use planetrs_pbf::{Block, PbfError, Planet, block, dense_group, id_span, visit_relations, visit_ways};
 
 use self::countries::{Countries, countries_in};
-use self::scan::{Scanned, Span, every_blob, scan};
+use self::positions::NodePositions;
+use self::scan::{every_blob, scan};
+use self::spill::Spill;
 use crate::error::ClipError;
 use crate::harvest::tag;
 
@@ -37,6 +41,9 @@ const MULTIPOLYGON: &str = "multipolygon";
 /// The finest grid a map index holds positions on: a stored unit of 100 nanodegrees, as every
 /// planet published stores them, keeps a position in 32 bits.
 const FINEST_GRANULARITY: i64 = 100;
+
+/// How much a spill holds in memory before it sorts it into a run on disk.
+const RUN_BYTES: usize = 1 << 31;
 
 /// What a map index holds, once built.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -56,8 +63,9 @@ pub struct MapIndexed {
 /// Builds the map index of the countries `countries` from the planet file at `planet`, cut into
 /// tiles, and records it in the dataset in `directory` in place of any map index it held.
 ///
-/// Its tiles weigh at most `tile_weight` each (see [`planetrs_dataset::map_index::TILE_WEIGHT`]), but where one
-/// place of the finest quadtree weighs more. `progress` hears how many blobs each pass has read, as a
+/// Its tiles weigh at most `tile_weight` each (see [`planetrs_dataset::map_index::TILE_WEIGHT`]),
+/// but where one cell of the finest tiling weighs more. The build's work files go beside the dataset
+/// and are removed however it ends. `progress` hears how many blobs each pass has read, as a
 /// harvest's caller does.
 pub fn build_map_index(
     planet: &Path,
@@ -73,42 +81,18 @@ pub fn build_map_index(
     let territory = countries_in(&planet, &sections, countries, progress)?;
     let codes: Vec<String> = territory.codes().map(str::to_string).collect();
     let coverage = territory.coverage();
-    let mut index = IdIndex::empty(planet.blobs.len());
-
+    std::fs::create_dir_all(directory).map_err(|failure| ClipError::writing(directory, failure))?;
+    let work = Work::beside(directory).map_err(|failure| ClipError::writing(directory, failure))?;
+    let failure = WorkFailure::default();
+    let grid = first_grid(&planet, sections.nodes.clone())?;
     let largest_node = largest_id(&planet, sections.nodes.clone())?;
-    let inside = IdentifierSet::up_to(largest_node);
-    let nodes = scan(
-        &planet,
-        &every_blob(sections.nodes.clone()),
-        "nodes",
-        progress,
-        NodesFound::default,
-        |found, decoded| visit_nodes(found, decoded, &territory, &inside),
-        NodesFound::absorb,
-    )?;
-    let NodesFound {
-        mut positions,
-        named,
-        grids,
-        out_of_range,
-    } = recorded(&mut index, nodes);
-    let grid = grid_of(&grids, out_of_range)?;
-    positions.par_sort_unstable_by_key(|(id, _, _)| *id);
-
-    let referenced = IdentifierSet::up_to(largest_node);
-    let mut ways = recorded(
-        &mut index,
-        scan(
-            &planet,
-            &every_blob(sections.ways.clone()),
-            "ways",
-            progress,
-            Vec::new,
-            |found, decoded| visit_country_ways(found, decoded, &inside, &referenced),
-            concatenated,
-        )?,
-    );
-    ways.par_sort_unstable_by_key(|way| way.id);
+    let largest_way = largest_id(&planet, sections.ways.clone())?;
+    let spill = Spill::new(&work.join("elements"), grid, RUN_BYTES).map_err(|e| work.failed(e))?;
+    let weights = TileWeights::new();
+    let elements = SetDown {
+        spill: &spill,
+        weights: &weights,
+    };
 
     let mut multipolygons = scan(
         &planet,
@@ -116,119 +100,123 @@ pub fn build_map_index(
         "relations",
         progress,
         Vec::new,
-        |found, decoded| visit_multipolygons(found, decoded, &ways),
+        visit_multipolygons,
         concatenated,
     )?
     .found;
     multipolygons.sort_unstable_by_key(|multipolygon| multipolygon.id);
-
-    let missing_ways = sorted_distinct(
-        multipolygons
-            .iter()
-            .flat_map(|multipolygon| multipolygon.members.iter().map(|(way, _)| *way))
-            .filter(|way| kept(&ways, *way).is_none()),
-    );
-    let mut fetched = scan(
-        &planet,
-        &index.blobs_holding(sections.ways.clone(), &missing_ways),
-        "member ways",
-        progress,
-        Vec::new,
-        |found, decoded| visit_ways_with_id(found, decoded, &missing_ways),
-        concatenated,
-    )?
-    .found;
-    fetched.sort_unstable_by_key(|way| way.id);
-
-    let member_way = |id: i64| kept(&ways, id).or_else(|| kept(&fetched, id));
-    let missing_nodes = sorted_distinct(
-        multipolygons
-            .iter()
-            .flat_map(|multipolygon| {
-                multipolygon
-                    .members
-                    .iter()
-                    .filter_map(|(way, _)| member_way(*way))
-            })
-            .flat_map(|way| way.refs.iter().copied())
-            .filter(|node| placed(&positions, *node).is_none()),
-    );
-    let mut elsewhere = scan(
-        &planet,
-        &index.blobs_holding(sections.nodes.clone(), &missing_nodes),
-        "member nodes",
-        progress,
-        Vec::new,
-        |found, decoded| visit_nodes_with_id(found, decoded, &missing_nodes),
-        concatenated,
-    )?
-    .found;
-    elsewhere.sort_unstable_by_key(|(id, _, _)| *id);
-
-    let position_of = |id: i64| {
-        placed(&positions, id)
-            .or_else(|| placed(&elsewhere, id))
-            .map(|(latitude, longitude)| position_on(grid, latitude, longitude))
-    };
-    let line_of = |way: &WayKept| Line {
-        id: way.id,
-        tags: way.tags.unpacked(),
-        refs: way.refs.to_vec(),
-        positions: way.refs.iter().map(|node| position_of(*node)).collect(),
-    };
-    let named_ids = sorted_distinct(named.iter().map(|node| node.id));
-    let lone: Vec<&Stored> = positions
-        .iter()
-        .filter(|(id, _, _)| !referenced.contains(*id) && named_ids.binary_search(id).is_err())
-        .collect();
-    let member_ways_of = |multipolygon: &MultipolygonKept| -> Vec<&WayKept> {
-        first_named(multipolygon.members.iter().map(|(way, _)| *way))
-            .into_iter()
-            .filter_map(member_way)
-            .collect()
-    };
-    let (nodes, lone_from) = (named.len() + lone.len(), named.len());
-    let ways_from = nodes;
-    let multipolygons_from = ways_from + ways.len();
-    let count = multipolygons_from + multipolygons.len();
-    let element_at = |at: usize| -> Element {
-        if at < lone_from {
-            let node = &named[at];
-            Element::Node {
-                id: node.id,
-                at: position_on(grid, node.latitude, node.longitude),
-                tags: node.tags.clone(),
-            }
-        } else if at < ways_from {
-            let (id, latitude, longitude) = *lone[at - lone_from];
-            Element::Node {
-                id,
-                at: position_on(grid, latitude, longitude),
-                tags: Tags::new(),
-            }
-        } else if at < multipolygons_from {
-            Element::Way(line_of(&ways[at - ways_from]))
-        } else {
-            let multipolygon = &multipolygons[at - multipolygons_from];
-            Element::Multipolygon {
-                id: multipolygon.id,
-                tags: multipolygon.tags.clone(),
-                members: multipolygon.members.clone(),
-                ways: member_ways_of(multipolygon).into_iter().map(line_of).collect(),
-            }
+    let member_ways = IdentifierSet::up_to(largest_way);
+    for multipolygon in &multipolygons {
+        for (way, _) in &multipolygon.members {
+            member_ways.insert(*way);
         }
-    };
-    let tiling = Tiling::of(count, element_at, tile_weight).map_err(ClipError::Encoding)?;
-    std::fs::create_dir_all(directory).map_err(|failure| ClipError::writing(directory, failure))?;
-    let mut written = Vec::new();
-    for (which, tile) in tiling.tiles().into_iter().enumerate() {
+    }
+
+    let positions =
+        NodePositions::create(&work.join("positions"), largest_node).map_err(|e| work.failed(e))?;
+    let inside = IdentifierSet::up_to(largest_node);
+    let named = IdentifierSet::up_to(largest_node);
+    let nodes_kept = AtomicUsize::new(0);
+    let grids = scan(
+        &planet,
+        &every_blob(sections.nodes.clone()),
+        "nodes",
+        progress,
+        GridsSeen::default,
+        |seen, decoded| {
+            let node_pass = NodePass {
+                territory: &territory,
+                positions: &positions,
+                inside: &inside,
+                named: &named,
+                grid,
+                elements: &elements,
+                kept: &nodes_kept,
+                failure: &failure,
+            };
+            node_pass.visit(seen, decoded)
+        },
+        GridsSeen::absorb,
+    )
+    .map_err(|error| failure.explained(&work, error))?
+    .found;
+    if grid_of(&grids.grids, grids.out_of_range)? != grid {
+        return Err(ClipError::Grid {
+            detail: "its node blocks use more than one grid".into(),
+        });
+    }
+
+    let referenced = IdentifierSet::up_to(largest_node);
+    let kept_ways = IdentifierSet::up_to(largest_way);
+    let members = Spill::new(&work.join("members"), grid, RUN_BYTES).map_err(|e| work.failed(e))?;
+    let ways_kept = AtomicUsize::new(0);
+    scan(
+        &planet,
+        &every_blob(sections.ways.clone()),
+        "ways",
+        progress,
+        || (),
+        |(), decoded| {
+            let way_pass = WayPass {
+                inside: &inside,
+                member_ways: &member_ways,
+                positions: &positions,
+                grid,
+                referenced: &referenced,
+                kept_ways: &kept_ways,
+                elements: &elements,
+                members: &members,
+                kept: &ways_kept,
+                failure: &failure,
+            };
+            way_pass.visit(decoded)
+        },
+        |(), ()| (),
+    )
+    .map_err(|error| failure.explained(&work, error))?;
+
+    positions
+        .visit_each(|id, latitude, longitude| {
+            if inside.contains(id) && !referenced.contains(id) && !named.contains(id) {
+                let lone = Element::Node {
+                    id,
+                    at: position_on(grid, latitude, longitude),
+                    tags: Tags::new(),
+                };
+                match elements.add(&lone) {
+                    Ok(true) => {
+                        nodes_kept.fetch_add(1, Ordering::Relaxed);
+                    }
+                    Ok(false) => {}
+                    Err(error) => {
+                        failure.keep(error);
+                    }
+                }
+            }
+        })
+        .map_err(|e| work.failed(e))?;
+    failure.raise(&work)?;
+    drop(positions);
+
+    let multipolygons_kept =
+        assemble_multipolygons(&multipolygons, &kept_ways, members, &work, grid, &elements)?;
+
+    let tiles = weights.tiles(tile_weight);
+    let mut merged = spill.merged().map_err(|e| work.failed(e))?.peekable();
+    let mut written = Vec::with_capacity(tiles.len() + 1);
+    for (tile, keys) in tiles {
         let name = tile.file_name();
         let beside = written_beside(directory, &name);
         let writing = |failure| ClipError::writing(&beside, failure);
         let file = File::create(&beside).map_err(writing)?;
-        let done = tiling
-            .write(which, BufWriter::new(file), element_at, grid)
-            .map_err(ClipError::Encoding)?;
+        let mut writer = TileWriter::new(BufWriter::new(file), tile, grid);
+        while let Some(next) =
+            merged.next_if(|next| next.as_ref().map_or(true, |(key, _)| keys.contains(key)))
+        {
+            let (_, element) = next.map_err(|e| work.failed(e))?;
+            writer.add(element).map_err(ClipError::Encoding)?;
+        }
+        let done = writer.finish().map_err(ClipError::Encoding)?;
         done.out
             .into_inner()
             .map_err(|failure| writing(failure.into_error()))?
@@ -270,9 +258,9 @@ pub fn build_map_index(
     })?;
     Ok(MapIndexed {
         countries: codes,
-        nodes,
-        ways: ways.len(),
-        multipolygons: multipolygons.len(),
+        nodes: nodes_kept.into_inner(),
+        ways: ways_kept.into_inner(),
+        multipolygons: multipolygons_kept,
         tiles,
     })
 }
@@ -285,31 +273,92 @@ fn is_the_map_index(part: &Part) -> bool {
     matches!(part, Part::MapSummary | Part::MapTile { .. })
 }
 
-/// A position stored on the planet's grid, in its 32-bit units.
-type Stored = (i64, i32, i32);
+/// The build's work files, beside the dataset, removed however the build ends.
+struct Work(PathBuf);
 
-/// A named node of a country, with every tag it carries.
-struct Named {
-    id: i64,
-    latitude: i32,
-    longitude: i32,
-    tags: Tags,
+impl Work {
+    fn beside(directory: &Path) -> io::Result<Self> {
+        let path = directory.join("map-index.work");
+        let _ = std::fs::remove_dir_all(&path);
+        std::fs::create_dir_all(&path)?;
+        Ok(Self(path))
+    }
+
+    fn join(&self, name: &str) -> PathBuf {
+        self.0.join(name)
+    }
+
+    /// A failure writing or reading the work files, said for what it is.
+    fn failed(&self, failure: io::Error) -> ClipError {
+        ClipError::writing(&self.0, failure)
+    }
 }
 
-/// What the pass over every node found: each node of a country, its position on the grid, and the
-/// named ones with their tags.
+impl Drop for Work {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+/// The first failure writing the build's work files: it stops the pass under way, and is said for
+/// what it is rather than as a planet that would not read.
 #[derive(Default)]
-struct NodesFound {
-    positions: Vec<Stored>,
-    named: Vec<Named>,
+struct WorkFailure(Mutex<Option<io::Error>>);
+
+impl WorkFailure {
+    /// Keeps the failure, the first one only, and gives the error that stops the pass.
+    fn keep(&self, failure: io::Error) -> PbfError {
+        if let Ok(mut first) = self.0.lock() {
+            first.get_or_insert(failure);
+        }
+        PbfError::Io(io::Error::other("the build's work files failed"))
+    }
+
+    /// The failure a pass stopped on: the work files' when they failed, else the planet's.
+    fn explained(&self, work: &Work, error: PbfError) -> ClipError {
+        match self.0.lock().ok().and_then(|mut first| first.take()) {
+            Some(failure) => work.failed(failure),
+            None => ClipError::Planet(error),
+        }
+    }
+
+    /// The failure kept, if any.
+    fn raise(&self, work: &Work) -> Result<(), ClipError> {
+        match self.0.lock().ok().and_then(|mut first| first.take()) {
+            Some(failure) => Err(work.failed(failure)),
+            None => Ok(()),
+        }
+    }
+}
+
+/// Where elements go as they are built: set down on disk, their weights summed by cell.
+struct SetDown<'a> {
+    spill: &'a Spill,
+    weights: &'a TileWeights,
+}
+
+impl SetDown<'_> {
+    /// Sets an element down, or leaves it out when the planet places none of its nodes, since it has
+    /// no place on a map: whether it was set down.
+    fn add(&self, element: &Element) -> io::Result<bool> {
+        let Ok(placement) = element.placement() else {
+            return Ok(false);
+        };
+        self.weights.add(placement.key, placement.weight);
+        self.spill.add(&placement, element)?;
+        Ok(true)
+    }
+}
+
+/// What the pass over every node saw of the grids its blocks store positions on.
+#[derive(Default)]
+struct GridsSeen {
     grids: Vec<Grid>,
     out_of_range: bool,
 }
 
-impl NodesFound {
+impl GridsSeen {
     fn absorb(mut self, other: Self) -> Self {
-        self.positions.extend(other.positions);
-        self.named.extend(other.named);
         for grid in other.grids {
             if !self.grids.contains(&grid) {
                 self.grids.push(grid);
@@ -320,225 +369,311 @@ impl NodesFound {
     }
 }
 
-/// A way kept whole, as small as it can be held: France keeps tens of millions of them at once.
-struct WayKept {
-    id: i64,
-    tags: PackedTags,
-    refs: Box<[i64]>,
+/// The pass over every node: each position written to the file, the nodes inside the countries
+/// marked, and their named ones set down with every tag.
+struct NodePass<'a> {
+    territory: &'a Countries,
+    positions: &'a NodePositions,
+    inside: &'a IdentifierSet,
+    named: &'a IdentifierSet,
+    grid: Grid,
+    elements: &'a SetDown<'a>,
+    kept: &'a AtomicUsize,
+    failure: &'a WorkFailure,
 }
 
-/// Tags as the planet's bytes in one allocation, each key and value as its length on four bytes
-/// then its bytes, read as text only when written.
-struct PackedTags(Box<[u8]>);
-
-impl PackedTags {
-    fn of(tags: &[(&[u8], &[u8])]) -> Self {
-        let mut packed =
-            Vec::with_capacity(tags.iter().map(|(key, value)| 8 + key.len() + value.len()).sum());
-        for text in tags.iter().flat_map(|(key, value)| [key, value]) {
-            packed.extend_from_slice(&(text.len() as u32).to_le_bytes());
-            packed.extend_from_slice(text);
-        }
-        Self(packed.into_boxed_slice())
-    }
-
-    /// The tags as text, invalid UTF-8 replaced as a harvest replaces it.
-    fn unpacked(&self) -> Tags {
-        let mut rest: &[u8] = &self.0;
-        let mut next_text = || {
-            let (length, after) = rest.split_first_chunk::<4>()?;
-            let length = u32::from_le_bytes(*length) as usize;
-            let (bytes, after) = after.split_at(length.min(after.len()));
-            rest = after;
-            Some(text(bytes))
+impl NodePass<'_> {
+    fn visit(
+        &self,
+        seen: &mut GridsSeen,
+        decoded: &Block<'_>,
+    ) -> Result<Option<planetrs_pbf::IdSpan>, PbfError> {
+        let block_grid = Grid {
+            granularity: decoded.granularity,
+            latitude_offset: decoded.lat_offset,
+            longitude_offset: decoded.lon_offset,
         };
-        let mut tags = Tags::new();
-        while let (Some(key), Some(value)) = (next_text(), next_text()) {
-            tags.push((key, value));
+        if !seen.grids.contains(&block_grid) {
+            seen.grids.push(block_grid);
         }
-        tags
+        // A block whose strings never mention `name` holds no named node, and is walked without its tags.
+        let name_key = decoded.string_id(b"name");
+        for group in &decoded.groups {
+            let Some(dense) = dense_group(group)? else {
+                continue;
+            };
+            let mut stored: Vec<(i64, i32, i32)> = Vec::new();
+            let mut named: Vec<Element> = Vec::new();
+            let mut keep = |id: i64, latitude: i64, longitude: i64, tags: Option<&[(u32, u32)]>| {
+                let (Ok(latitude), Ok(longitude)) = (i32::try_from(latitude), i32::try_from(longitude))
+                else {
+                    seen.out_of_range = true;
+                    return;
+                };
+                stored.push((id, latitude, longitude));
+                if !self.territory.hold([
+                    decoded.longitude(i64::from(longitude)),
+                    decoded.latitude(i64::from(latitude)),
+                ]) {
+                    return;
+                }
+                self.inside.insert(id);
+                let Some(tags) = tags.filter(|tags| tags.iter().any(|(key, _)| Some(*key) == name_key))
+                else {
+                    return;
+                };
+                self.named.insert(id);
+                named.push(Element::Node {
+                    id,
+                    at: position_on(self.grid, latitude, longitude),
+                    tags: tags
+                        .iter()
+                        .map(|(key, value)| {
+                            (
+                                text(decoded.string(*key as usize)),
+                                text(decoded.string(*value as usize)),
+                            )
+                        })
+                        .collect(),
+                });
+            };
+            match name_key {
+                None => dense.visit(&mut |id, latitude, longitude| keep(id, latitude, longitude, None))?,
+                Some(_) => dense.visit_tagged(&mut |id, latitude, longitude, tags| {
+                    keep(id, latitude, longitude, Some(tags));
+                })?,
+            }
+            self.positions
+                .write(&stored)
+                .map_err(|error| self.failure.keep(error))?;
+            for node in &named {
+                if self
+                    .elements
+                    .add(node)
+                    .map_err(|error| self.failure.keep(error))?
+                {
+                    self.kept.fetch_add(1, Ordering::Relaxed);
+                }
+            }
+        }
+        Ok(None)
     }
 }
 
-/// A multipolygon kept with its way members.
+/// The pass over every way: each way with a node inside the countries set down whole, every node
+/// the planet places, and each member of a multipolygon set apart by its id.
+struct WayPass<'a> {
+    inside: &'a IdentifierSet,
+    member_ways: &'a IdentifierSet,
+    positions: &'a NodePositions,
+    grid: Grid,
+    referenced: &'a IdentifierSet,
+    kept_ways: &'a IdentifierSet,
+    elements: &'a SetDown<'a>,
+    members: &'a Spill,
+    kept: &'a AtomicUsize,
+    failure: &'a WorkFailure,
+}
+
+impl WayPass<'_> {
+    fn visit(&self, decoded: &Block<'_>) -> Result<Option<planetrs_pbf::IdSpan>, PbfError> {
+        let mut wanted: Vec<(i64, Tags, Vec<i64>, bool, bool)> = Vec::new();
+        for group in &decoded.groups {
+            visit_ways(group, &mut |way| {
+                let refs = way.refs().collect::<Result<Vec<i64>, _>>()?;
+                let touches = refs.iter().any(|node| self.inside.contains(*node));
+                let member = self.member_ways.contains(way.id);
+                if touches || member {
+                    wanted.push((way.id, named_tags(way.tags(decoded)), refs, touches, member));
+                }
+                Ok(())
+            })?;
+        }
+        let every_ref: Vec<i64> = wanted
+            .iter()
+            .flat_map(|(_, _, refs, _, _)| refs.iter().copied())
+            .collect();
+        let found = self
+            .positions
+            .read(&every_ref)
+            .map_err(|error| self.failure.keep(error))?;
+        let mut cursor = 0;
+        for (id, tags, refs, touches, member) in wanted {
+            let positions = found[cursor..cursor + refs.len()]
+                .iter()
+                .map(|at| at.map(|(latitude, longitude)| position_on(self.grid, latitude, longitude)))
+                .collect();
+            cursor += refs.len();
+            let line = Line {
+                id,
+                tags,
+                refs,
+                positions,
+            };
+            if member {
+                let by_id = Placement {
+                    key: id as u64,
+                    order: (1, id),
+                    weight: 0,
+                    rows: 0,
+                };
+                self.members
+                    .add(&by_id, &Element::Way(line.clone()))
+                    .map_err(|error| self.failure.keep(error))?;
+            }
+            if touches {
+                self.kept_ways.insert(id);
+                for node in &line.refs {
+                    self.referenced.insert(*node);
+                }
+                if self
+                    .elements
+                    .add(&Element::Way(line))
+                    .map_err(|error| self.failure.keep(error))?
+                {
+                    self.kept.fetch_add(1, Ordering::Relaxed);
+                }
+            }
+        }
+        Ok(None)
+    }
+}
+
+/// Sets down every multipolygon with a member among the kept ways, each with its member ways whole
+/// in the order its members first name them, joined from the members set apart by id: how many.
+fn assemble_multipolygons(
+    multipolygons: &[MultipolygonKept],
+    kept_ways: &IdentifierSet,
+    members: Spill,
+    work: &Work,
+    grid: Grid,
+    elements: &SetDown<'_>,
+) -> Result<usize, ClipError> {
+    let kept: Vec<&MultipolygonKept> = multipolygons
+        .iter()
+        .filter(|multipolygon| {
+            multipolygon
+                .members
+                .iter()
+                .any(|(way, _)| kept_ways.contains(*way))
+        })
+        .collect();
+    let mut memberships: Vec<(i64, usize, usize)> = kept
+        .iter()
+        .enumerate()
+        .flat_map(|(at, multipolygon)| {
+            first_named(multipolygon.members.iter().map(|(way, _)| *way))
+                .into_iter()
+                .enumerate()
+                .map(move |(order, way)| (way, at, order))
+        })
+        .collect();
+    memberships.sort_unstable();
+    let assembled = Spill::new(&work.join("assembled"), grid, RUN_BYTES).map_err(|e| work.failed(e))?;
+    let mut next = 0;
+    for member in members.merged().map_err(|e| work.failed(e))? {
+        let (way, line) = member.map_err(|e| work.failed(e))?;
+        let way = way as i64;
+        while next < memberships.len() && memberships[next].0 < way {
+            next += 1;
+        }
+        let mut at = next;
+        while at < memberships.len() && memberships[at].0 == way {
+            let (_, multipolygon, order) = memberships[at];
+            let place = Placement {
+                key: multipolygon as u64,
+                order: (0, order as i64),
+                weight: 0,
+                rows: 0,
+            };
+            assembled.add(&place, &line).map_err(|e| work.failed(e))?;
+            at += 1;
+        }
+    }
+    let mut count = 0;
+    let mut gathered: Option<(usize, Vec<Line>)> = None;
+    let mut set_down = |(at, ways): (usize, Vec<Line>)| -> Result<(), ClipError> {
+        let multipolygon = kept[at];
+        let element = Element::Multipolygon {
+            id: multipolygon.id,
+            tags: multipolygon.tags.clone(),
+            members: multipolygon.members.clone(),
+            ways,
+        };
+        if elements.add(&element).map_err(|e| work.failed(e))? {
+            count += 1;
+        }
+        Ok(())
+    };
+    for line in assembled.merged().map_err(|e| work.failed(e))? {
+        let (at, line) = line.map_err(|e| work.failed(e))?;
+        let Element::Way(line) = line else {
+            continue;
+        };
+        let at = at as usize;
+        match gathered.as_mut() {
+            Some((gathering, ways)) if *gathering == at => ways.push(line),
+            _ => {
+                if let Some(done) = gathered.replace((at, vec![line])) {
+                    set_down(done)?;
+                }
+            }
+        }
+    }
+    if let Some(done) = gathered {
+        set_down(done)?;
+    }
+    Ok(count)
+}
+
+/// A multipolygon with its way members.
 struct MultipolygonKept {
     id: i64,
     tags: Tags,
     members: Vec<(i64, String)>,
 }
 
-fn visit_nodes(
-    found: &mut NodesFound,
-    decoded: &Block<'_>,
-    territory: &Countries,
-    inside: &IdentifierSet,
-) -> Result<Option<IdSpan>, PbfError> {
-    let grid = Grid {
-        granularity: decoded.granularity,
-        latitude_offset: decoded.lat_offset,
-        longitude_offset: decoded.lon_offset,
-    };
-    if !found.grids.contains(&grid) {
-        found.grids.push(grid);
-    }
-    let mut seen = Span::new();
-    // A block whose strings never mention `name` holds no named node, and is walked without its tags.
-    let name_key = decoded.string_id(b"name");
-    for group in &decoded.groups {
-        let Some(dense) = dense_group(group)? else {
-            continue;
-        };
-        let mut keep = |id: i64, latitude: i64, longitude: i64| {
-            seen.saw(id);
-            if !territory.hold([decoded.longitude(longitude), decoded.latitude(latitude)]) {
-                return None;
-            }
-            let (Ok(latitude), Ok(longitude)) = (i32::try_from(latitude), i32::try_from(longitude)) else {
-                found.out_of_range = true;
-                return None;
-            };
-            inside.insert(id);
-            found.positions.push((id, latitude, longitude));
-            Some((latitude, longitude))
-        };
-        let mut named = Vec::new();
-        match name_key {
-            None => dense.visit(&mut |id, latitude, longitude| {
-                keep(id, latitude, longitude);
-            })?,
-            Some(name_key) => dense.visit_tagged(&mut |id, latitude, longitude, tags| {
-                let Some((latitude, longitude)) = keep(id, latitude, longitude) else {
-                    return;
-                };
-                if tags.iter().any(|(key, _)| *key == name_key) {
-                    named.push(Named {
-                        id,
-                        latitude,
-                        longitude,
-                        tags: tags
-                            .iter()
-                            .map(|(key, value)| {
-                                (
-                                    text(decoded.string(*key as usize)),
-                                    text(decoded.string(*value as usize)),
-                                )
-                            })
-                            .collect(),
-                    });
-                }
-            })?,
-        }
-        found.named.extend(named);
-    }
-    Ok(seen.of(Section::Nodes))
-}
-
-fn visit_country_ways(
-    found: &mut Vec<WayKept>,
-    decoded: &Block<'_>,
-    inside: &IdentifierSet,
-    referenced: &IdentifierSet,
-) -> Result<Option<IdSpan>, PbfError> {
-    let mut seen = Span::new();
-    for group in &decoded.groups {
-        visit_ways(group, &mut |way| {
-            seen.saw(way.id);
-            let mut touches = false;
-            for reference in way.refs() {
-                touches |= inside.contains(reference?);
-            }
-            if !touches {
-                return Ok(());
-            }
-            let refs = way.refs().collect::<Result<Box<[i64]>, _>>()?;
-            for node in &refs {
-                referenced.insert(*node);
-            }
-            found.push(WayKept {
-                id: way.id,
-                tags: PackedTags::of(&way.tags(decoded)),
-                refs,
-            });
-            Ok(())
-        })?;
-    }
-    Ok(seen.of(Section::Ways))
-}
-
 fn visit_multipolygons(
     found: &mut Vec<MultipolygonKept>,
     decoded: &Block<'_>,
-    ways: &[WayKept],
-) -> Result<Option<IdSpan>, PbfError> {
+) -> Result<Option<planetrs_pbf::IdSpan>, PbfError> {
     for group in &decoded.groups {
         visit_relations(group, &mut |relation| {
             let tags = named_tags(relation.tags(decoded));
             if tag(&tags, "type") != Some(MULTIPOLYGON) {
                 return Ok(());
             }
-            let members: Vec<(i64, String)> = relation
-                .ways(decoded)
-                .into_iter()
-                .map(|(way, role)| (way, text(role)))
-                .collect();
-            if members.iter().any(|(way, _)| kept(ways, *way).is_some()) {
-                found.push(MultipolygonKept {
-                    id: relation.id,
-                    tags,
-                    members,
-                });
-            }
+            found.push(MultipolygonKept {
+                id: relation.id,
+                tags,
+                members: relation
+                    .ways(decoded)
+                    .into_iter()
+                    .map(|(way, role)| (way, text(role)))
+                    .collect(),
+            });
             Ok(())
         })?;
     }
     Ok(None)
 }
 
-fn visit_ways_with_id(
-    found: &mut Vec<WayKept>,
-    decoded: &Block<'_>,
-    wanted: &[i64],
-) -> Result<Option<IdSpan>, PbfError> {
-    for group in &decoded.groups {
-        visit_ways(group, &mut |way| {
-            if wanted.binary_search(&way.id).is_ok() {
-                found.push(WayKept {
-                    id: way.id,
-                    tags: PackedTags::of(&way.tags(decoded)),
-                    refs: way.refs().collect::<Result<Box<[i64]>, _>>()?,
-                });
-            }
-            Ok(())
-        })?;
-    }
-    Ok(None)
-}
-
-fn visit_nodes_with_id(
-    found: &mut Vec<Stored>,
-    decoded: &Block<'_>,
-    wanted: &[i64],
-) -> Result<Option<IdSpan>, PbfError> {
-    for group in &decoded.groups {
-        if let Some(dense) = dense_group(group)? {
-            dense.visit(&mut |id, latitude, longitude| {
-                if wanted.binary_search(&id).is_ok()
-                    && let (Ok(latitude), Ok(longitude)) = (i32::try_from(latitude), i32::try_from(longitude))
-                {
-                    found.push((id, latitude, longitude));
-                }
-            })?;
-        }
-    }
-    Ok(None)
-}
-
-/// The pass's findings, its blobs' id spans recorded in the index for the passes that fetch by id.
-fn recorded<T>(index: &mut IdIndex, scanned: Scanned<T>) -> T {
-    for (at, span) in &scanned.spans {
-        index.record(*at, *span);
-    }
-    scanned.found
+/// The grid the first node block stores positions on, which every other must share.
+fn first_grid(planet: &Planet, section: std::ops::Range<usize>) -> Result<Grid, ClipError> {
+    let Some(first) = (!section.is_empty()).then_some(section.start) else {
+        return Err(ClipError::Grid {
+            detail: "the planet holds no node".into(),
+        });
+    };
+    let mut payload = Vec::new();
+    let mut inflated = Vec::new();
+    planet.inflate_blob(first, &mut payload, &mut inflated)?;
+    let decoded = block(&inflated)?;
+    Ok(Grid {
+        granularity: decoded.granularity,
+        latitude_offset: decoded.lat_offset,
+        longitude_offset: decoded.lon_offset,
+    })
 }
 
 /// The one grid every node block stores positions on, refused when there are several or when it is
@@ -571,21 +706,6 @@ fn position_on(grid: Grid, latitude: i32, longitude: i32) -> Position {
     }
 }
 
-/// The stored position of a node, among positions sorted by id.
-fn placed(positions: &[Stored], id: i64) -> Option<(i32, i32)> {
-    positions
-        .binary_search_by_key(&id, |(node, _, _)| *node)
-        .ok()
-        .map(|at| (positions[at].1, positions[at].2))
-}
-
-/// The kept way of this id, among ways sorted by id.
-fn kept(ways: &[WayKept], id: i64) -> Option<&WayKept> {
-    ways.binary_search_by_key(&id, |way| way.id)
-        .ok()
-        .map(|at| &ways[at])
-}
-
 /// The largest id of a section, read from its last blob.
 fn largest_id(planet: &Planet, section: std::ops::Range<usize>) -> Result<i64, PbfError> {
     let Some(last) = section.end.checked_sub(1).filter(|last| *last >= section.start) else {
@@ -596,13 +716,6 @@ fn largest_id(planet: &Planet, section: std::ops::Range<usize>) -> Result<i64, P
     planet.inflate_blob(last, &mut payload, &mut inflated)?;
     let decoded = block(&inflated)?;
     Ok(id_span(&decoded)?.map(|span| span.last).unwrap_or(0))
-}
-
-fn sorted_distinct(ids: impl IntoIterator<Item = i64>) -> Vec<i64> {
-    let mut ids: Vec<i64> = ids.into_iter().collect();
-    ids.sort_unstable();
-    ids.dedup();
-    ids
 }
 
 /// Each id once, in the order it is first named.

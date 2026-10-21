@@ -177,12 +177,12 @@ impl Merged {
     }
 
     fn next_element(&mut self) -> io::Result<Option<(u64, Element)>> {
-        let Some(Reverse((key, kind, id, run))) = self.heap.pop() else {
+        let Some(Reverse((key, _, _, run))) = self.heap.pop() else {
             return Ok(None);
         };
         let bytes = std::mem::take(&mut self.heads[run]);
         self.advance(run)?;
-        Ok(Some((key, decode(kind, id, &bytes, self.grid)?)))
+        Ok(Some((key, decode(&bytes, self.grid)?)))
     }
 }
 
@@ -261,9 +261,17 @@ fn not_as_written() -> io::Error {
     )
 }
 
-/// An element's bytes in a run: what follows its id, positions on `grid` as differences from the
-/// one before, every number in as few bytes as it needs.
+/// An element's bytes in a run: its kind and its id, then the rest, positions on `grid` as
+/// differences from the one before, every number in as few bytes as it needs. The element says what
+/// it is itself, whatever order it is sorted in.
 fn encode(element: &Element, grid: Grid, out: &mut Vec<u8>) {
+    let (kind, id) = match element {
+        Element::Node { id, .. } => (0, *id),
+        Element::Way(line) => (1, line.id),
+        Element::Multipolygon { id, .. } => (2, *id),
+    };
+    out.push(kind);
+    put_signed(out, id);
     match element {
         Element::Node { at, tags, .. } => {
             let (latitude, longitude) = units_of(*at, grid);
@@ -292,9 +300,11 @@ fn encode(element: &Element, grid: Grid, out: &mut Vec<u8>) {
     }
 }
 
-/// The element `bytes` stand for, of `kind` and `id`.
-fn decode(kind: u8, id: i64, mut bytes: &[u8], grid: Grid) -> io::Result<Element> {
+/// The element `bytes` stand for.
+fn decode(mut bytes: &[u8], grid: Grid) -> io::Result<Element> {
     let bytes = &mut bytes;
+    let kind = take(bytes, 1)?[0];
+    let id = get_signed(bytes)?;
     match kind {
         0 => {
             let latitude = get_signed(bytes)?;

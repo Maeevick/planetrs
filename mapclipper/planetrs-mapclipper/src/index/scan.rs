@@ -4,7 +4,7 @@
 use std::ops::Range;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use planetrs_pbf::{Block, IdSpan, PbfError, Planet, Section, block};
+use planetrs_pbf::{Block, IdSpan, PbfError, Planet, block};
 use rayon::prelude::*;
 
 /// How many blobs pass between two progress lines, as in a harvest.
@@ -84,32 +84,4 @@ fn blobs_read(pass: &str, done: usize, total: usize) -> String {
 /// Every blob of a section.
 pub(super) fn every_blob(range: Range<usize>) -> Vec<usize> {
     range.collect()
-}
-
-/// The lowest and highest id a visit saw in one block, tracked as it walks it.
-pub(super) struct Span {
-    lowest: i64,
-    highest: i64,
-}
-
-impl Span {
-    pub(super) fn new() -> Self {
-        Self {
-            lowest: i64::MAX,
-            highest: i64::MIN,
-        }
-    }
-
-    pub(super) fn saw(&mut self, id: i64) {
-        self.lowest = self.lowest.min(id);
-        self.highest = self.highest.max(id);
-    }
-
-    pub(super) fn of(self, section: Section) -> Option<IdSpan> {
-        (self.lowest <= self.highest).then_some(IdSpan {
-            section,
-            first: self.lowest,
-            last: self.highest,
-        })
-    }
 }
