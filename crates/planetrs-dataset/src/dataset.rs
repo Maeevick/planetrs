@@ -415,7 +415,7 @@ mod tests {
     }
 
     fn holding_sens() -> Result<FilesInMemory, TableError> {
-        let gazetteer = gazetteer::to_parquet(&sens(), &planet())?;
+        let gazetteer = gazetteer::to_parquet(&sens())?;
         let manifest = Manifest {
             planet: planet(),
             files: vec![Entry {
@@ -444,8 +444,8 @@ mod tests {
     }
 
     fn holding_sens_and_its_streets() -> Result<FilesInMemory, TableError> {
-        let index = geocoder_index::to_parquet("FR", &streets_of_sens(), 0.0, &planet())?;
-        let gazetteer = gazetteer::to_parquet(&sens(), &planet())?;
+        let index = geocoder_index::to_parquet("FR", &streets_of_sens(), 0.0)?;
+        let gazetteer = gazetteer::to_parquet(&sens())?;
         let entry = |part: Part, file: &str, bytes: &[u8]| Entry {
             part,
             file: file.into(),
@@ -519,7 +519,7 @@ mod tests {
     /// A dataset whose French index has every byte outside `kept` and its footer zeroed, so that a
     /// read reaching anywhere else fails.
     fn holding_france_with_only(kept: &[std::ops::Range<usize>]) -> Result<FilesInMemory, TableError> {
-        let mut index = geocoder_index::cut_at("FR", &france_in_small_row_groups(), 0.0, &planet(), 2)?;
+        let mut index = geocoder_index::cut_at("FR", &france_in_small_row_groups(), 0.0, 2)?;
         let length = index.len();
         let footer_length = u32::from_le_bytes([
             index[length - 8],
@@ -551,7 +551,7 @@ mod tests {
 
     /// Where each row group of the French index lies, by commune span.
     fn row_group_ranges() -> Result<Vec<(i64, std::ops::Range<usize>)>, TableError> {
-        let index = geocoder_index::cut_at("FR", &france_in_small_row_groups(), 0.0, &planet(), 2)?;
+        let index = geocoder_index::cut_at("FR", &france_in_small_row_groups(), 0.0, 2)?;
         Ok(crate::tables::row_group_bytes(&index, "commune")?
             .into_iter()
             .map(|(lowest, range)| (lowest, range.start as usize..range.end as usize))
@@ -595,7 +595,7 @@ mod tests {
     #[test]
     fn given_a_countrys_index_when_its_footer_is_read_then_it_says_how_far_its_streets_reach_from_their_centres()
     -> Result<(), Box<dyn std::error::Error>> {
-        let index = geocoder_index::to_parquet("FR", &streets_of_sens(), 12_345.6, &planet())?;
+        let index = geocoder_index::to_parquet("FR", &streets_of_sens(), 12_345.6)?;
         let manifest = Manifest {
             planet: planet(),
             files: vec![Entry {
@@ -660,7 +660,7 @@ mod tests {
             latitude_offset: 0,
             longitude_offset: 0,
         };
-        let map = crate::map_index::cut_at("FR", &Coverage::default(), &three_towns(), grid, &planet(), 1)?;
+        let map = crate::map_index::cut_at("FR", &Coverage::default(), &three_towns(), grid, 1)?;
         let manifest = Manifest {
             planet: planet(),
             files: vec![Entry {

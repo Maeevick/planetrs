@@ -197,13 +197,12 @@ pub fn build_index(
             &indexed.parents,
             &indexed.areas,
         );
-        let bytes = gazetteer::to_parquet(&areas, &source).map_err(BuildError::Encoding)?;
+        let bytes = gazetteer::to_parquet(&areas).map_err(BuildError::Encoding)?;
         recording(Part::Gazetteer, "gazetteer.parquet", bytes, areas.len())?;
         for country in countries {
             let entries = geocoder_index_of(country, &assembled.communes, &indexed.streets, &indexed.shops);
             let reach = reach_of(&entries, &assembled.communes);
-            let bytes = geocoder_index::to_parquet(country, &entries, reach, &source)
-                .map_err(BuildError::Encoding)?;
+            let bytes = geocoder_index::to_parquet(country, &entries, reach).map_err(BuildError::Encoding)?;
             recording(
                 Part::GeocoderIndex {
                     country: country.to_string(),
@@ -221,7 +220,7 @@ pub fn build_index(
             &HashMap::new(),
             &HashMap::new(),
         );
-        let bytes = gazetteer::to_parquet(&areas, &source).map_err(BuildError::Encoding)?;
+        let bytes = gazetteer::to_parquet(&areas).map_err(BuildError::Encoding)?;
         recording(Part::Gazetteer, "gazetteer.parquet", bytes, areas.len())?;
     }
     progress(&format!("written        the index in {:.1}s", elapsed()));

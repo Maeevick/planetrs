@@ -13,7 +13,7 @@ use planetrs_geo::territory::Coverage;
 use planetrs_geo::wkb;
 
 use crate::geoparquet;
-use crate::manifest::{self, Provenance};
+use crate::manifest;
 use rayon::prelude::*;
 
 use crate::tables::{
@@ -117,7 +117,6 @@ pub fn to_parquet(
     coverage: &Coverage,
     elements: &[Element],
     grid: Grid,
-    planet: &Provenance,
 ) -> Result<Vec<u8>, TableError> {
     write_parquet(
         Vec::new(),
@@ -126,7 +125,6 @@ pub fn to_parquet(
         elements.len(),
         |at| elements[at].clone(),
         grid,
-        planet,
     )
 }
 
@@ -140,11 +138,10 @@ pub fn write_parquet<W: Write + Send>(
     count: usize,
     element_at: impl Fn(usize) -> Element + Sync,
     grid: Grid,
-    planet: &Provenance,
 ) -> Result<W, TableError> {
     written(
         out,
-        stated(country, coverage, grid, planet),
+        stated(country, coverage, grid),
         count,
         element_at,
         ROWS_PER_ROW_GROUP,
@@ -158,12 +155,11 @@ pub(crate) fn cut_at(
     coverage: &Coverage,
     elements: &[Element],
     grid: Grid,
-    planet: &Provenance,
     rows_per_row_group: usize,
 ) -> Result<Vec<u8>, TableError> {
     written(
         Vec::new(),
-        stated(country, coverage, grid, planet),
+        stated(country, coverage, grid),
         elements.len(),
         |at| elements[at].clone(),
         rows_per_row_group,
@@ -172,15 +168,10 @@ pub(crate) fn cut_at(
 
 /// What a map index's footer states beside its rows: the GeoParquet declaration, the planet and the
 /// licence, the country, the grid its positions were read on and the ground it answers for.
-fn stated(
-    country: &str,
-    coverage: &Coverage,
-    grid: Grid,
-    planet: &Provenance,
-) -> Vec<(&'static str, String)> {
+fn stated(country: &str, coverage: &Coverage, grid: Grid) -> Vec<(&'static str, String)> {
     vec![
         geoparquet::geo_covered_by_bbox(&["Point", "LineString", "GeometryCollection"]),
-        manifest::notice("map index", planet),
+        manifest::notice("map index"),
         (COUNTRY, country.to_string()),
         (
             GRID,
@@ -611,17 +602,6 @@ fn unexpected(column: &str) -> TableError {
 mod tests {
     use super::*;
 
-    fn planet() -> Provenance {
-        Provenance {
-            source_name: "planet-260907.osm.pbf".into(),
-            file_size: 94_746_421_723,
-            blob_count: 52_810,
-            replication_timestamp: 1_788_739_204,
-            replication_sequence: 4_321,
-            writing_program: "planet-dump-ng 1.2.7".into(),
-        }
-    }
-
     fn grid() -> Grid {
         Grid {
             granularity: 100,
@@ -700,7 +680,7 @@ mod tests {
     #[test]
     fn given_nodes_a_way_and_a_multipolygon_when_written_then_reading_them_back_gives_the_same_elements_and_grid()
     -> Result<(), TableError> {
-        let written = to_parquet("MC", &Coverage::default(), &harbour(), grid(), &planet())?;
+        let written = to_parquet("MC", &Coverage::default(), &harbour(), grid())?;
 
         let (read_grid, read) = from_parquet(&written)?;
 
@@ -729,13 +709,7 @@ mod tests {
             })
             .collect();
 
-        let (_, read) = from_parquet(&to_parquet(
-            "MC",
-            &Coverage::default(),
-            &nodes,
-            grid(),
-            &planet(),
-        )?)?;
+        let (_, read) = from_parquet(&to_parquet("MC", &Coverage::default(), &nodes, grid())?)?;
 
         assert_eq!(by_id(read), nodes);
         Ok(())
@@ -747,8 +721,8 @@ mod tests {
         let mut reversed = harbour();
         reversed.reverse();
 
-        let once = to_parquet("MC", &Coverage::default(), &harbour(), grid(), &planet())?;
-        let again = to_parquet("MC", &Coverage::default(), &reversed, grid(), &planet())?;
+        let once = to_parquet("MC", &Coverage::default(), &harbour(), grid())?;
+        let again = to_parquet("MC", &Coverage::default(), &reversed, grid())?;
 
         assert_eq!(once, again);
         Ok(())
@@ -757,7 +731,7 @@ mod tests {
     #[test]
     fn given_more_rows_than_a_row_group_holds_when_written_then_no_multipolygon_is_parted_from_its_members()
     -> Result<(), TableError> {
-        let written = cut_at("MC", &Coverage::default(), &harbour(), grid(), &planet(), 1)?;
+        let written = cut_at("MC", &Coverage::default(), &harbour(), grid(), 1)?;
 
         let Tail::Footer(footer) = tables::footer_from_tail(&written, written.len() as u64)? else {
             return Err(unexpected("footer"));
@@ -782,7 +756,7 @@ mod tests {
     #[test]
     fn given_a_map_index_when_its_footer_is_read_then_the_box_alone_carries_statistics()
     -> Result<(), TableError> {
-        let written = to_parquet("MC", &Coverage::default(), &harbour(), grid(), &planet())?;
+        let written = to_parquet("MC", &Coverage::default(), &harbour(), grid())?;
 
         let with_statistics = tables::columns_with_statistics(&written)?;
 

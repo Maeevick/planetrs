@@ -241,7 +241,6 @@ pub fn build_map_index(
                 count,
                 element_at,
                 grid,
-                &source,
             )
             .map_err(ClipError::Encoding)?
             .into_inner()

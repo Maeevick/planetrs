@@ -8,7 +8,7 @@
 use planetrs_geo::wkb;
 
 use crate::geoparquet;
-use crate::manifest::{self, Provenance};
+use crate::manifest;
 use crate::tables::{
     self, Column, TableError, Values, integers, optional_bytes, optional_integers, optional_texts,
     text_lists, texts,
@@ -72,20 +72,14 @@ const ENTRIES_PER_ROW_GROUP: usize = 20_000;
 /// counts first, then each commune's entries together, communes in numeric order.
 ///
 /// `reach_metres` is how far the middle of any of its streets lies from its commune's centre.
-pub fn to_parquet(
-    country: &str,
-    entries: &[Entry],
-    reach_metres: f64,
-    planet: &Provenance,
-) -> Result<Vec<u8>, TableError> {
-    cut_at(country, entries, reach_metres, planet, ENTRIES_PER_ROW_GROUP)
+pub fn to_parquet(country: &str, entries: &[Entry], reach_metres: f64) -> Result<Vec<u8>, TableError> {
+    cut_at(country, entries, reach_metres, ENTRIES_PER_ROW_GROUP)
 }
 
 pub(crate) fn cut_at(
     country: &str,
     entries: &[Entry],
     reach_metres: f64,
-    planet: &Provenance,
     per_row_group: usize,
 ) -> Result<Vec<u8>, TableError> {
     let row_groups: Vec<Vec<Column>> = row_groups_of(entries, per_row_group)
@@ -96,7 +90,7 @@ pub(crate) fn cut_at(
         &row_groups,
         &[
             geoparquet::geo(&["Point"]),
-            manifest::notice(&format!("geocoder-{country}"), planet),
+            manifest::notice(&format!("geocoder-{country}")),
             (REACH, format!("{reach_metres}")),
         ],
         &["commune"],
@@ -339,17 +333,6 @@ fn unexpected(name: &str) -> TableError {
 mod tests {
     use super::*;
 
-    fn planet() -> Provenance {
-        Provenance {
-            source_name: "planet-260907.osm.pbf".into(),
-            file_size: 94_746_421_723,
-            blob_count: 52_810,
-            replication_timestamp: 1_788_739_204,
-            replication_sequence: 4_321,
-            writing_program: "planet-dump-ng 1.2.7".into(),
-        }
-    }
-
     fn sens() -> Vec<Entry> {
         vec![
             Entry::Names { count: 3 },
@@ -399,7 +382,7 @@ mod tests {
     -> Result<(), TableError> {
         let entries = sens();
 
-        let read_back = from_parquet(&to_parquet("FR", &entries, 0.0, &planet())?)?;
+        let read_back = from_parquet(&to_parquet("FR", &entries, 0.0)?)?;
 
         assert_eq!(read_back, entries);
         Ok(())
@@ -443,7 +426,7 @@ mod tests {
         ];
         let entries: Vec<Entry> = words.into_iter().chain(communes).collect();
 
-        let written = cut_at("FR", &entries, 0.0, &planet(), 4)?;
+        let written = cut_at("FR", &entries, 0.0, 4)?;
 
         assert_eq!(
             tables::row_groups(&written, "commune")?,
@@ -471,7 +454,7 @@ mod tests {
     #[test]
     fn given_a_geocoder_index_when_its_footer_is_read_then_only_the_commune_carries_statistics()
     -> Result<(), TableError> {
-        let written = to_parquet("FR", &sens(), 0.0, &planet())?;
+        let written = to_parquet("FR", &sens(), 0.0)?;
 
         let with_statistics = tables::columns_with_statistics(&written)?;
 

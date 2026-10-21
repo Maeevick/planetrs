@@ -8,7 +8,7 @@
 use planetrs_geo::wkb;
 
 use crate::geoparquet;
-use crate::manifest::{self, Provenance};
+use crate::manifest;
 use crate::tables::{
     self, Column, TableError, Values, integers, optional_bytes, optional_integers, optional_reals,
     optional_texts, small_integers, text_lists,
@@ -40,11 +40,11 @@ pub struct Area {
 const AREAS_PER_ROW_GROUP: usize = 100_000;
 
 /// The gazetteer as a GeoParquet file, one row per area in the order given.
-pub fn to_parquet(areas: &[Area], planet: &Provenance) -> Result<Vec<u8>, TableError> {
+pub fn to_parquet(areas: &[Area]) -> Result<Vec<u8>, TableError> {
     let row_groups: Vec<Vec<Column>> = areas.chunks(AREAS_PER_ROW_GROUP).map(columns_of).collect();
     tables::write(
         &row_groups,
-        &[geoparquet::geo(&["Point"]), manifest::notice("gazetteer", planet)],
+        &[geoparquet::geo(&["Point"]), manifest::notice("gazetteer")],
         &["relation"],
     )
 }
@@ -138,17 +138,6 @@ fn unexpected(name: &str) -> TableError {
 mod tests {
     use super::*;
 
-    fn planet() -> Provenance {
-        Provenance {
-            source_name: "planet-260907.osm.pbf".into(),
-            file_size: 94_746_421_723,
-            blob_count: 52_810,
-            replication_timestamp: 1_788_739_204,
-            replication_sequence: 4_321,
-            writing_program: "planet-dump-ng 1.2.7".into(),
-        }
-    }
-
     fn france_sens_and_a_former_town() -> Vec<Area> {
         vec![
             Area {
@@ -199,7 +188,7 @@ mod tests {
     -> Result<(), TableError> {
         let areas = france_sens_and_a_former_town();
 
-        let read_back = from_parquet(&to_parquet(&areas, &planet())?)?;
+        let read_back = from_parquet(&to_parquet(&areas)?)?;
 
         assert_eq!(read_back, areas);
         Ok(())
@@ -217,7 +206,7 @@ mod tests {
     #[test]
     fn given_a_gazetteer_file_when_its_footer_is_read_then_it_declares_geoparquet_with_centres_as_wkb_points()
     -> Result<(), Box<dyn std::error::Error>> {
-        let written = to_parquet(&france_sens_and_a_former_town(), &planet())?;
+        let written = to_parquet(&france_sens_and_a_former_town())?;
 
         let geo = metadata_of(&written, "geo")?;
 
@@ -236,7 +225,7 @@ mod tests {
     #[test]
     fn given_a_gazetteer_file_when_its_footer_is_read_then_it_names_the_odbl_and_its_format_and_leaves_the_planet_to_the_manifest()
     -> Result<(), Box<dyn std::error::Error>> {
-        let written = to_parquet(&france_sens_and_a_former_town(), &planet())?;
+        let written = to_parquet(&france_sens_and_a_former_town())?;
 
         let notice = metadata_of(&written, "planetrs")?;
 
@@ -256,7 +245,7 @@ mod tests {
     -> Result<(), TableError> {
         let areas = france_sens_and_a_former_town();
 
-        let (first, second) = (to_parquet(&areas, &planet())?, to_parquet(&areas, &planet())?);
+        let (first, second) = (to_parquet(&areas)?, to_parquet(&areas)?);
 
         assert_eq!(first, second);
         Ok(())
@@ -265,7 +254,7 @@ mod tests {
     #[test]
     fn given_a_gazetteer_file_cut_short_or_not_parquet_at_all_when_read_then_it_is_refused_rather_than_misread()
     -> Result<(), TableError> {
-        let written = to_parquet(&france_sens_and_a_former_town(), &planet())?;
+        let written = to_parquet(&france_sens_and_a_former_town())?;
 
         let refused = [
             &written[..written.len() - 9],

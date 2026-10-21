@@ -6,23 +6,11 @@
 use std::path::PathBuf;
 use std::process::Command;
 
-use planetrs_dataset::Provenance;
 use planetrs_dataset::gazetteer::{self, Area};
 use planetrs_dataset::map_index::{self, Element, Grid, Line, Position};
 use planetrs_geo::territory::Coverage;
 
 type Outcome = Result<(), Box<dyn std::error::Error>>;
-
-fn planet() -> Provenance {
-    Provenance {
-        source_name: "planet-260907.osm.pbf".into(),
-        file_size: 94_746_421_723,
-        blob_count: 52_810,
-        replication_timestamp: 1_788_739_204,
-        replication_sequence: 4_321,
-        writing_program: "planet-dump-ng 1.2.7".into(),
-    }
-}
 
 fn sens_and_monaco() -> Vec<Area> {
     vec![
@@ -61,7 +49,7 @@ fn sens_and_monaco() -> Vec<Area> {
 
 fn written_gazetteer(name: &str) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let path = std::env::temp_dir().join(format!("planetrs-dataset-{name}-{}.parquet", std::process::id()));
-    std::fs::write(&path, gazetteer::to_parquet(&sens_and_monaco(), &planet())?)?;
+    std::fs::write(&path, gazetteer::to_parquet(&sens_and_monaco())?)?;
     Ok(path)
 }
 
@@ -195,7 +183,7 @@ fn written_map_index(name: &str) -> Result<PathBuf, Box<dyn std::error::Error>> 
     };
     std::fs::write(
         &path,
-        map_index::to_parquet("MC", &Coverage::default(), &harbour(), grid, &planet())?,
+        map_index::to_parquet("MC", &Coverage::default(), &harbour(), grid)?,
     )?;
     Ok(path)
 }

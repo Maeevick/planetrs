@@ -167,7 +167,7 @@ fn given_a_dataset_read_once_through_a_cache_when_its_parts_are_gone_then_the_sa
             position: [3.268_208_2, 48.197_500_6],
         },
     ];
-    let index = geocoder_index::to_parquet("FR", &entries, 0.0, &planet)?;
+    let index = geocoder_index::to_parquet("FR", &entries, 0.0)?;
     record(
         &directory,
         &planet,

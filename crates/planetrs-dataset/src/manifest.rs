@@ -155,13 +155,14 @@ impl Manifest {
     }
 }
 
-/// The `planetrs` key-value pair every file of a dataset carries: which file it is, the planet it
-/// came from, the licence and whom to credit, so that a file copied out of its dataset still says.
-pub(crate) fn notice(file: &str, planet: &Provenance) -> (&'static str, String) {
+/// The `planetrs` key-value pair every file of a dataset carries: which file it is, its format, the
+/// licence and whom to credit, so that a file copied out of its dataset still says. The planet it
+/// came from is the manifest's to say, so that the same content built from another planet is the
+/// same file.
+pub(crate) fn notice(file: &str) -> (&'static str, String) {
     let notice = serde_json::json!({
         "file": file,
         "format": FORMAT,
-        "planet": planet,
         "licence": LICENCE,
         "attribution": ATTRIBUTION,
     });
