@@ -1,8 +1,8 @@
-//! Filing what the planet holds under the countries asked for, as each country's map index, so that
-//! a map of any box inside them is cut from the dataset rather than from the planet.
+//! Filing what the planet holds under the countries asked for, as their map index cut into tiles, so
+//! that a map of any box inside them is cut from the dataset rather than from the planet.
 //!
-//! A country's map index holds what passes one to five of a harvest would take out of the planet for
-//! any box inside it: every way with a node in the country, whole; every node of the country that
+//! The map index holds what passes one to five of a harvest would take out of the planet for any box
+//! inside the countries: every way with a node in one of them, whole; every node of theirs that
 //! carries a name or that no way runs through, the others standing in their ways; and every
 //! multipolygon with a member among those ways, each member way whole with every node placed.
 

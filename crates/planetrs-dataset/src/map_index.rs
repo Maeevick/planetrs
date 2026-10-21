@@ -1,11 +1,16 @@
-//! A country's map index: everything a map of any box inside the country takes from the planet,
-//! filed so that a box reads only the few row groups around it.
+//! A map index: everything a map of any box inside the countries it was built for takes from the
+//! planet, cut into tiles of about a gigabyte and filed so that a box reads only the few row groups
+//! around it.
 //!
-//! It holds every way with a node in the country, whole, with the position of each node the planet
-//! places; every node of the country that carries a name or that no way runs through; and every
+//! It holds every way with a node in those countries, whole, with the position of each node the
+//! planet places; every node of theirs that carries a name or that no way runs through; and every
 //! multipolygon with a member among those ways, followed by each of its member ways whole, so that a
 //! map never has to fetch a member by its id. Positions come back to the nanodegree, exactly as the
 //! planet stores them.
+//!
+//! Each element lies in one tile, the cell of a quadtree over the planet holding the centre of its
+//! box, a cell being cut in four while it weighs more than a tile may. A summary, read before any
+//! tile, says whom the map index was built for, the grid of its positions and the ground it covers.
 
 use std::io::Write;
 use std::ops::Range;
