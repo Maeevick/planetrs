@@ -8,7 +8,7 @@ use planetrs_geo::territory::Coverage;
 use crate::directory::MANIFEST;
 use crate::files::{ForReadingFiles, Unreachable};
 use crate::manifest::{Entry, Manifest, ManifestError, Part};
-use crate::map_index::{Element, Grid};
+use crate::map_index::{Element, Grid, Tile};
 use crate::tables::{self, Column, Footer, RowGroupBytes, TableError, Tail};
 use crate::{gazetteer, geocoder_index};
 
@@ -338,18 +338,77 @@ impl<F: ForReadingFiles> Dataset<F> {
     /// south, east and north in degrees. A row group whose footer states no bounds is read, since it
     /// cannot be ruled out.
     pub fn elements_near(&self, index: &MapIndex, bounds: [f64; 4]) -> Result<Vec<Element>, DatasetError> {
+        self.elements_of_near(&index.entry, &index.footer, bounds)
+    }
+
+    /// The elements of every row group of the file `entry` names, its footer `footer`, whose rows'
+    /// boxes may touch `bounds`.
+    fn elements_of_near(
+        &self,
+        entry: &Entry,
+        footer: &Footer,
+        bounds: [f64; 4],
+    ) -> Result<Vec<Element>, DatasetError> {
         let mut elements = Vec::new();
-        for (group, around) in index.footer.row_group_bounds("bbox") {
+        for (group, around) in footer.row_group_bounds("bbox") {
             if around.is_some_and(|around| !touch(around, bounds)) {
                 continue;
             }
-            let columns = self.row_group_of(&index.entry, &index.footer, &group)?;
+            let columns = self.row_group_of(entry, footer, &group)?;
             elements.extend(
-                crate::map_index::elements_in(&columns)
-                    .map_err(|source| table_error(&index.entry, source))?,
+                crate::map_index::elements_in(&columns).map_err(|source| table_error(entry, source))?,
             );
         }
         Ok(elements)
+    }
+}
+
+/// One tile of a dataset's map index with only its footer read: its elements are fetched a row
+/// group at a time, the row groups near a box.
+#[derive(Debug, Clone)]
+pub struct MapTile {
+    tile: Tile,
+    entry: Entry,
+    footer: Footer,
+}
+
+impl MapTile {
+    /// Which tile it is.
+    pub fn tile(&self) -> Tile {
+        self.tile
+    }
+
+    /// The grid its positions were read on, as its footer states it.
+    pub fn grid(&self) -> Option<Grid> {
+        crate::map_index::grid_in(&self.footer)
+    }
+}
+
+impl<F: ForReadingFiles> Dataset<F> {
+    /// The tiles of the map index whose elements' box touches `bounds`, as west, south, east and
+    /// north in degrees, each with only its footer read. A tile the manifest gives no box is
+    /// opened, since it cannot be ruled out.
+    pub fn map_tiles_near(&self, _bounds: [f64; 4]) -> Result<Vec<MapTile>, DatasetError> {
+        self.manifest
+            .files
+            .iter()
+            .filter_map(|entry| match entry.part {
+                Part::MapTile { level, x, y } => Some((Tile { level, x, y }, entry)),
+                _ => None,
+            })
+            .map(|(tile, entry)| {
+                self.footer_of(entry).map(|footer| MapTile {
+                    tile,
+                    entry: entry.clone(),
+                    footer,
+                })
+            })
+            .collect()
+    }
+
+    /// The elements of every row group of `tile` whose rows' boxes may touch `bounds`.
+    pub fn tile_elements_near(&self, tile: &MapTile, bounds: [f64; 4]) -> Result<Vec<Element>, DatasetError> {
+        self.elements_of_near(&tile.entry, &tile.footer, bounds)
     }
 }
 
@@ -683,6 +742,71 @@ mod tests {
                 .with("map-FR.parquet", &map),
             reads: std::sync::Arc::clone(reads),
         })
+    }
+
+    /// The three towns in a tile each, listed in a manifest with the box of each tile.
+    fn tiled_three_towns(
+        reads: &std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    ) -> Result<Counting, TableError> {
+        let grid = Grid {
+            granularity: 100,
+            latitude_offset: 0,
+            longitude_offset: 0,
+        };
+        let towns = three_towns();
+        let lightest = towns
+            .iter()
+            .map(crate::map_index::Element::weight)
+            .max()
+            .unwrap_or_default();
+        let tiling = crate::map_index::Tiling::of(towns.len(), |at| towns[at].clone(), lightest)?;
+        let mut files = FilesInMemory::default();
+        let mut entries = Vec::new();
+        for (which, tile) in tiling.tiles().into_iter().enumerate() {
+            let written = tiling.write(which, Vec::new(), |at| towns[at].clone(), grid)?;
+            files = files.with(&tile.file_name(), &written.out);
+            entries.push(Entry {
+                part: Part::MapTile {
+                    level: tile.level,
+                    x: tile.x,
+                    y: tile.y,
+                },
+                file: tile.file_name(),
+                url: None,
+                bytes: written.out.len() as u64,
+                sha256: String::new(),
+                rows: written.rows,
+                bbox: Some(written.bbox),
+            });
+        }
+        let manifest = Manifest {
+            planet: planet(),
+            files: entries,
+        };
+        Ok(Counting {
+            files: files.with(MANIFEST, manifest.to_json().as_bytes()),
+            reads: std::sync::Arc::clone(reads),
+        })
+    }
+
+    #[test]
+    fn given_three_towns_in_a_tile_each_when_the_elements_near_monaco_are_read_then_only_monacos_tile_is_opened()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let reads = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let dataset = Dataset::open(tiled_three_towns(&reads)?)?;
+        let before = reads.load(std::sync::atomic::Ordering::Relaxed);
+        let near_monaco = [7.40, 43.72, 7.44, 43.75];
+
+        let tiles = dataset.map_tiles_near(near_monaco)?;
+        let near = tiles
+            .iter()
+            .map(|tile| dataset.tile_elements_near(tile, near_monaco))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let fetched = reads.load(std::sync::atomic::Ordering::Relaxed) - before;
+        assert_eq!(near.concat(), vec![three_towns()[0].clone()]);
+        assert_eq!(fetched, 2, "Monaco's footer and its one row group");
+        Ok(())
     }
 
     #[test]
