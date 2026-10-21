@@ -134,7 +134,7 @@ fn given_a_road_across_a_border_when_indexed_then_its_map_index_keeps_it_once_wi
 }
 
 #[test]
-fn given_a_road_leaving_for_land_no_index_covers_when_indexed_then_its_map_index_keeps_it_with_the_node_outside_unplaced()
+fn given_a_road_leaving_for_land_no_index_covers_when_indexed_then_its_map_index_keeps_it_whole_with_every_node_placed_the_one_outside_included()
 -> Outcome {
     let dataset = indexed("leaving")?;
 
@@ -142,7 +142,10 @@ fn given_a_road_leaving_for_land_no_index_covers_when_indexed_then_its_map_index
 
     assert_eq!(
         road.map(|road| road.positions),
-        Some(vec![at(43_690_000_000, 7_300_000_000), None])
+        Some(vec![
+            at(43_690_000_000, 7_300_000_000),
+            at(44_200_000_000, 7_300_000_000)
+        ])
     );
     Ok(())
 }
