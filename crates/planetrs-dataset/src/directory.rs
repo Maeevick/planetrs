@@ -160,6 +160,37 @@ pub fn record_written(
     )
 }
 
+/// A part already written at [`written_beside`] its name, waiting to be recorded with the others
+/// of its build.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Written {
+    /// Which part it is.
+    pub part: Part,
+    /// Its name in the dataset.
+    pub name: String,
+    /// How many rows it holds.
+    pub rows: u64,
+    /// For a tile, the box around its elements.
+    pub bbox: Option<[f64; 4]>,
+}
+
+/// Records every part of `written`, written beside the dataset in `directory` from `planet`, in
+/// place of every part `family` says belongs with them, and removes the files of those it replaces
+/// that are not written again: a build of the map index replaces all of its tiles at once, whatever
+/// tiles the build before cut.
+pub fn record_all_written(
+    directory: &Path,
+    planet: &Provenance,
+    _family: impl Fn(&Part) -> bool,
+    written: Vec<Written>,
+) -> Result<Manifest, RecordError> {
+    let mut manifest = of_the_same_planet(directory, planet)?;
+    for part in written {
+        manifest = record_written(directory, planet, part.part, &part.name, part.rows)?;
+    }
+    Ok(manifest)
+}
+
 /// The length and the SHA-256 of a file, read a megabyte at a time.
 fn measured(path: &Path) -> Result<(u64, String), RecordError> {
     use std::io::Read;

@@ -3,7 +3,8 @@
 use std::path::PathBuf;
 
 use planetrs_dataset::directory::{
-    CarriedOver, MANIFEST, RecordError, carry_over, record, record_written, written_beside,
+    CarriedOver, MANIFEST, RecordError, Written, carry_over, record, record_all_written, record_written,
+    written_beside,
 };
 use planetrs_dataset::testing::FilesInMemory;
 use planetrs_dataset::{Dataset, DirectoryFiles, Entry, Manifest, Part, Provenance, geocoder_index};
@@ -354,6 +355,69 @@ fn given_a_part_written_beside_the_dataset_when_recorded_then_it_takes_its_name_
             rows: 3,
             bbox: None,
         }]
+    );
+    Ok(())
+}
+
+fn is_map(part: &Part) -> bool {
+    matches!(part, Part::MapSummary | Part::MapTile { .. })
+}
+
+#[test]
+fn given_a_map_index_recorded_in_two_tiles_when_a_rebuild_records_it_in_one_then_the_manifest_lists_the_new_parts_alone_and_the_old_tiles_are_gone()
+-> Outcome {
+    let directory = scratch("map-index");
+    record(
+        &directory,
+        &planet(),
+        Part::Gazetteer,
+        "gazetteer.parquet",
+        b"PAR1 a gazetteer PAR1",
+        3,
+    )?;
+    let tile = |level: u8, x: u32, y: u32| Part::MapTile { level, x, y };
+    let beside = |name: &str, bytes: &[u8]| std::fs::write(written_beside(&directory, name), bytes);
+    let written = |part: Part, name: &str, rows: u64, bbox: Option<[f64; 4]>| Written {
+        part,
+        name: name.into(),
+        rows,
+        bbox,
+    };
+    beside("map-summary.json", b"{\"countries\":[\"FR\",\"MC\"]}")?;
+    beside("map-1-0-1.parquet", b"PAR1 abidjan PAR1")?;
+    beside("map-1-1-1.parquet", b"PAR1 monaco PAR1")?;
+    record_all_written(
+        &directory,
+        &planet(),
+        is_map,
+        vec![
+            written(Part::MapSummary, "map-summary.json", 2, None),
+            written(tile(1, 0, 1), "map-1-0-1.parquet", 1, Some([-4.012, 5.269, -4.010, 5.270])),
+            written(tile(1, 1, 1), "map-1-1-1.parquet", 6, Some([7.4186, 43.7347, 7.51, 43.81])),
+        ],
+    )?;
+    beside("map-summary.json", b"{\"countries\":[\"MC\"]}")?;
+    beside("map-0-0-0.parquet", b"PAR1 monaco alone PAR1")?;
+
+    record_all_written(
+        &directory,
+        &planet(),
+        is_map,
+        vec![
+            written(Part::MapSummary, "map-summary.json", 1, None),
+            written(tile(0, 0, 0), "map-0-0-0.parquet", 6, Some([7.4186, 43.7347, 7.51, 43.81])),
+        ],
+    )?;
+
+    assert_eq!(
+        parts_listed_in(&directory)?,
+        vec![Part::Gazetteer, Part::MapSummary, tile(0, 0, 0)]
+    );
+    assert!(!directory.join("map-1-0-1.parquet").exists());
+    assert!(!directory.join("map-1-1-1.parquet").exists());
+    assert_eq!(
+        std::fs::read(directory.join("map-0-0-0.parquet"))?,
+        b"PAR1 monaco alone PAR1"
     );
     Ok(())
 }
