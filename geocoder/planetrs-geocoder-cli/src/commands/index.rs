@@ -18,30 +18,23 @@ const LARGE_PLANET_BYTES: u64 = 10_000_000_000;
 
 /// Whether a part of a dataset is one the mapclipper builds, which indexing never rebuilds.
 fn is_the_mapclippers(part: &Part) -> bool {
-    matches!(part, Part::MapIndex { .. })
+    matches!(
+        part,
+        Part::MapSummary | Part::MapTile { .. } | Part::MapIndex { .. }
+    )
 }
 
 /// What a rebuild says about the map index it kept or left out.
 fn carried_lines(carried: &CarriedOver) -> Vec<String> {
-    let countries = |parts: &[Part]| {
-        parts
-            .iter()
-            .filter_map(|part| match part {
-                Part::MapIndex { country } => Some(country.as_str()),
-                _ => None,
-            })
-            .collect::<Vec<_>>()
-            .join(",")
-    };
     let mut lines = Vec::new();
     if !carried.kept.is_empty() {
-        lines.push(format!("kept the map index of {}", countries(&carried.kept)));
+        lines.push("kept the map index".to_string());
     }
     if !carried.left.is_empty() {
-        lines.push(format!(
-            "left out the map index of {}, built from another planet\n  → rebuild it: planetrs-mapclipper index",
-            countries(&carried.left)
-        ));
+        lines.push(
+            "left out the map index, built from another planet\n  → rebuild it: planetrs-mapclipper index"
+                .to_string(),
+        );
     }
     lines
 }

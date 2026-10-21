@@ -7,8 +7,8 @@
 //! their member ways; and the members' nodes. The map index holds each member way whole, so nothing
 //! has to be fetched by id.
 
-use planetrs_dataset::map_index::{Element, Grid, Line, Position};
-use planetrs_dataset::{Dataset, ForReadingFiles, MapIndex};
+use planetrs_dataset::map_index::{Element, Grid, Line, Position, Scope};
+use planetrs_dataset::{Dataset, DatasetError, ForReadingFiles};
 use planetrs_geo::territory::Coverage;
 use planetrs_geo::{Area, BoundingBox, Window};
 
@@ -22,18 +22,24 @@ pub fn harvest_from_dataset<F: ForReadingFiles>(
     area: &Area,
 ) -> Result<Harvest, ClipError> {
     let collected = area.collected();
-    let indexes = dataset.map_indexes()?;
-    let grid = one_grid(&indexes)?;
+    let summary = dataset.map_summary().map_err(|failure| match failure {
+        DatasetError::NoMapIndex => ClipError::NoMapIndex,
+        other => ClipError::Dataset(other),
+    })?;
+    let grid = summary.grid;
     let window = Window::of(
         &collected,
         grid.granularity,
         grid.latitude_offset,
         grid.longitude_offset,
     );
-    let coverages: Vec<Coverage> = indexes.iter().map(MapIndex::coverage).collect();
-    if !Coverage::cover(&coverages, &ground_of(&window, grid)) {
+    let ground = ground_of(&window, grid);
+    if !Coverage::cover(std::slice::from_ref(&summary.coverage), &ground) {
         return Err(ClipError::OutsideTheDataset {
-            countries: indexes.iter().map(|index| index.country().to_string()).collect(),
+            countries: match summary.scope {
+                Scope::Countries(countries) => countries,
+                Scope::Planet => Vec::new(),
+            },
         });
     }
     let inside = |at: &Position| {
@@ -42,10 +48,10 @@ pub fn harvest_from_dataset<F: ForReadingFiles>(
             (at.longitude - grid.longitude_offset) / grid.granularity,
         )
     };
-    let bounds = [collected.west, collected.south, collected.east, collected.north];
+    let bounds = [ground.west, ground.south, ground.east, ground.north];
     let mut elements = Vec::new();
-    for index in &indexes {
-        elements.extend(dataset.elements_near(index, bounds)?);
+    for tile in dataset.map_tiles_near(bounds)? {
+        elements.extend(dataset.tile_elements_near(&tile, bounds)?);
     }
 
     let mut nodes: Vec<Node> = Vec::new();
@@ -147,19 +153,6 @@ pub fn harvest_from_dataset<F: ForReadingFiles>(
         relations: found.into_iter().map(|(relation, _)| relation).collect(),
     }
     .sorted())
-}
-
-/// The one grid every map index read its positions on, refused when they differ, since a window is
-/// tested on one.
-fn one_grid(indexes: &[MapIndex]) -> Result<Grid, ClipError> {
-    let mut grids = indexes.iter().map(MapIndex::grid);
-    let first = grids.next().ok_or(ClipError::NoMapIndex)?;
-    match first {
-        Some(grid) if grids.all(|other| other == Some(grid)) => Ok(grid),
-        _ => Err(ClipError::Grid {
-            detail: "the dataset's map indexes do not state one grid".into(),
-        }),
-    }
 }
 
 /// The ground whose positions a window holds, in degrees: rounded outward from the area collected, it

@@ -1,5 +1,5 @@
-//! Building each country's map index from a planet file, beside the dataset, and putting it in place
-//! with the geocoder's parts the dataset held of the same planet.
+//! Building the map index of the countries asked for from a planet file, beside the dataset, and
+//! putting it in place with the geocoder's parts the dataset held of the same planet.
 
 use std::path::PathBuf;
 
@@ -14,7 +14,7 @@ use planetrs_mapclipper::index::build_map_index;
 use super::{Context, explained};
 use crate::cli::IndexArgs;
 
-/// Builds the map index of each country the command line asks for.
+/// Builds the map index of the countries the command line asks for.
 pub fn run(context: &Context, arguments: IndexArgs) -> Result<()> {
     let planet = planet_to_read(context, arguments.planet)?;
     let codes = country_codes(&arguments.countries);
@@ -44,12 +44,14 @@ pub fn run(context: &Context, arguments: IndexArgs) -> Result<()> {
     for line in carried_lines(&carried) {
         context.say(&line);
     }
-    for country in &indexed {
-        context.say(&format!(
-            "indexed {}: {} nodes, {} ways and {} multipolygons",
-            country.country, country.nodes, country.ways, country.multipolygons
-        ));
-    }
+    context.say(&format!(
+        "indexed {}: {} nodes, {} ways and {} multipolygons, in {} tiles",
+        indexed.countries.join(", "),
+        indexed.nodes,
+        indexed.ways,
+        indexed.multipolygons,
+        indexed.tiles
+    ));
     Ok(())
 }
 

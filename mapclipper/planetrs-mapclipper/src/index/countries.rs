@@ -25,22 +25,15 @@ impl Countries {
         self.outlines.iter().map(|(code, _)| code.as_str())
     }
 
-    /// Where a box cut from each country's map index lacks nothing the planet holds, in the order of
-    /// [`Countries::codes`].
-    pub(super) fn coverages(&self) -> Vec<Coverage> {
+    /// Where a box cut from the countries' map index lacks nothing the planet holds.
+    pub(super) fn coverage(&self) -> Coverage {
         let outlines: Vec<&Outline> = self.outlines.iter().map(|(_, outline)| outline).collect();
-        Coverage::of_each(&outlines)
+        Coverage::of(&outlines)
     }
 
-    /// The index among [`Countries::codes`] of the country holding a longitude and latitude, the
-    /// first in code order when outlines overlap at a border.
-    pub(super) fn country_of(&self, point: [f64; 2]) -> Option<usize> {
-        if !self.mask.might_hold(point) {
-            return None;
-        }
-        self.outlines
-            .iter()
-            .position(|(_, outline)| outline.contains(point))
+    /// Whether one of the countries holds a longitude and latitude.
+    pub(super) fn hold(&self, point: [f64; 2]) -> bool {
+        self.mask.might_hold(point) && self.outlines.iter().any(|(_, outline)| outline.contains(point))
     }
 }
 

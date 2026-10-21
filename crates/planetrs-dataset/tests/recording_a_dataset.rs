@@ -392,8 +392,18 @@ fn given_a_map_index_recorded_in_two_tiles_when_a_rebuild_records_it_in_one_then
         is_map,
         vec![
             written(Part::MapSummary, "map-summary.json", 2, None),
-            written(tile(1, 0, 1), "map-1-0-1.parquet", 1, Some([-4.012, 5.269, -4.010, 5.270])),
-            written(tile(1, 1, 1), "map-1-1-1.parquet", 6, Some([7.4186, 43.7347, 7.51, 43.81])),
+            written(
+                tile(1, 0, 1),
+                "map-1-0-1.parquet",
+                1,
+                Some([-4.012, 5.269, -4.010, 5.270]),
+            ),
+            written(
+                tile(1, 1, 1),
+                "map-1-1-1.parquet",
+                6,
+                Some([7.4186, 43.7347, 7.51, 43.81]),
+            ),
         ],
     )?;
     beside("map-summary.json", b"{\"countries\":[\"MC\"]}")?;
@@ -405,7 +415,12 @@ fn given_a_map_index_recorded_in_two_tiles_when_a_rebuild_records_it_in_one_then
         is_map,
         vec![
             written(Part::MapSummary, "map-summary.json", 1, None),
-            written(tile(0, 0, 0), "map-0-0-0.parquet", 6, Some([7.4186, 43.7347, 7.51, 43.81])),
+            written(
+                tile(0, 0, 0),
+                "map-0-0-0.parquet",
+                6,
+                Some([7.4186, 43.7347, 7.51, 43.81]),
+            ),
         ],
     )?;
 

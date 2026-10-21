@@ -386,12 +386,12 @@ fn manifest_of(dataset: &Path) -> Manifest {
 fn given_a_dataset_holding_a_map_index_of_the_same_planet_when_indexed_again_then_the_map_index_is_kept() {
     let directory = scratch("keeps-the-maps");
     let dataset = index_in(&directory);
-    let map_of_france = Part::MapIndex { country: "FR".into() };
+    let map_of_france = Part::MapTile { level: 0, x: 0, y: 0 };
     record(
         &dataset,
         &manifest_of(&dataset).planet,
         map_of_france.clone(),
-        "map-FR.parquet",
+        "map-0-0-0.parquet",
         b"a map of France",
         1,
     )
@@ -419,7 +419,7 @@ fn given_a_dataset_holding_a_map_index_of_the_same_planet_when_indexed_again_the
             .any(|entry| entry.part == map_of_france)
     );
     assert_eq!(
-        std::fs::read(dataset.join("map-FR.parquet")).unwrap(),
+        std::fs::read(dataset.join("map-0-0-0.parquet")).unwrap(),
         b"a map of France"
     );
 }
@@ -429,12 +429,12 @@ fn given_a_dataset_holding_a_map_index_of_another_planet_when_indexed_from_a_new
  {
     let directory = scratch("leaves-old-maps");
     let dataset = index_in(&directory);
-    let map_of_france = Part::MapIndex { country: "FR".into() };
+    let map_of_france = Part::MapTile { level: 0, x: 0, y: 0 };
     record(
         &dataset,
         &manifest_of(&dataset).planet,
         map_of_france.clone(),
-        "map-FR.parquet",
+        "map-0-0-0.parquet",
         b"a map of France",
         1,
     )
@@ -457,7 +457,7 @@ fn given_a_dataset_holding_a_map_index_of_another_planet_when_indexed_from_a_new
 
     assert!(rebuilt.status.success(), "{}", text(&rebuilt.stderr));
     assert!(
-        text(&rebuilt.stderr).contains("left out the map index of FR, built from another planet"),
+        text(&rebuilt.stderr).contains("left out the map index, built from another planet"),
         "{}",
         text(&rebuilt.stderr)
     );

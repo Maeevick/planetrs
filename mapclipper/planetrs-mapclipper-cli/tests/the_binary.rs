@@ -279,7 +279,7 @@ fn given_a_harvest_when_inspected_as_json_then_stdout_names_the_planet_it_was_cu
 }
 
 #[test]
-fn given_a_planet_when_indexed_then_the_dataset_holds_its_countrys_map_index_and_stderr_ends_with_the_attribution()
+fn given_a_planet_when_indexed_then_the_dataset_holds_its_countrys_map_index_in_one_tile_and_stderr_ends_with_the_attribution()
  {
     let directory = scratch("index");
 
@@ -288,7 +288,7 @@ fn given_a_planet_when_indexed_then_the_dataset_holds_its_countrys_map_index_and
     assert!(indexed.status.success(), "{}", text(&indexed.stderr));
     assert_eq!(
         parts_of(&directory.join("dataset")),
-        vec![Part::MapIndex { country: "MC".into() }]
+        vec![Part::MapSummary, Part::MapTile { level: 0, x: 0, y: 0 }]
     );
     assert_eq!(text(&indexed.stderr).lines().last(), Some(ATTRIBUTION));
 }
