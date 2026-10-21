@@ -134,15 +134,48 @@ pub enum Scope {
 }
 
 impl Summary {
-    /// The summary as the JSON part of a dataset.
+    /// The summary as the JSON part of a dataset, naming the licence as every file of one does.
     pub fn to_json(&self) -> String {
-        String::new()
+        serde_json::to_string_pretty(&SummaryPart {
+            file: "map summary".into(),
+            format: manifest::FORMAT.into(),
+            licence: manifest::LICENCE.into(),
+            attribution: manifest::ATTRIBUTION.into(),
+            countries: match &self.scope {
+                Scope::Planet => None,
+                Scope::Countries(countries) => Some(countries.clone()),
+            },
+            grid: format!(
+                "{},{},{}",
+                self.grid.granularity, self.grid.latitude_offset, self.grid.longitude_offset
+            ),
+            coverage: self.coverage.to_text(),
+        })
+        .unwrap_or_default()
     }
 
     /// The summary a JSON part stands for, or nothing when it is not one.
-    pub fn from_json(_text: &str) -> Option<Summary> {
-        None
+    pub fn from_json(text: &str) -> Option<Summary> {
+        let part: SummaryPart = serde_json::from_str(text).ok()?;
+        Some(Summary {
+            scope: part.countries.map_or(Scope::Planet, Scope::Countries),
+            grid: grid_of(&part.grid)?,
+            coverage: Coverage::from_text(&part.coverage)?,
+        })
     }
+}
+
+/// A map index's summary as its JSON part holds it: the notice every file carries, then the
+/// countries it was built for, none for the whole planet, its grid and its coverage as text.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct SummaryPart {
+    file: String,
+    format: String,
+    licence: String,
+    attribution: String,
+    countries: Option<Vec<String>>,
+    grid: String,
+    coverage: String,
 }
 
 impl Element {
@@ -1035,7 +1068,7 @@ mod tests {
 
     #[test]
     fn given_the_summary_of_a_map_index_of_two_countries_or_of_the_planet_when_written_and_read_back_then_it_is_the_same_summary()
-    {
+     {
         let countries = Summary {
             scope: Scope::Countries(vec!["FR".into(), "MC".into()]),
             grid: grid(),
