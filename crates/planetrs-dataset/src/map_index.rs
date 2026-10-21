@@ -231,30 +231,109 @@ impl Element {
 /// One tile written element by element, in the order of their placements, a row group at a time,
 /// for elements too many to hold at once.
 pub struct TileWriter<W: Write + Send> {
-    out: W,
+    writer: TableWriter<W>,
     tile: Tile,
+    group: Vec<Element>,
+    rows: usize,
+    rows_per_row_group: usize,
+    groups_written: usize,
+    written_rows: u64,
+    around: Option<[f64; 4]>,
 }
 
 impl<W: Write + Send> TileWriter<W> {
     /// A writer of the tile `tile` into `out`, its positions read on `grid`.
-    pub fn new(out: W, tile: Tile, _grid: Grid) -> Self {
-        Self { out, tile }
+    pub fn new(out: W, tile: Tile, grid: Grid) -> Self {
+        Self::cut_at(out, tile, grid, ROWS_PER_ROW_GROUP)
+    }
+
+    /// A writer whose row groups hold about `rows_per_row_group` rows, never parting a
+    /// multipolygon from its members.
+    fn cut_at(out: W, tile: Tile, grid: Grid, rows_per_row_group: usize) -> Self {
+        let writer = TableWriter::into(out, &tile_stated(tile, grid), &BOX_FIELDS)
+            .with_close_integers(&["refs.list.item", "unresolved.list.item", "member_ways.list.item"])
+            .with_split_reals(&BOX_FIELDS)
+            .with_unique_values(&["geometry"]);
+        Self {
+            writer,
+            tile,
+            group: Vec::new(),
+            rows: 0,
+            rows_per_row_group,
+            groups_written: 0,
+            written_rows: 0,
+            around: None,
+        }
     }
 
     /// Adds the next element.
-    pub fn add(&mut self, _element: Element) -> Result<(), TableError> {
+    pub fn add(&mut self, element: Element) -> Result<(), TableError> {
+        self.rows += rows_in(&element);
+        self.group.push(element);
+        if self.rows >= self.rows_per_row_group {
+            self.flush()?;
+        }
         Ok(())
     }
 
     /// Writes what is left and the footer, and gives back the tile written.
     pub fn finish(self) -> Result<TileWritten<W>, TableError> {
-        let _ = self.tile;
-        Ok(TileWritten {
-            out: self.out,
-            rows: 0,
-            bbox: [0.0; 4],
-        })
+        let name = self.tile.file_name();
+        let (out, rows, bbox) = self.finished()?;
+        let bbox = bbox.ok_or_else(|| TableError::Unwritable {
+            detail: format!("the tile {name} holds no element"),
+        })?;
+        Ok(TileWritten { out, rows, bbox })
     }
+
+    /// Writes what is left and the footer, and gives back `out`, the rows written and the box
+    /// around them, none when no element came.
+    fn finished(mut self) -> Result<(W, u64, Option<[f64; 4]>), TableError> {
+        if !self.group.is_empty() || self.groups_written == 0 {
+            self.flush()?;
+        }
+        Ok((self.writer.finish()?, self.written_rows, self.around))
+    }
+
+    /// Writes the elements gathered as one row group.
+    fn flush(&mut self) -> Result<(), TableError> {
+        let rows: Vec<Row> = self
+            .group
+            .par_iter()
+            .map(rows_of)
+            .collect::<Result<Vec<Vec<Row>>, TableError>>()?
+            .into_iter()
+            .flatten()
+            .collect();
+        if let Some(bbox) = rows.iter().map(|row| row.bbox).reduce(union) {
+            self.around = Some(self.around.map_or(bbox, |around| union(around, bbox)));
+        }
+        self.writer.write(&columns_of(rows))?;
+        self.written_rows += self.rows as u64;
+        self.groups_written += 1;
+        self.group.clear();
+        self.rows = 0;
+        Ok(())
+    }
+}
+
+/// How many elements are built at once, in parallel, before they are handed to a tile's writer.
+const ELEMENTS_BUILT_AT_ONCE: usize = 10_000;
+
+/// Writes the elements `placed` names, built by `element_at` a batch at a time in parallel, through
+/// `writer`.
+fn add_placed<W: Write + Send>(
+    writer: &mut TileWriter<W>,
+    placed: &[Placed],
+    element_at: &(impl Fn(usize) -> Element + Sync),
+) -> Result<(), TableError> {
+    for batch in placed.chunks(ELEMENTS_BUILT_AT_ONCE) {
+        let built: Vec<Element> = batch.par_iter().map(|placed| element_at(placed.at)).collect();
+        for element in built {
+            writer.add(element)?;
+        }
+    }
+    Ok(())
 }
 
 /// The weight of a way's row.
@@ -344,17 +423,9 @@ impl Tiling {
         grid: Grid,
     ) -> Result<TileWritten<W>, TableError> {
         let (tile, run) = &self.tiles[which];
-        let (out, rows, bbox) = write_placed(
-            out,
-            &tile_stated(*tile, grid),
-            &self.placed[run.clone()],
-            &element_at,
-            ROWS_PER_ROW_GROUP,
-        )?;
-        let bbox = bbox.ok_or_else(|| TableError::Unwritable {
-            detail: format!("the tile {} holds no element", tile.file_name()),
-        })?;
-        Ok(TileWritten { out, rows, bbox })
+        let mut writer = TileWriter::new(out, *tile, grid);
+        add_placed(&mut writer, &self.placed[run.clone()], &element_at)?;
+        writer.finish()
     }
 }
 
@@ -376,13 +447,11 @@ fn tile_stated(tile: Tile, grid: Grid) -> Vec<(&'static str, String)> {
 }
 
 /// One element as a map index places it: where its box's centre falls along the Hilbert curve, its
-/// order among elements of the same place, which it is, and how many rows and how much weight it
-/// brings.
+/// order among elements of the same place, which it is, and how much weight it brings.
 struct Placed {
     key: u64,
     order: (u8, i64),
     at: usize,
-    rows: usize,
     weight: u64,
 }
 
@@ -395,12 +464,12 @@ fn placed_of(
         .into_par_iter()
         .map(|at| {
             let element = element_at(at);
+            let placement = element.placement()?;
             Ok(Placed {
-                key: hilbert_key(box_of(&element)?),
-                order: order_of(&element),
+                key: placement.key,
+                order: placement.order,
                 at,
-                rows: rows_in(&element),
-                weight: element.weight(),
+                weight: placement.weight,
             })
         })
         .collect::<Result<_, TableError>>()?;
@@ -466,74 +535,9 @@ fn written<W: Write + Send>(
 ) -> Result<W, TableError> {
     let element_at = |at: usize| elements[at].clone();
     let placed = placed_of(elements.len(), &element_at)?;
-    write_placed(
-        out,
-        &tile_stated(WHOLE_PLANET, grid),
-        &placed,
-        &element_at,
-        rows_per_row_group,
-    )
-    .map(|(out, _, _)| out)
-}
-
-/// Writes the elements `placed` names, built by `element_at`, in row groups of about
-/// `rows_per_row_group` rows, and gives back `out`, how many rows went in and the box around them.
-fn write_placed<W: Write + Send>(
-    out: W,
-    stated: &[(&'static str, String)],
-    placed: &[Placed],
-    element_at: &(impl Fn(usize) -> Element + Sync),
-    rows_per_row_group: usize,
-) -> Result<(W, u64, Option<[f64; 4]>), TableError> {
-    let mut writer = TableWriter::into(out, stated, &BOX_FIELDS)
-        .with_close_integers(&["refs.list.item", "unresolved.list.item", "member_ways.list.item"])
-        .with_split_reals(&BOX_FIELDS)
-        .with_unique_values(&["geometry"]);
-    let mut group: Vec<usize> = Vec::new();
-    let mut rows = 0;
-    let mut groups_written = 0;
-    let mut written_rows = 0u64;
-    let mut around: Option<[f64; 4]> = None;
-    let mut flush = |writer: &mut TableWriter<W>, group: &[usize], rows: usize| -> Result<(), TableError> {
-        if let Some(bbox) = write_group(writer, group, element_at)? {
-            around = Some(around.map_or(bbox, |around| union(around, bbox)));
-        }
-        written_rows += rows as u64;
-        Ok(())
-    };
-    for element in placed {
-        group.push(element.at);
-        rows += element.rows;
-        if rows >= rows_per_row_group {
-            flush(&mut writer, &group, rows)?;
-            groups_written += 1;
-            group.clear();
-            rows = 0;
-        }
-    }
-    if !group.is_empty() || groups_written == 0 {
-        flush(&mut writer, &group, rows)?;
-    }
-    Ok((writer.finish()?, written_rows, around))
-}
-
-/// Builds the elements at `group`, in that order, writes their rows as one row group, and gives back
-/// the box around them.
-fn write_group<W: Write + Send>(
-    writer: &mut TableWriter<W>,
-    group: &[usize],
-    element_at: &(impl Fn(usize) -> Element + Sync),
-) -> Result<Option<[f64; 4]>, TableError> {
-    let rows: Vec<Row> = group
-        .par_iter()
-        .map(|at| rows_of(&element_at(*at)))
-        .collect::<Result<Vec<Vec<Row>>, TableError>>()?
-        .into_iter()
-        .flatten()
-        .collect();
-    let around = rows.iter().map(|row| row.bbox).reduce(union);
-    writer.write(&columns_of(rows))?;
-    Ok(around)
+    let mut writer = TileWriter::cut_at(out, WHOLE_PLANET, grid, rows_per_row_group);
+    add_placed(&mut writer, &placed, &element_at)?;
+    writer.finished().map(|(out, _, _)| out)
 }
 
 /// The box of an element's own row: a node's point, a way's placed nodes, a multipolygon's members.
