@@ -8,7 +8,7 @@ use planetrs_geo::territory::Coverage;
 use crate::directory::MANIFEST;
 use crate::files::{ForReadingFiles, Unreachable};
 use crate::manifest::{Entry, Manifest, ManifestError, Part};
-use crate::map_index::{Element, Grid, Tile};
+use crate::map_index::{Element, Grid, Summary, Tile};
 use crate::tables::{self, Column, Footer, RowGroupBytes, TableError, Tail};
 use crate::{gazetteer, geocoder_index};
 
@@ -36,6 +36,8 @@ pub enum DatasetError {
     },
     /// The manifest lists no gazetteer, and nothing can be settled without one.
     NoGazetteer,
+    /// The manifest lists no map index, and no map can be cut without one.
+    NoMapIndex,
 }
 
 impl std::fmt::Display for DatasetError {
@@ -45,6 +47,7 @@ impl std::fmt::Display for DatasetError {
             Self::Manifest(reason) => write!(formatter, "{reason}"),
             Self::Table { file, source } => write!(formatter, "{file}: {source}"),
             Self::NoGazetteer => write!(formatter, "the dataset lists no gazetteer"),
+            Self::NoMapIndex => write!(formatter, "the dataset lists no map index"),
         }
     }
 }
@@ -385,6 +388,11 @@ impl MapTile {
 }
 
 impl<F: ForReadingFiles> Dataset<F> {
+    /// What the map index says as a whole: whom it was built for, its grid and its coverage.
+    pub fn map_summary(&self) -> Result<Summary, DatasetError> {
+        Err(DatasetError::NoMapIndex)
+    }
+
     /// The tiles of the map index whose elements' box touches `bounds`, as west, south, east and
     /// north in degrees, each with only its footer read. A tile the manifest gives no box is
     /// opened, since it cannot be ruled out.
@@ -788,6 +796,43 @@ mod tests {
             files: files.with(MANIFEST, manifest.to_json().as_bytes()),
             reads: std::sync::Arc::clone(reads),
         })
+    }
+
+    #[test]
+    fn given_a_dataset_with_a_map_index_of_france_and_monaco_when_its_summary_is_read_then_it_names_them_their_grid_and_coverage()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let summary = crate::map_index::Summary {
+            scope: crate::map_index::Scope::Countries(vec!["FR".into(), "MC".into()]),
+            grid: Grid {
+                granularity: 100,
+                latitude_offset: 0,
+                longitude_offset: 0,
+            },
+            coverage: Coverage::from_text("0.01;4372:740..743").unwrap_or_default(),
+        };
+        let json = summary.to_json();
+        let manifest = Manifest {
+            planet: planet(),
+            files: vec![Entry {
+                part: Part::MapSummary,
+                file: "map-summary.json".into(),
+                url: None,
+                bytes: json.len() as u64,
+                sha256: String::new(),
+                rows: 0,
+                bbox: None,
+            }],
+        };
+        let dataset = Dataset::open(
+            FilesInMemory::default()
+                .with(MANIFEST, manifest.to_json().as_bytes())
+                .with("map-summary.json", json.as_bytes()),
+        )?;
+
+        let read = dataset.map_summary();
+
+        assert_eq!(read, Ok(summary));
+        Ok(())
     }
 
     #[test]
