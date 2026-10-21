@@ -165,6 +165,13 @@ impl Summary {
     }
 }
 
+/// The summary a dataset's JSON part holds, refused when it is not one.
+pub(crate) fn summary_from(bytes: &[u8]) -> Result<Summary, TableError> {
+    Summary::from_json(&String::from_utf8_lossy(bytes)).ok_or_else(|| TableError::Unreadable {
+        detail: "not a map index summary".into(),
+    })
+}
+
 /// A map index's summary as its JSON part holds it: the notice every file carries, then the
 /// countries it was built for, none for the whole planet, its grid and its coverage as text.
 #[derive(serde::Serialize, serde::Deserialize)]

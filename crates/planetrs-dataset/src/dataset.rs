@@ -390,7 +390,8 @@ impl MapTile {
 impl<F: ForReadingFiles> Dataset<F> {
     /// What the map index says as a whole: whom it was built for, its grid and its coverage.
     pub fn map_summary(&self) -> Result<Summary, DatasetError> {
-        Err(DatasetError::NoMapIndex)
+        let entry = self.entry_of(&Part::MapSummary).ok_or(DatasetError::NoMapIndex)?;
+        self.read_whole(entry, crate::map_index::summary_from)
     }
 
     /// The tiles of the map index whose elements' box touches `bounds`, as west, south, east and
