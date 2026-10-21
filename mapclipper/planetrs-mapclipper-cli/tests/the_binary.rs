@@ -361,3 +361,32 @@ fn given_a_dataset_of_monaco_served_over_http_when_a_box_inside_it_is_harvested_
         std::fs::read(directory.join("from-planet.mapclip")).unwrap()
     );
 }
+
+/// A file standing for a planet, and its checksum as planet.openstreetmap.org publishes one.
+const PUBLISHED_PLANET: &[u8] = b"a planet of Monaco, published with its checksum";
+const PUBLISHED_CHECKSUM: &str = "4124c6bf7c53aaa75c88ba15c36948bf  monaco-latest.osm.pbf\n";
+
+#[test]
+fn given_a_planet_published_with_its_checksum_when_downloaded_then_it_takes_its_name_in_the_data_directory_and_the_next_step_is_to_index_it()
+ {
+    let directory = scratch("download");
+    let server = RangeServer::serving(&[
+        ("monaco-latest.osm.pbf", PUBLISHED_PLANET),
+        ("monaco-latest.osm.pbf.md5", PUBLISHED_CHECKSUM.as_bytes()),
+    ])
+    .unwrap();
+    let source = format!("{}monaco-latest.osm.pbf", server.url());
+
+    let output = run(&directory, &["--data-dir", "data", "download", "--from", &source]);
+
+    assert!(output.status.success(), "{}", text(&output.stderr));
+    assert_eq!(
+        std::fs::read(directory.join("data/planets/monaco-latest.osm.pbf")).unwrap(),
+        PUBLISHED_PLANET
+    );
+    assert!(
+        text(&output.stderr).contains("→ next: planetrs-mapclipper index --planet"),
+        "{}",
+        text(&output.stderr)
+    );
+}
