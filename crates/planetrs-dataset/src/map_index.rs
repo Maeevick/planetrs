@@ -14,6 +14,7 @@
 
 use std::io::Write;
 use std::ops::Range;
+use std::sync::atomic::AtomicU64;
 
 use planetrs_geo::territory::Coverage;
 use planetrs_geo::wkb;
@@ -314,6 +315,35 @@ impl<W: Write + Send> TileWriter<W> {
         self.group.clear();
         self.rows = 0;
         Ok(())
+    }
+}
+
+/// The weights of a map index's elements summed by cell of the deepest level a tile is cut to, so
+/// that its tiles are known before any element is written.
+pub struct TileWeights {
+    cells: Vec<AtomicU64>,
+}
+
+impl TileWeights {
+    /// No weight yet.
+    pub fn new() -> Self {
+        Self { cells: Vec::new() }
+    }
+
+    /// Adds the weight of an element whose placement has `key`.
+    pub fn add(&self, _key: u64, _weight: u64) {}
+
+    /// The tiles cut from the weights as [`Tiling::of`] cuts them, each with the run of keys its
+    /// elements have.
+    pub fn tiles(&self, _target: u64) -> Vec<(Tile, Range<u64>)> {
+        let _ = &self.cells;
+        Vec::new()
+    }
+}
+
+impl Default for TileWeights {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -1125,6 +1155,27 @@ mod tests {
             (written.out, written.rows, written.bbox),
             (expected.out, expected.rows, expected.bbox)
         );
+        Ok(())
+    }
+
+    #[test]
+    fn given_the_weights_of_a_harbour_and_a_quay_summed_by_cell_when_tiled_then_the_tiles_are_those_the_tiling_cuts()
+    -> Result<(), TableError> {
+        let (monaco, abidjan) = (harbour(), abidjan_quay());
+        let elements = [monaco.clone(), abidjan.clone()].concat();
+        let weights = TileWeights::new();
+        for element in &elements {
+            let placement = element.placement()?;
+            weights.add(placement.key, placement.weight);
+        }
+
+        for target in [u64::MAX, weight(&monaco).max(weight(&abidjan)), 0] {
+            let tiled = Tiling::of(elements.len(), |at| elements[at].clone(), target)?;
+
+            let summed: Vec<Tile> = weights.tiles(target).into_iter().map(|(tile, _)| tile).collect();
+
+            assert_eq!(summed, tiled.tiles(), "a tile weighing at most {target}");
+        }
         Ok(())
     }
 
