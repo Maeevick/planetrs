@@ -51,7 +51,7 @@ pub fn harvest_from_dataset<F: ForReadingFiles>(
     let bounds = [ground.west, ground.south, ground.east, ground.north];
     let mut elements = Vec::new();
     for tile in dataset.map_tiles_near(bounds)? {
-        elements.extend(dataset.tile_elements_near(&tile, bounds)?);
+        elements.extend(dataset.elements_near(&tile, bounds)?);
     }
 
     let mut nodes: Vec<Node> = Vec::new();

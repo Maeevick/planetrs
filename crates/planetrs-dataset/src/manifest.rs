@@ -64,11 +64,6 @@ pub enum Part {
         /// The country's ISO 3166-1 code.
         country: String,
     },
-    /// The map index of one country.
-    MapIndex {
-        /// The country's ISO 3166-1 code.
-        country: String,
-    },
     /// What the map index says as a whole: the countries it was built for, or the whole planet, the
     /// grid of its positions and the ground it covers, read before any of its tiles.
     MapSummary,

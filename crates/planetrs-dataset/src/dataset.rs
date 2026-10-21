@@ -3,8 +3,6 @@
 use std::ops::{Range, RangeInclusive};
 use std::path::{Path, PathBuf};
 
-use planetrs_geo::territory::Coverage;
-
 use crate::directory::MANIFEST;
 use crate::files::{ForReadingFiles, Unreachable};
 use crate::manifest::{Entry, Manifest, ManifestError, Part};
@@ -290,60 +288,7 @@ impl<F: ForReadingFiles> Dataset<F> {
     }
 }
 
-/// One country's map index with only its footer read: its elements are fetched a row group at a
-/// time, the row groups near a box.
-#[derive(Debug, Clone)]
-pub struct MapIndex {
-    country: String,
-    entry: Entry,
-    footer: Footer,
-}
-
-impl MapIndex {
-    /// The country it is the map index of.
-    pub fn country(&self) -> &str {
-        &self.country
-    }
-
-    /// The grid its positions were read on, as its footer states it.
-    pub fn grid(&self) -> Option<Grid> {
-        crate::map_index::grid_in(&self.footer)
-    }
-
-    /// The ground where a box cut from it lacks nothing the planet holds, as its footer states it:
-    /// nothing when it states none.
-    pub fn coverage(&self) -> Coverage {
-        crate::map_index::coverage_in(&self.footer)
-    }
-}
-
 impl<F: ForReadingFiles> Dataset<F> {
-    /// The map index of every country the dataset holds one of, each with only its footer read.
-    pub fn map_indexes(&self) -> Result<Vec<MapIndex>, DatasetError> {
-        self.manifest
-            .files
-            .iter()
-            .filter_map(|entry| match &entry.part {
-                Part::MapIndex { country } => Some((country, entry)),
-                _ => None,
-            })
-            .map(|(country, entry)| {
-                self.footer_of(entry).map(|footer| MapIndex {
-                    country: country.clone(),
-                    entry: entry.clone(),
-                    footer,
-                })
-            })
-            .collect()
-    }
-
-    /// The elements of every row group of `index` whose rows' boxes may touch `bounds`, as west,
-    /// south, east and north in degrees. A row group whose footer states no bounds is read, since it
-    /// cannot be ruled out.
-    pub fn elements_near(&self, index: &MapIndex, bounds: [f64; 4]) -> Result<Vec<Element>, DatasetError> {
-        self.elements_of_near(&index.entry, &index.footer, bounds)
-    }
-
     /// The elements of every row group of the file `entry` names, its footer `footer`, whose rows'
     /// boxes may touch `bounds`.
     fn elements_of_near(
@@ -416,8 +361,10 @@ impl<F: ForReadingFiles> Dataset<F> {
             .collect()
     }
 
-    /// The elements of every row group of `tile` whose rows' boxes may touch `bounds`.
-    pub fn tile_elements_near(&self, tile: &MapTile, bounds: [f64; 4]) -> Result<Vec<Element>, DatasetError> {
+    /// The elements of every row group of `tile` whose rows' boxes may touch `bounds`, as west,
+    /// south, east and north in degrees. A row group whose footer states no bounds is read, since it
+    /// cannot be ruled out.
+    pub fn elements_near(&self, tile: &MapTile, bounds: [f64; 4]) -> Result<Vec<Element>, DatasetError> {
         self.elements_of_near(&tile.entry, &tile.footer, bounds)
     }
 }
@@ -455,6 +402,8 @@ fn whole(files: &impl ForReadingFiles, file: &str) -> Result<Vec<u8>, DatasetErr
 
 #[cfg(test)]
 mod tests {
+    use planetrs_geo::territory::Coverage;
+
     use super::*;
     use crate::manifest::Provenance;
     use crate::testing::FilesInMemory;
@@ -733,12 +682,12 @@ mod tests {
             latitude_offset: 0,
             longitude_offset: 0,
         };
-        let map = crate::map_index::cut_at("FR", &Coverage::default(), &three_towns(), grid, 1)?;
+        let map = crate::map_index::cut_at(&three_towns(), grid, 1)?;
         let manifest = Manifest {
             planet: planet(),
             files: vec![Entry {
-                part: Part::MapIndex { country: "FR".into() },
-                file: "map-FR.parquet".into(),
+                part: Part::MapTile { level: 0, x: 0, y: 0 },
+                file: "map-0-0-0.parquet".into(),
                 url: None,
                 bytes: map.len() as u64,
                 sha256: String::new(),
@@ -749,7 +698,7 @@ mod tests {
         Ok(Counting {
             files: FilesInMemory::default()
                 .with(MANIFEST, manifest.to_json().as_bytes())
-                .with("map-FR.parquet", &map),
+                .with("map-0-0-0.parquet", &map),
             reads: std::sync::Arc::clone(reads),
         })
     }
@@ -847,7 +796,7 @@ mod tests {
         let tiles = dataset.map_tiles_near(near_monaco)?;
         let near = tiles
             .iter()
-            .map(|tile| dataset.tile_elements_near(tile, near_monaco))
+            .map(|tile| dataset.elements_near(tile, near_monaco))
             .collect::<Result<Vec<_>, _>>()?;
 
         let fetched = reads.load(std::sync::atomic::Ordering::Relaxed) - before;
@@ -857,16 +806,17 @@ mod tests {
     }
 
     #[test]
-    fn given_a_map_index_of_three_towns_when_the_elements_near_monaco_are_read_then_only_monacos_row_group_is_fetched()
+    fn given_a_tile_of_three_towns_when_the_elements_near_monaco_are_read_then_only_monacos_row_group_is_fetched()
     -> Result<(), Box<dyn std::error::Error>> {
         let reads = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let dataset = Dataset::open(holding_three_towns(&reads)?)?;
-        let indexes = dataset.map_indexes()?;
+        let near_monaco = [7.40, 43.72, 7.44, 43.75];
+        let tiles = dataset.map_tiles_near(near_monaco)?;
         let before = reads.load(std::sync::atomic::Ordering::Relaxed);
 
-        let near = indexes
+        let near = tiles
             .iter()
-            .map(|index| dataset.elements_near(index, [7.40, 43.72, 7.44, 43.75]))
+            .map(|tile| dataset.elements_near(tile, near_monaco))
             .collect::<Result<Vec<_>, _>>()?;
 
         let fetched = reads.load(std::sync::atomic::Ordering::Relaxed) - before;

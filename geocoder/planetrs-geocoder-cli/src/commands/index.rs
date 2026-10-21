@@ -18,10 +18,7 @@ const LARGE_PLANET_BYTES: u64 = 10_000_000_000;
 
 /// Whether a part of a dataset is one the mapclipper builds, which indexing never rebuilds.
 fn is_the_mapclippers(part: &Part) -> bool {
-    matches!(
-        part,
-        Part::MapSummary | Part::MapTile { .. } | Part::MapIndex { .. }
-    )
+    matches!(part, Part::MapSummary | Part::MapTile { .. })
 }
 
 /// What a rebuild says about the map index it kept or left out.

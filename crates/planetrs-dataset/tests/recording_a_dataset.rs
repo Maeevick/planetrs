@@ -203,7 +203,7 @@ fn given_both_tools_parts_and_a_rebuild_of_the_geocoders_when_carried_over_then_
 -> Outcome {
     let (previous, building) = (scratch("carry-previous"), scratch("carry-building"));
     let planet = planet();
-    let map_of_france = Part::MapIndex { country: "FR".into() };
+    let map_of_france = Part::MapTile { level: 0, x: 0, y: 0 };
     record(
         &previous,
         &planet,
@@ -245,7 +245,7 @@ fn given_both_tools_parts_and_a_rebuild_of_the_geocoders_when_carried_over_then_
         1,
     )?;
 
-    let carried = carry_over(&previous, &building, |part| matches!(part, Part::MapIndex { .. }))?;
+    let carried = carry_over(&previous, &building, is_map)?;
 
     assert_eq!(
         parts_listed_in(&building)?,
@@ -280,7 +280,7 @@ fn given_a_dataset_of_an_older_planet_when_carried_over_then_nothing_joins_the_r
         replication_timestamp: 1_788_134_404,
         ..planet()
     };
-    let map_of_france = Part::MapIndex { country: "FR".into() };
+    let map_of_france = Part::MapTile { level: 0, x: 0, y: 0 };
     record(
         &previous,
         &older,
@@ -306,7 +306,7 @@ fn given_a_dataset_of_an_older_planet_when_carried_over_then_nothing_joins_the_r
         1,
     )?;
 
-    let carried = carry_over(&previous, &building, |part| matches!(part, Part::MapIndex { .. }))?;
+    let carried = carry_over(&previous, &building, is_map)?;
 
     assert_eq!(parts_listed_in(&building)?, vec![Part::Gazetteer]);
     assert!(!building.join("map-FR.parquet").exists());
@@ -333,7 +333,7 @@ fn given_a_part_written_beside_the_dataset_when_recorded_then_it_takes_its_name_
     record_written(
         &directory,
         &planet(),
-        Part::MapIndex { country: "MC".into() },
+        Part::MapTile { level: 0, x: 0, y: 0 },
         "map-MC.parquet",
         3,
     )?;
@@ -347,7 +347,7 @@ fn given_a_part_written_beside_the_dataset_when_recorded_then_it_takes_its_name_
     assert_eq!(
         manifest.files,
         vec![Entry {
-            part: Part::MapIndex { country: "MC".into() },
+            part: Part::MapTile { level: 0, x: 0, y: 0 },
             file: "map-MC.parquet".into(),
             url: None,
             bytes: 21,

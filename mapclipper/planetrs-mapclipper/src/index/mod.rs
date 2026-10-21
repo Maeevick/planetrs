@@ -278,10 +278,7 @@ const SUMMARY: &str = "map-summary.json";
 
 /// Whether a part of a dataset belongs to the map index, which a build replaces whole.
 fn is_the_map_index(part: &Part) -> bool {
-    matches!(
-        part,
-        Part::MapSummary | Part::MapTile { .. } | Part::MapIndex { .. }
-    )
+    matches!(part, Part::MapSummary | Part::MapTile { .. })
 }
 
 /// A position stored on the planet's grid, in its 32-bit units.

@@ -26,7 +26,7 @@ pub mod territory;
 #[cfg(any(test, feature = "testing"))]
 pub mod testing;
 
-pub use dataset::{CommunesRead, CountryIndex, Dataset, DatasetError, MapIndex};
+pub use dataset::{CommunesRead, CountryIndex, Dataset, DatasetError, MapTile};
 pub use files::{DirectoryFiles, ForReadingFiles, Unreachable};
 #[cfg(feature = "remote")]
 pub use http::HttpFiles;
