@@ -119,12 +119,30 @@ const COVERAGE_DEGREES: f64 = 0.01;
 /// however its position and theirs round.
 const TOUCHING_DEGREES: f64 = 1e-9;
 
+/// How a coverage reads as text when it covers every box.
+const EVERYWHERE: &str = "everywhere";
+
 /// The cells of a hundredth of a degree that lie wholly inside a country indexed, where a box can be
-/// cut from a dataset and lack nothing the planet holds.
+/// cut from a dataset and lack nothing the planet holds; every cell, for a dataset of the whole
+/// planet.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Coverage {
+    ground: Ground,
+}
+
+/// What a coverage answers for.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Ground {
+    /// Every cell of the planet.
+    Everywhere,
     /// By row of latitude, the runs of covered columns, each as its first and last.
-    rows: BTreeMap<i32, Vec<(i32, i32)>>,
+    Cells(BTreeMap<i32, Vec<(i32, i32)>>),
+}
+
+impl Default for Ground {
+    fn default() -> Self {
+        Self::Cells(BTreeMap::new())
+    }
 }
 
 impl Coverage {
@@ -153,14 +171,16 @@ impl Coverage {
                     }
                 }
                 Coverage {
-                    rows: covered
-                        .into_iter()
-                        .map(|(row, mut columns)| {
-                            columns.sort_unstable();
-                            columns.dedup();
-                            (row, runs_of(&columns))
-                        })
-                        .collect(),
+                    ground: Ground::Cells(
+                        covered
+                            .into_iter()
+                            .map(|(row, mut columns)| {
+                                columns.sort_unstable();
+                                columns.dedup();
+                                (row, runs_of(&columns))
+                            })
+                            .collect(),
+                    ),
                 }
             })
             .collect()
@@ -168,22 +188,29 @@ impl Coverage {
 
     /// The coverage of a dataset built from the whole planet, which answers for every box.
     pub fn everywhere() -> Coverage {
-        Coverage::default()
+        Coverage {
+            ground: Ground::Everywhere,
+        }
     }
 
     /// Whether every cell `box_` touches is covered by one of `coverages`.
     pub fn cover(coverages: &[Coverage], box_: &BoundingBox) -> bool {
-        (cell_of_coverage(box_.south)..=cell_of_coverage(box_.north)).all(|row| {
-            (cell_of_coverage(box_.west)..=cell_of_coverage(box_.east))
-                .all(|column| coverages.iter().any(|coverage| coverage.holds(row, column)))
-        })
+        let anywhere = |coverage: &Coverage| coverage.ground == Ground::Everywhere;
+        coverages.iter().any(anywhere)
+            || (cell_of_coverage(box_.south)..=cell_of_coverage(box_.north)).all(|row| {
+                (cell_of_coverage(box_.west)..=cell_of_coverage(box_.east))
+                    .all(|column| coverages.iter().any(|coverage| coverage.holds(row, column)))
+            })
     }
 
-    /// The coverage as text, as a map index's footer keeps it: the cell size, then each row with
-    /// its runs of columns, `0.01;4372:740..743,750..751;-1:-5..-3`.
+    /// The coverage as text, as a map index keeps it: the cell size, then each row with its runs of
+    /// columns, `0.01;4372:740..743,750..751;-1:-5..-3`, or `everywhere`.
     pub fn to_text(&self) -> String {
+        let Ground::Cells(rows) = &self.ground else {
+            return EVERYWHERE.to_string();
+        };
         std::iter::once(COVERAGE_DEGREES.to_string())
-            .chain(self.rows.iter().map(|(row, runs)| {
+            .chain(rows.iter().map(|(row, runs)| {
                 let runs: Vec<String> = runs
                     .iter()
                     .map(|(first, last)| format!("{first}..{last}"))
@@ -196,6 +223,9 @@ impl Coverage {
 
     /// The coverage text stands for, or nothing when it is not one, or one of another cell size.
     pub fn from_text(text: &str) -> Option<Coverage> {
+        if text == EVERYWHERE {
+            return Some(Coverage::everywhere());
+        }
         let mut parts = text.split(';');
         if parts.next()?.parse::<f64>().ok()? != COVERAGE_DEGREES {
             return None;
@@ -213,14 +243,19 @@ impl Coverage {
                 Some((row.parse().ok()?, runs))
             })
             .collect::<Option<BTreeMap<i32, Vec<(i32, i32)>>>>()?;
-        Some(Coverage { rows })
+        Some(Coverage {
+            ground: Ground::Cells(rows),
+        })
     }
 
     fn holds(&self, row: i32, column: i32) -> bool {
-        self.rows.get(&row).is_some_and(|runs| {
-            let after = runs.partition_point(|(first, _)| *first <= column);
-            after > 0 && runs[after - 1].1 >= column
-        })
+        match &self.ground {
+            Ground::Everywhere => true,
+            Ground::Cells(rows) => rows.get(&row).is_some_and(|runs| {
+                let after = runs.partition_point(|(first, _)| *first <= column);
+                after > 0 && runs[after - 1].1 >= column
+            }),
+        }
     }
 }
 
