@@ -231,16 +231,18 @@ mod tests {
         Ok(())
     }
 
+    /// A file holds its content alone, so that the same content built from next week's planet is the
+    /// same file, and only the manifest says which planet a dataset came from.
     #[test]
-    fn given_a_gazetteer_file_when_its_footer_is_read_then_it_names_the_planet_it_came_from_and_the_odbl()
+    fn given_a_gazetteer_file_when_its_footer_is_read_then_it_names_the_odbl_and_its_format_and_leaves_the_planet_to_the_manifest()
     -> Result<(), Box<dyn std::error::Error>> {
         let written = to_parquet(&france_sens_and_a_former_town(), &planet())?;
 
         let notice = metadata_of(&written, "planetrs")?;
 
         assert_eq!(notice["file"], "gazetteer");
-        assert_eq!(notice["planet"]["source_name"], "planet-260907.osm.pbf");
-        assert_eq!(notice["planet"]["replication_timestamp"], 1_788_739_204);
+        assert_eq!(notice["format"], "planetrs dataset 1");
+        assert!(notice.get("planet").is_none(), "{notice}");
         assert_eq!(notice["licence"], "ODbL-1.0");
         assert_eq!(
             notice["attribution"],
