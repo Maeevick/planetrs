@@ -8,6 +8,7 @@
 //! planet stores them.
 
 use std::io::Write;
+use std::ops::Range;
 
 use planetrs_geo::territory::Coverage;
 use planetrs_geo::wkb;
@@ -108,10 +109,22 @@ pub enum Element {
 }
 
 impl Element {
-    /// About the bytes the element takes once encoded, the measure a map index is cut into tiles by.
+    /// About the bytes the element takes once encoded, the measure a map index is cut into tiles by:
+    /// ten for each position, three for each node a way runs through and thirty for each row, as
+    /// France's map index measured them.
     pub fn weight(&self) -> u64 {
-        0
+        match self {
+            Element::Node { .. } => 10 + 30,
+            Element::Way(line) => weight_of(line),
+            Element::Multipolygon { ways, .. } => 30 + ways.iter().map(weight_of).sum::<u64>(),
+        }
     }
+}
+
+/// The weight of a way's row.
+fn weight_of(line: &Line) -> u64 {
+    let placed = line.positions.iter().flatten().count() as u64;
+    10 * placed + 3 * line.refs.len() as u64 + 30
 }
 
 /// A tile of a map index: the cell of a quadtree over the planet holding the centres of its
@@ -140,21 +153,94 @@ pub struct Tiling {
 }
 
 impl Tiling {
-    /// The tiles of `count` elements built by `element_at`, a cell being cut in four while its
-    /// elements weigh more than `target`.
+    /// The tiles of `count` elements built by `element_at`: the planet's cell is cut in four, and
+    /// each quarter again, while its elements weigh more than `target` (see [`Element::weight`]).
     pub fn of(
-        _count: usize,
-        _element_at: impl Fn(usize) -> Element + Sync,
-        _target: u64,
+        count: usize,
+        element_at: impl Fn(usize) -> Element + Sync,
+        target: u64,
     ) -> Result<Self, TableError> {
-        Ok(Self {
-            tiles: vec![Tile { level: 0, x: 0, y: 0 }],
-        })
+        let placed = placed_of(count, &element_at)?;
+        let mut cells = Vec::new();
+        cut(&placed, 0..placed.len(), 0, 0, target, &mut cells);
+        let tiles = cells
+            .into_iter()
+            .map(|(level, run)| {
+                let (x, y) = cell_of_centre(box_of(&element_at(placed[run.start].at))?);
+                let shift = HILBERT_ORDER - level;
+                Ok(Tile {
+                    level: level as u8,
+                    x: x >> shift,
+                    y: y >> shift,
+                })
+            })
+            .collect::<Result<_, TableError>>()?;
+        Ok(Self { tiles })
     }
 
     /// The tiles, along the Hilbert curve.
     pub fn tiles(&self) -> Vec<Tile> {
         self.tiles.clone()
+    }
+}
+
+/// One element as a map index places it: where its box's centre falls along the Hilbert curve, its
+/// order among elements of the same place, which it is, and how many rows and how much weight it
+/// brings.
+struct Placed {
+    key: u64,
+    order: (u8, i64),
+    at: usize,
+    rows: usize,
+    weight: u64,
+}
+
+/// The `count` elements built by `element_at`, placed along the Hilbert curve.
+fn placed_of(
+    count: usize,
+    element_at: &(impl Fn(usize) -> Element + Sync),
+) -> Result<Vec<Placed>, TableError> {
+    let mut placed: Vec<Placed> = (0..count)
+        .into_par_iter()
+        .map(|at| {
+            let element = element_at(at);
+            Ok(Placed {
+                key: hilbert_key(box_of(&element)?),
+                order: order_of(&element),
+                at,
+                rows: rows_in(&element),
+                weight: element.weight(),
+            })
+        })
+        .collect::<Result<_, TableError>>()?;
+    placed.par_sort_unstable_by_key(|placed| (placed.key, placed.order));
+    Ok(placed)
+}
+
+/// Cuts the cell at `level` whose elements are `run` of `placed`, its key along the curve
+/// `prefix`, into the quarters that weigh no more than `target`, each as its level and its run.
+fn cut(
+    placed: &[Placed],
+    run: Range<usize>,
+    level: u32,
+    prefix: u64,
+    target: u64,
+    cells: &mut Vec<(u32, Range<usize>)>,
+) {
+    if run.is_empty() {
+        return;
+    }
+    let weight: u64 = placed[run.clone()].iter().map(|placed| placed.weight).sum();
+    if weight <= target || level == HILBERT_ORDER {
+        cells.push((level, run));
+        return;
+    }
+    let shift = 2 * (HILBERT_ORDER - level - 1);
+    let mut start = run.start;
+    for quarter in 4 * prefix..4 * prefix + 4 {
+        let end = run.start + placed[run.clone()].partition_point(|placed| placed.key >> shift <= quarter);
+        cut(placed, start..end, level + 1, quarter, target, cells);
+        start = end;
     }
 }
 
@@ -242,19 +328,7 @@ fn written<W: Write + Send>(
     element_at: impl Fn(usize) -> Element + Sync,
     rows_per_row_group: usize,
 ) -> Result<W, TableError> {
-    let mut placed: Vec<(u64, (u8, i64), usize, usize)> = (0..count)
-        .into_par_iter()
-        .map(|at| {
-            let element = element_at(at);
-            Ok((
-                hilbert_key(box_of(&element)?),
-                order_of(&element),
-                at,
-                rows_in(&element),
-            ))
-        })
-        .collect::<Result<_, TableError>>()?;
-    placed.par_sort_unstable_by_key(|(key, order, _, _)| (*key, *order));
+    let placed = placed_of(count, &element_at)?;
     let mut writer = TableWriter::into(out, &stated, &BOX_FIELDS)
         .with_close_integers(&["refs.list.item", "unresolved.list.item", "member_ways.list.item"])
         .with_split_reals(&BOX_FIELDS)
@@ -262,9 +336,9 @@ fn written<W: Write + Send>(
     let mut group: Vec<usize> = Vec::new();
     let mut rows = 0;
     let mut groups_written = 0;
-    for (_, _, at, element_rows) in placed {
-        group.push(at);
-        rows += element_rows;
+    for element in &placed {
+        group.push(element.at);
+        rows += element.rows;
         if rows >= rows_per_row_group {
             write_group(&mut writer, &group, &element_at)?;
             groups_written += 1;
@@ -454,13 +528,21 @@ fn position_of([longitude, latitude]: [f64; 2]) -> Position {
 }
 
 /// The index along a Hilbert curve of the cell holding a box's centre.
-fn hilbert_key([xmin, ymin, xmax, ymax]: [f64; 4]) -> u64 {
-    let cells = f64::from((1u32 << HILBERT_ORDER) - 1);
-    let cell =
-        |value: f64, low: f64, span: f64| (((value - low) / span).clamp(0.0, 1.0) * cells).round() as u32;
-    let x = cell((xmin + xmax) / 2.0, -180.0, 360.0);
-    let y = cell((ymin + ymax) / 2.0, -90.0, 180.0);
+fn hilbert_key(bbox: [f64; 4]) -> u64 {
+    let (x, y) = cell_of_centre(bbox);
     hilbert(x, y)
+}
+
+/// The cell of the finest quadtree, its column from 180°W and its row from 90°S, holding a box's
+/// centre: a cell at a coarser level is the same column and row shifted right, which names a tile.
+fn cell_of_centre([xmin, ymin, xmax, ymax]: [f64; 4]) -> (u32, u32) {
+    let side = f64::from(1u32 << HILBERT_ORDER);
+    let cell =
+        |value: f64, low: f64, span: f64| ((value - low) / span * side).floor().clamp(0.0, side - 1.0) as u32;
+    (
+        cell((xmin + xmax) / 2.0, -180.0, 360.0),
+        cell((ymin + ymax) / 2.0, -90.0, 180.0),
+    )
 }
 
 /// The classic conversion of a cell to its index along the curve, a quadrant at a time.
@@ -743,6 +825,18 @@ mod tests {
 
     fn weight(elements: &[Element]) -> u64 {
         elements.iter().map(Element::weight).sum()
+    }
+
+    #[test]
+    fn given_elements_lighter_together_than_the_target_when_tiled_then_one_tile_of_the_whole_planet_holds_them()
+    -> Result<(), TableError> {
+        let elements = [harbour(), abidjan_quay()].concat();
+
+        let tiling = Tiling::of(elements.len(), |at| elements[at].clone(), weight(&elements))?;
+
+        assert_eq!(tiling.tiles(), vec![Tile { level: 0, x: 0, y: 0 }]);
+        assert_eq!(tiling.tiles()[0].file_name(), "map-0-0-0.parquet");
+        Ok(())
     }
 
     #[test]
