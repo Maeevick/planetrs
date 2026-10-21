@@ -111,6 +111,40 @@ pub enum Element {
     },
 }
 
+/// What a map index says as a whole, read before any of its tiles: whom it was built for, the grid
+/// its positions were read on, and the ground where a box cut from it lacks nothing the planet
+/// holds.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Summary {
+    /// Whom it was built for.
+    pub scope: Scope,
+    /// The planet's grid, which a box's window is tested on.
+    pub grid: Grid,
+    /// Where a box cut from it lacks nothing the planet holds.
+    pub coverage: Coverage,
+}
+
+/// Whom a map index was built for.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Scope {
+    /// The whole planet.
+    Planet,
+    /// The countries asked for, by ISO 3166-1 code.
+    Countries(Vec<String>),
+}
+
+impl Summary {
+    /// The summary as the JSON part of a dataset.
+    pub fn to_json(&self) -> String {
+        String::new()
+    }
+
+    /// The summary a JSON part stands for, or nothing when it is not one.
+    pub fn from_json(_text: &str) -> Option<Summary> {
+        None
+    }
+}
+
 impl Element {
     /// About the bytes the element takes once encoded, the measure a map index is cut into tiles by:
     /// ten for each position, three for each node a way runs through and thirty for each row, as
@@ -997,6 +1031,25 @@ mod tests {
             )
         );
         Ok(())
+    }
+
+    #[test]
+    fn given_the_summary_of_a_map_index_of_two_countries_or_of_the_planet_when_written_and_read_back_then_it_is_the_same_summary()
+    {
+        let countries = Summary {
+            scope: Scope::Countries(vec!["FR".into(), "MC".into()]),
+            grid: grid(),
+            coverage: Coverage::from_text("0.01;4372:740..743,750..751").unwrap_or_default(),
+        };
+        let planet = Summary {
+            scope: Scope::Planet,
+            grid: grid(),
+            coverage: Coverage::everywhere(),
+        };
+
+        let read_back = [&countries, &planet].map(|summary| Summary::from_json(&summary.to_json()));
+
+        assert_eq!(read_back, [Some(countries.clone()), Some(planet.clone())]);
     }
 
     #[test]
