@@ -7,6 +7,7 @@ use anyhow::Result;
 use planetrs_cli::dataset::{country_codes, rebuild};
 use planetrs_cli::{Progress, UsageError};
 use planetrs_dataset::directory::CarriedOver;
+use planetrs_dataset::map_index::TILE_WEIGHT;
 use planetrs_dataset::{Location, Part};
 use planetrs_mapclipper::index::build_map_index;
 
@@ -34,7 +35,9 @@ pub fn run(context: &Context, arguments: IndexArgs) -> Result<()> {
     let country_refs: Vec<&str> = codes.iter().map(String::as_str).collect();
     let progress = Progress::to_stderr(context.quiet);
     let (indexed, carried) = rebuild(&destination, is_the_geocoders, |building| {
-        let built = build_map_index(&planet, building, &country_refs, &|line| progress.note(line));
+        let built = build_map_index(&planet, building, &country_refs, TILE_WEIGHT, &|line| {
+            progress.note(line)
+        });
         progress.clear();
         built.map_err(explained)
     })?;

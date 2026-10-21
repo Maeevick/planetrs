@@ -6,6 +6,7 @@
 
 use std::path::PathBuf;
 
+use planetrs_dataset::map_index::TILE_WEIGHT;
 use planetrs_dataset::{Dataset, DirectoryFiles};
 use planetrs_geo::{Area, BoundingBox};
 use planetrs_mapclipper::error::ClipError;
@@ -32,7 +33,7 @@ fn planet_and_dataset(name: &str) -> Result<(PathBuf, PathBuf), Box<dyn std::err
     let planet = directory.join("riviera.osm.pbf");
     riviera().write(&planet)?;
     let dataset = directory.join("dataset");
-    build_map_index(&planet, &dataset, &["FR", "MC"], &|_| {})?;
+    build_map_index(&planet, &dataset, &["FR", "MC"], TILE_WEIGHT, &|_| {})?;
     Ok((planet, dataset))
 }
 

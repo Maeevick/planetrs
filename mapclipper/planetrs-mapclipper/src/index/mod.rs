@@ -50,11 +50,14 @@ pub struct CountryIndexed {
 /// Builds the map index of each country of `countries` from the planet file at `planet`, and records
 /// each in the dataset in `directory`.
 ///
-/// `progress` hears how many blobs each pass has read, as a harvest's caller does.
+/// Its tiles weigh at most `tile_weight` each (see [`map_index::TILE_WEIGHT`]), but where one
+/// place of the finest quadtree weighs more. `progress` hears how many blobs each pass has read, as a
+/// harvest's caller does.
 pub fn build_map_index(
     planet: &Path,
     directory: &Path,
     countries: &[&str],
+    _tile_weight: u64,
     progress: &(dyn Fn(&str) + Sync),
 ) -> Result<Vec<CountryIndexed>, ClipError> {
     let path = planet;

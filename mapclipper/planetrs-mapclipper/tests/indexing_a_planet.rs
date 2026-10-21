@@ -7,7 +7,7 @@
 use std::path::{Path, PathBuf};
 
 use planetrs_dataset::directory::MANIFEST;
-use planetrs_dataset::map_index::{self, Element, Line, Position};
+use planetrs_dataset::map_index::{self, Element, Line, Position, TILE_WEIGHT};
 use planetrs_dataset::{Manifest, Part};
 use planetrs_mapclipper::error::ClipError;
 use planetrs_mapclipper::index::build_map_index;
@@ -28,12 +28,17 @@ fn scratch(name: &str) -> PathBuf {
 
 /// The riviera indexed for France and Monaco into a fresh dataset, and the dataset's directory.
 fn indexed(name: &str) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    indexed_in_tiles_of(name, TILE_WEIGHT)
+}
+
+/// The riviera indexed for France and Monaco in tiles weighing at most `tile_weight`.
+fn indexed_in_tiles_of(name: &str, tile_weight: u64) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let directory = scratch(name);
     std::fs::create_dir_all(&directory)?;
     let planet = directory.join("riviera.osm.pbf");
     riviera().write(&planet)?;
     let dataset = directory.join("dataset");
-    build_map_index(&planet, &dataset, &["FR", "MC"], &|_| {})?;
+    build_map_index(&planet, &dataset, &["FR", "MC"], tile_weight, &|_| {})?;
     Ok(dataset)
 }
 
@@ -190,7 +195,7 @@ fn given_a_country_the_planet_has_no_outline_of_when_indexed_then_the_build_name
     riviera().write(&planet)?;
     let dataset = directory.join("dataset");
 
-    let built = build_map_index(&planet, &dataset, &["FR", "BE"], &|_| {});
+    let built = build_map_index(&planet, &dataset, &["FR", "BE"], TILE_WEIGHT, &|_| {});
 
     assert!(
         matches!(&built, Err(ClipError::UnknownCountry { country }) if country == "BE"),
@@ -212,5 +217,25 @@ fn given_the_riviera_indexed_twice_when_the_files_are_compared_then_they_are_ide
             "{file}"
         );
     }
+    Ok(())
+}
+
+#[test]
+fn given_the_riviera_indexed_in_tiles_lighter_than_it_when_its_manifest_is_read_then_it_lists_its_summary_then_its_tiles_each_with_its_box()
+-> Outcome {
+    let dataset = indexed_in_tiles_of("tiles", 200)?;
+
+    let manifest = Manifest::from_json(&std::fs::read_to_string(dataset.join(MANIFEST))?)?;
+
+    let parts: Vec<Part> = manifest.files.iter().map(|entry| entry.part.clone()).collect();
+    let tiles: Vec<&planetrs_dataset::Entry> = manifest
+        .files
+        .iter()
+        .filter(|entry| matches!(entry.part, Part::MapTile { .. }))
+        .collect();
+    assert_eq!(parts.first(), Some(&Part::MapSummary), "{parts:?}");
+    assert!(tiles.len() > 1, "{parts:?}");
+    assert!(tiles.iter().all(|entry| entry.bbox.is_some()), "{parts:?}");
+    assert_eq!(tiles.len() + 1, parts.len(), "{parts:?}");
     Ok(())
 }

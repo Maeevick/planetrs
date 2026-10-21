@@ -35,6 +35,10 @@ const GRID: &str = "planetrs.grid";
 /// The footer key holding the country the file is the map index of.
 const COUNTRY: &str = "planetrs.country";
 
+/// How much a tile of a map index weighs before it is cut in four, about a gigabyte once encoded:
+/// small enough to upload again in minutes, large enough that the planet makes a few hundred.
+pub const TILE_WEIGHT: u64 = 1_000_000_000;
+
 /// The footer key naming the tile a file is, as level, column and row.
 const TILE: &str = "planetrs.tile";
 
