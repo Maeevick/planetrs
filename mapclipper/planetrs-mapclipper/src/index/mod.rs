@@ -26,7 +26,7 @@ use planetrs_dataset::map_index::{
     Element, Grid, Line, Placement, Position, Scope, Summary, Tags, TileWeights, TileWriter,
 };
 use planetrs_dataset::{Part, Provenance};
-use planetrs_geo::territory::IdentifierSet;
+use planetrs_geo::territory::{Coverage, IdentifierSet};
 use planetrs_pbf::{Block, PbfError, Planet, block, dense_group, id_span, visit_relations, visit_ways};
 
 use self::countries::{Countries, countries_in};
@@ -79,13 +79,20 @@ pub fn build_map_index(
     let planet = Planet::open(path)?;
     let source = Provenance::of(path, &planet);
     let sections = planet.sections()?;
-    let countries: Vec<&str> = match scope {
-        Scope::Planet => Vec::new(),
-        Scope::Countries(codes) => codes.iter().map(String::as_str).collect(),
+    let territory = match scope {
+        Scope::Planet => None,
+        Scope::Countries(codes) => {
+            let codes: Vec<&str> = codes.iter().map(String::as_str).collect();
+            Some(countries_in(&planet, &sections, &codes, progress)?)
+        }
     };
-    let territory = countries_in(&planet, &sections, &countries, progress)?;
-    let codes: Vec<String> = territory.codes().map(str::to_string).collect();
-    let coverage = territory.coverage();
+    let (scope, coverage) = match &territory {
+        None => (Scope::Planet, Coverage::everywhere()),
+        Some(countries) => (
+            Scope::Countries(countries.codes().map(str::to_string).collect()),
+            countries.coverage(),
+        ),
+    };
     std::fs::create_dir_all(directory).map_err(|failure| ClipError::writing(directory, failure))?;
     let work = Work::beside(directory).map_err(|failure| ClipError::writing(directory, failure))?;
     let failure = WorkFailure::default();
@@ -130,7 +137,7 @@ pub fn build_map_index(
         GridsSeen::default,
         |seen, decoded| {
             let node_pass = NodePass {
-                territory: &territory,
+                territory: territory.as_ref(),
                 positions: &positions,
                 inside: &inside,
                 named: &named,
@@ -240,7 +247,7 @@ pub fn build_map_index(
     }
     let tiles = written.len();
     let summary = Summary {
-        scope: Scope::Countries(codes.clone()),
+        scope: scope.clone(),
         grid,
         coverage,
     };
@@ -262,7 +269,7 @@ pub fn build_map_index(
         }
     })?;
     Ok(MapIndexed {
-        scope: Scope::Countries(codes),
+        scope,
         nodes: nodes_kept.into_inner(),
         ways: ways_kept.into_inner(),
         multipolygons: multipolygons_kept,
@@ -375,9 +382,10 @@ impl GridsSeen {
 }
 
 /// The pass over every node: each position written to the file, the nodes inside the countries
-/// marked, and their named ones set down with every tag.
+/// marked, every node when the whole planet is indexed, and their named ones set down with every
+/// tag.
 struct NodePass<'a> {
-    territory: &'a Countries,
+    territory: Option<&'a Countries>,
     positions: &'a NodePositions,
     inside: &'a IdentifierSet,
     named: &'a IdentifierSet,
@@ -416,10 +424,11 @@ impl NodePass<'_> {
                     return;
                 };
                 stored.push((id, latitude, longitude));
-                if !self.territory.hold([
+                let point = [
                     decoded.longitude(i64::from(longitude)),
                     decoded.latitude(i64::from(latitude)),
-                ]) {
+                ];
+                if !self.territory.is_none_or(|countries| countries.hold(point)) {
                     return;
                 }
                 self.inside.insert(id);
