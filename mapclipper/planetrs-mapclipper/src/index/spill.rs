@@ -91,7 +91,7 @@ impl Spill {
 
     /// Every element set down, in the order of their placements, each with its key, removing the
     /// runs as they are read.
-    pub(super) fn merged(self) -> io::Result<impl Iterator<Item = io::Result<(u64, Element)>>> {
+    pub(super) fn merged(self) -> io::Result<impl Iterator<Item = io::Result<Spilled>>> {
         let rest = std::mem::take(&mut *self.sink.lock().map_err(|_| poisoned())?);
         if !rest.records.is_empty() {
             self.write_run(rest)?;
@@ -176,18 +176,37 @@ impl Merged {
         Ok(())
     }
 
-    fn next_element(&mut self) -> io::Result<Option<(u64, Element)>> {
+    fn next_element(&mut self) -> io::Result<Option<Spilled>> {
         let Some(Reverse((key, _, _, run))) = self.heap.pop() else {
             return Ok(None);
         };
         let bytes = std::mem::take(&mut self.heads[run]);
         self.advance(run)?;
-        Ok(Some((key, decode(&bytes, self.grid)?)))
+        Ok(Some(Spilled {
+            key,
+            bytes,
+            grid: self.grid,
+        }))
+    }
+}
+
+/// One element as the merge gives it back: its key, and its bytes, read into the element by
+/// whoever takes it, on whichever thread.
+pub(super) struct Spilled {
+    pub(super) key: u64,
+    bytes: Vec<u8>,
+    grid: Grid,
+}
+
+impl Spilled {
+    /// The element the bytes stand for.
+    pub(super) fn element(&self) -> io::Result<Element> {
+        decode(&self.bytes, self.grid)
     }
 }
 
 impl Iterator for Merged {
-    type Item = io::Result<(u64, Element)>;
+    type Item = io::Result<Spilled>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.next_element().transpose()
@@ -578,7 +597,10 @@ mod tests {
             spill.add(&element.placement()?, element)?;
         }
 
-        let merged = spill.merged()?.collect::<io::Result<Vec<_>>>()?;
+        let merged = spill
+            .merged()?
+            .map(|spilled| spilled.and_then(|spilled| Ok((spilled.key, spilled.element()?))))
+            .collect::<io::Result<Vec<_>>>()?;
 
         let mut expected = elements
             .iter()

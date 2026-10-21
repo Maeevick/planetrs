@@ -15,6 +15,7 @@ mod positions;
 mod scan;
 mod spill;
 
+use std::collections::VecDeque;
 use std::fs::File;
 use std::io::{self, BufWriter};
 use std::path::{Path, PathBuf};
@@ -23,7 +24,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use planetrs_dataset::directory::{Written, record_all_written, written_beside};
 use planetrs_dataset::map_index::{
-    Element, Grid, Line, Placement, Position, Scope, Summary, Tags, TileWeights, TileWriter,
+    Element, Grid, Line, Placement, Position, Scope, Summary, Tags, Tile, TileWeights, TileWriter,
+    TileWritten,
 };
 use planetrs_dataset::{Part, Provenance};
 use planetrs_geo::territory::{Coverage, IdentifierSet};
@@ -214,37 +216,7 @@ pub fn build_map_index(
         assemble_multipolygons(&multipolygons, &kept_ways, members, &work, grid, &elements)?;
 
     let tiles = weights.tiles(tile_weight);
-    let mut merged = spill.merged().map_err(|e| work.failed(e))?.peekable();
-    let mut written = Vec::with_capacity(tiles.len() + 1);
-    for (tile, keys) in tiles {
-        let name = tile.file_name();
-        let beside = written_beside(directory, &name);
-        let writing = |failure| ClipError::writing(&beside, failure);
-        let file = File::create(&beside).map_err(writing)?;
-        let mut writer = TileWriter::new(BufWriter::new(file), tile, grid);
-        while let Some(next) =
-            merged.next_if(|next| next.as_ref().map_or(true, |(key, _)| keys.contains(key)))
-        {
-            let (_, element) = next.map_err(|e| work.failed(e))?;
-            writer.add(element).map_err(ClipError::Encoding)?;
-        }
-        let done = writer.finish().map_err(ClipError::Encoding)?;
-        done.out
-            .into_inner()
-            .map_err(|failure| writing(failure.into_error()))?
-            .sync_all()
-            .map_err(writing)?;
-        written.push(Written {
-            part: Part::MapTile {
-                level: tile.level,
-                x: tile.x,
-                y: tile.y,
-            },
-            name,
-            rows: done.rows,
-            bbox: Some(done.bbox),
-        });
-    }
+    let mut written = write_tiles(tiles, spill, directory, &work, grid)?;
     let tiles = written.len();
     let summary = Summary {
         scope: scope.clone(),
@@ -298,6 +270,10 @@ impl Work {
 
     fn join(&self, name: &str) -> PathBuf {
         self.0.join(name)
+    }
+
+    fn path(&self) -> &Path {
+        &self.0
     }
 
     /// A failure writing or reading the work files, said for what it is.
@@ -553,6 +529,101 @@ impl WayPass<'_> {
     }
 }
 
+/// How many tiles are written at once, each on its own thread: encoding a tile is the slow part.
+const TILES_WRITTEN_AT_ONCE: usize = 8;
+
+/// How many elements wait for a tile's writer before the merge waits for it.
+const ELEMENTS_IN_FLIGHT: usize = 4_096;
+
+/// Writes each tile of `tiles` beside the dataset from the elements merged back from `spill`, the
+/// merge handing each element to its tile's writer while several tiles are encoded at once.
+fn write_tiles(
+    tiles: Vec<(Tile, std::ops::Range<u64>)>,
+    spill: Spill,
+    directory: &Path,
+    work: &Work,
+    grid: Grid,
+) -> Result<Vec<Written>, ClipError> {
+    std::thread::scope(|scope| {
+        let mut merged = spill.merged().map_err(|e| work.failed(e))?.peekable();
+        let mut writing: VecDeque<TileUnderWay<'_>> = VecDeque::new();
+        let mut written = Vec::with_capacity(tiles.len() + 1);
+        for (tile, keys) in tiles {
+            if writing.len() == TILES_WRITTEN_AT_ONCE
+                && let Some(oldest) = writing.pop_front()
+            {
+                written.push(oldest.finished()?);
+            }
+            let name = tile.file_name();
+            let beside = written_beside(directory, &name);
+            let file = File::create(&beside).map_err(|failure| ClipError::writing(&beside, failure))?;
+            let (hand, take) = std::sync::mpsc::sync_channel::<spill::Spilled>(ELEMENTS_IN_FLIGHT);
+            let writer = scope.spawn(move || {
+                let mut writer = TileWriter::new(BufWriter::new(file), tile, grid);
+                for spilled in take {
+                    let element = spilled
+                        .element()
+                        .map_err(|e| ClipError::writing(work.path(), e))?;
+                    writer.add(element).map_err(ClipError::Encoding)?;
+                }
+                writer.finish().map_err(ClipError::Encoding)
+            });
+            while let Some(next) =
+                merged.next_if(|next| next.as_ref().map_or(true, |spilled| keys.contains(&spilled.key)))
+            {
+                if hand.send(next.map_err(|e| work.failed(e))?).is_err() {
+                    break;
+                }
+            }
+            drop(hand);
+            writing.push_back(TileUnderWay {
+                tile,
+                name,
+                beside,
+                writer,
+            });
+        }
+        for under_way in writing {
+            written.push(under_way.finished()?);
+        }
+        Ok(written)
+    })
+}
+
+/// A tile being encoded on its own thread.
+struct TileUnderWay<'scope> {
+    tile: Tile,
+    name: String,
+    beside: PathBuf,
+    writer: std::thread::ScopedJoinHandle<'scope, Result<TileWritten<BufWriter<File>>, ClipError>>,
+}
+
+impl TileUnderWay<'_> {
+    /// Waits for the tile, puts it on disk, and gives back its entry in the manifest.
+    fn finished(self) -> Result<Written, ClipError> {
+        let writing = |failure| ClipError::writing(&self.beside, failure);
+        let done = self
+            .writer
+            .join()
+            .map_err(|_| writing(io::Error::other("the tile's writer stopped")))??;
+        done.out
+            .into_inner()
+            .map_err(|failure| writing(failure.into_error()))?
+            .sync_all()
+            .map_err(writing)?;
+        Ok(Written {
+            part: Part::MapTile {
+                level: self.tile.level,
+                x: self.tile.x,
+                y: self.tile.y,
+            },
+            name: self.name,
+            rows: done.rows,
+            bbox: Some(done.bbox),
+        })
+    }
+}
+
 /// Sets down every multipolygon with a member among the kept ways, each with its member ways whole
 /// in the order its members first name them, joined from the members set apart by id: how many.
 fn assemble_multipolygons(
@@ -586,8 +657,8 @@ fn assemble_multipolygons(
     let assembled = Spill::new(&work.join("assembled"), grid, RUN_BYTES).map_err(|e| work.failed(e))?;
     let mut next = 0;
     for member in members.merged().map_err(|e| work.failed(e))? {
-        let (way, line) = member.map_err(|e| work.failed(e))?;
-        let way = way as i64;
+        let member = member.map_err(|e| work.failed(e))?;
+        let (way, line) = (member.key as i64, member.element().map_err(|e| work.failed(e))?);
         while next < memberships.len() && memberships[next].0 < way {
             next += 1;
         }
@@ -620,11 +691,11 @@ fn assemble_multipolygons(
         Ok(())
     };
     for line in assembled.merged().map_err(|e| work.failed(e))? {
-        let (at, line) = line.map_err(|e| work.failed(e))?;
-        let Element::Way(line) = line else {
+        let line = line.map_err(|e| work.failed(e))?;
+        let at = line.key as usize;
+        let Element::Way(line) = line.element().map_err(|e| work.failed(e))? else {
             continue;
         };
-        let at = at as usize;
         match gathered.as_mut() {
             Some((gathering, ways)) if *gathering == at => ways.push(line),
             _ => {
