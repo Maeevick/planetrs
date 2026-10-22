@@ -126,10 +126,10 @@ map-7-65-96.parquet   one tile of the map index: the ways, named places and mult
 
 `planetrs-geocoder index` writes the gazetteer and the geocoder indexes, `planetrs-mapclipper index`
 the map index, each keeping the other's files when they come from the same planet. The map index is
-cut into tiles of about a gigabyte, the cells of a quadtree over the planet, so that a weekly update
-uploads only the tiles that changed. A lookup reads the communes it needs and a map the few row
-groups around its box, so a dataset served over HTTP is read a few megabytes at a time, and two
-builds from one planet agree to the byte.
+cut into tiles of at most about a gigabyte, the cells of a quadtree over the planet, so that a map
+opens only the tiles near its box. A lookup reads the communes it needs and a map the few row groups
+around its box, so a dataset served over HTTP is read a few megabytes at a time, and two builds from
+one planet agree to the byte.
 
 ## The workspace
 
