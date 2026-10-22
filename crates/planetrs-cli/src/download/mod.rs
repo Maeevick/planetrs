@@ -5,7 +5,8 @@
 //! `<name>.part`, with `<name>.part.meta` saying which file of which source they belong to; a later
 //! run resumes from the end of the partial file when the meta still matches, and starts over when it
 //! does not. Only a file whose md5 matches the published one is renamed into place, with its
-//! checksum written beside it.
+//! checksum written beside it. The planet published under its `latest` alias then takes the date
+//! its header states, `planet-261019.osm.pbf`, as the server names each week's planet.
 
 pub mod checksum;
 pub mod http;
@@ -14,13 +15,17 @@ pub mod ranges;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufWriter, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::time::{Duration, UNIX_EPOCH};
 
 use self::checksum::{NotAChecksum, md5_of_file};
 use self::ranges::{PartMeta, file_name_of, named_by_checksum, next_range};
+use crate::files::Day;
 
 /// Where the planet is published: a link the server moves to each week's planet.
 pub const DEFAULT_SOURCE: &str = "https://planet.openstreetmap.org/pbf/planet-latest.osm.pbf";
+
+/// The name each week's planet is published under, on planet.openstreetmap.org and its mirrors alike.
+const LATEST_PLANET: &str = "planet-latest.osm.pbf";
 
 /// What a server says about a file before it is fetched.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -385,9 +390,48 @@ pub fn download(
         });
     }
     fs::rename(&part, &destination)?;
-    fs::write(&sidecar, format!("{}  {file_name}\n", published.md5))?;
+    let destination = dated_by_its_header(destination);
+    let file_name = file_name_of_path(&destination).unwrap_or(file_name);
+    fs::write(
+        with_suffix(&destination, ".md5"),
+        format!("{}  {file_name}\n", published.md5),
+    )?;
     fs::remove_file(&meta_path)?;
     Ok(Outcome::Downloaded(destination))
+}
+
+/// The name the planet published under its `latest` alias takes once verified: the Monday its header
+/// states, `planet-261019.osm.pbf`, as the server names each week's planet, so that `index` finds the
+/// newest planet by its name and next week's lands beside it. Any other file, a planet whose header
+/// states no date, or a dated name already taken keeps the name it came with.
+fn dated_by_its_header(planet: PathBuf) -> PathBuf {
+    if file_name_of_path(&planet).as_deref() != Some(LATEST_PLANET) {
+        return planet;
+    }
+    let Some(seconds) = planetrs_pbf::Planet::open(&planet)
+        .ok()
+        .and_then(|opened| opened.header.replication_timestamp)
+        .and_then(|seconds| u64::try_from(seconds).ok())
+    else {
+        return planet;
+    };
+    let day = Day::of(UNIX_EPOCH + Duration::from_secs(seconds));
+    let dated = planet.with_file_name(format!(
+        "planet-{:02}{:02}{:02}.osm.pbf",
+        day.year.rem_euclid(100),
+        day.month,
+        day.day
+    ));
+    if dated.exists() || fs::rename(&planet, &dated).is_err() {
+        return planet;
+    }
+    dated
+}
+
+fn file_name_of_path(path: &Path) -> Option<String> {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .map(str::to_string)
 }
 
 /// Downloads the planet at `from` into `directory` as both command lines do: saying through `say`
