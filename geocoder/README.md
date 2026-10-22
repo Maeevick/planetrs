@@ -83,6 +83,7 @@ if let Some(answer) = &answer {
 if let Some(reason) = refusal_of(&site, answer.as_ref()) {
     eprintln!("look before using it: {reason}");
 }
+# Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 `planetrs_geocoder::build_index` builds a dataset from a planet file. `Geocoder::open` reads a
