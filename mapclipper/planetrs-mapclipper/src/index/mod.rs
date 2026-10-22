@@ -190,21 +190,24 @@ pub fn build_map_index(
     .map_err(|error| failure.explained(&work, error))?;
 
     positions
-        .visit_each(|id, latitude, longitude| {
-            if inside.contains(id) && !referenced.contains(id) && !named.contains(id) {
-                let lone = Element::Node {
-                    id,
-                    at: position_on(grid, latitude, longitude),
+        .visit_each(|held| {
+            let lone: Vec<Element> = held
+                .iter()
+                .filter(|(id, _, _)| {
+                    inside.contains(*id) && !referenced.contains(*id) && !named.contains(*id)
+                })
+                .map(|(id, latitude, longitude)| Element::Node {
+                    id: *id,
+                    at: position_on(grid, *latitude, *longitude),
                     tags: Tags::new(),
-                };
-                match elements.add(&lone) {
-                    Ok(true) => {
-                        nodes_kept.fetch_add(1, Ordering::Relaxed);
-                    }
-                    Ok(false) => {}
-                    Err(error) => {
-                        failure.keep(error);
-                    }
+                })
+                .collect();
+            match elements.add_all(&lone) {
+                Ok(set_down) => {
+                    nodes_kept.fetch_add(set_down, Ordering::Relaxed);
+                }
+                Err(error) => {
+                    failure.keep(error);
                 }
             }
         })
@@ -329,12 +332,21 @@ impl SetDown<'_> {
     /// Sets an element down, or leaves it out when the planet places none of its nodes, since it has
     /// no place on a map: whether it was set down.
     fn add(&self, element: &Element) -> io::Result<bool> {
-        let Ok(placement) = element.placement() else {
-            return Ok(false);
-        };
-        self.weights.add(placement.key, placement.weight);
-        self.spill.add(&placement, element)?;
-        Ok(true)
+        Ok(self.add_all(std::slice::from_ref(element))? == 1)
+    }
+
+    /// Sets elements down at once, leaving out those the planet places no node of: how many were set
+    /// down.
+    fn add_all(&self, elements: &[Element]) -> io::Result<usize> {
+        let placed: Vec<(Placement, &Element)> = elements
+            .iter()
+            .filter_map(|element| element.placement().ok().map(|placement| (placement, element)))
+            .collect();
+        for (placement, _) in &placed {
+            self.weights.add(placement.key, placement.weight);
+        }
+        self.spill.add_all(placed.iter().copied())?;
+        Ok(placed.len())
     }
 }
 
@@ -436,15 +448,11 @@ impl NodePass<'_> {
             self.positions
                 .write(&stored)
                 .map_err(|error| self.failure.keep(error))?;
-            for node in &named {
-                if self
-                    .elements
-                    .add(node)
-                    .map_err(|error| self.failure.keep(error))?
-                {
-                    self.kept.fetch_add(1, Ordering::Relaxed);
-                }
-            }
+            let set_down = self
+                .elements
+                .add_all(&named)
+                .map_err(|error| self.failure.keep(error))?;
+            self.kept.fetch_add(set_down, Ordering::Relaxed);
         }
         Ok(None)
     }
@@ -488,6 +496,8 @@ impl WayPass<'_> {
             .read(&every_ref)
             .map_err(|error| self.failure.keep(error))?;
         let mut cursor = 0;
+        let mut kept_here: Vec<Element> = Vec::new();
+        let mut members_here: Vec<(Placement, Element)> = Vec::new();
         for (id, tags, refs, touches, member) in wanted {
             let positions = found[cursor..cursor + refs.len()]
                 .iter()
@@ -507,24 +517,28 @@ impl WayPass<'_> {
                     weight: 0,
                     rows: 0,
                 };
-                self.members
-                    .add(&by_id, &Element::Way(line.clone()))
-                    .map_err(|error| self.failure.keep(error))?;
+                members_here.push((by_id, Element::Way(line.clone())));
             }
             if touches {
                 self.kept_ways.insert(id);
                 for node in &line.refs {
                     self.referenced.insert(*node);
                 }
-                if self
-                    .elements
-                    .add(&Element::Way(line))
-                    .map_err(|error| self.failure.keep(error))?
-                {
-                    self.kept.fetch_add(1, Ordering::Relaxed);
-                }
+                kept_here.push(Element::Way(line));
             }
         }
+        self.members
+            .add_all(
+                members_here
+                    .iter()
+                    .map(|(placement, element)| (*placement, element)),
+            )
+            .map_err(|error| self.failure.keep(error))?;
+        let set_down = self
+            .elements
+            .add_all(&kept_here)
+            .map_err(|error| self.failure.keep(error))?;
+        self.kept.fetch_add(set_down, Ordering::Relaxed);
         Ok(None)
     }
 }

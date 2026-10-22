@@ -104,9 +104,9 @@ impl NodePositions {
 }
 
 impl NodePositions {
-    /// Hands every node the file holds to `visit`, with its position, reading the file a slice at a
-    /// time across threads.
-    pub(super) fn visit_each(&self, visit: impl Fn(i64, i32, i32) + Sync) -> io::Result<()> {
+    /// Hands every node the file holds to `visit`, as its id and position, a slice of the file at a
+    /// time across threads, each slice's nodes together.
+    pub(super) fn visit_each(&self, visit: impl Fn(&[(i64, i32, i32)]) + Sync) -> io::Result<()> {
         (0..self.length.div_ceil(SLICE_BYTES))
             .into_par_iter()
             .try_for_each(|slice| {
@@ -114,16 +114,17 @@ impl NodePositions {
                 let mut bytes = vec![0u8; SLICE_BYTES.min(self.length - start) as usize];
                 at::read_exact(&self.file, &mut bytes, start)?;
                 let first = (start / BYTES_PER_NODE) as i64;
-                for (offset, node) in bytes
+                let held: Vec<(i64, i32, i32)> = bytes
                     .as_chunks::<{ BYTES_PER_NODE as usize }>()
                     .0
                     .iter()
                     .enumerate()
-                {
-                    if let Some((latitude, longitude)) = position_in(node) {
-                        visit(first + offset as i64, latitude, longitude);
-                    }
-                }
+                    .filter_map(|(offset, node)| {
+                        position_in(node)
+                            .map(|(latitude, longitude)| (first + offset as i64, latitude, longitude))
+                    })
+                    .collect();
+                visit(&held);
                 Ok(())
             })
     }
@@ -238,8 +239,8 @@ mod tests {
         positions.write(&[(2_999, -52_690_000, -40_120_000)])?;
         let visited = std::sync::Mutex::new(Vec::new());
 
-        positions.visit_each(|id, latitude, longitude| {
-            visited.lock().unwrap().push((id, latitude, longitude));
+        positions.visit_each(|held| {
+            visited.lock().unwrap().extend_from_slice(held);
         })?;
 
         let mut visited = visited.into_inner().unwrap();

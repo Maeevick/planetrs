@@ -68,19 +68,38 @@ impl Spill {
 
     /// Sets down an element at its placement, from any thread.
     pub(super) fn add(&self, placement: &Placement, element: &Element) -> io::Result<()> {
-        let mut bytes = Vec::new();
-        encode(element, self.grid, &mut bytes);
-        let full = {
-            let mut sink = self.sink.lock().map_err(|_| poisoned())?;
-            let start = sink.arena.len();
-            sink.records.push(Record {
+        self.add_all([(*placement, element)])
+    }
+
+    /// Sets down elements at their placements, from any thread, encoded on the caller's thread and
+    /// handed over at once, so that workers seldom wait for one another.
+    pub(super) fn add_all<'a>(
+        &self,
+        placed: impl IntoIterator<Item = (Placement, &'a Element)>,
+    ) -> io::Result<()> {
+        let mut batch = Sink::default();
+        for (placement, element) in placed {
+            let start = batch.arena.len();
+            encode(element, self.grid, &mut batch.arena);
+            batch.records.push(Record {
                 key: placement.key,
                 kind: placement.order.0,
                 id: placement.order.1,
                 start,
-                length: bytes.len(),
+                length: batch.arena.len() - start,
             });
-            sink.arena.extend_from_slice(&bytes);
+        }
+        if batch.records.is_empty() {
+            return Ok(());
+        }
+        let full = {
+            let mut sink = self.sink.lock().map_err(|_| poisoned())?;
+            let offset = sink.arena.len();
+            sink.arena.extend_from_slice(&batch.arena);
+            sink.records.extend(batch.records.iter().map(|record| Record {
+                start: record.start + offset,
+                ..*record
+            }));
             (sink.arena.len() >= self.run_bytes).then(|| std::mem::take(&mut *sink))
         };
         match full {
