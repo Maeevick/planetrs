@@ -19,7 +19,9 @@ use planetrs_mapclipper::theme::Theme;
 const DOWNLOAD_FOOTER: &str = "\
 The planet is about 90 GB and goes to planets/ in the data directory. A broken download resumes
 where it stopped when run again, and the file takes its name only once its md5 matches the published
-one. Mirrors carry the same files: https://wiki.openstreetmap.org/wiki/Planet.osm
+one: the Monday its header states, planet-261019.osm.pbf, which index then finds on its own. Asked
+again the same week, nothing is fetched. Mirrors carry the same files:
+https://wiki.openstreetmap.org/wiki/Planet.osm
 
 Examples:
   planetrs-mapclipper download

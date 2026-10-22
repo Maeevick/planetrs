@@ -92,7 +92,8 @@ planetrs-mapclipper clip --planet ~/.local/share/planetrs/planets/monaco-latest.
 ```
 
 The real thing is the same commands without the arguments. `download` fetches the latest planet,
-about 90 GB, resumes when the connection breaks, and checks its md5 before the file takes its name.
+about 90 GB, resumes when the connection breaks, and checks its md5 before the file takes its name,
+the Monday its header states: `planet-261019.osm.pbf`, which `index` then finds on its own.
 For France and Monaco, the geocoder's `index` then needs about 28 GB of memory and four minutes on a
 recent laptop, after which a whole file of sites geocodes in seconds; the mapclipper's needs about
 17 GB of memory, 120 GB of scratch disk and eleven minutes, after which a map of anywhere in them is
