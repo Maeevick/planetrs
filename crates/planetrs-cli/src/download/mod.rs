@@ -515,6 +515,15 @@ mod tests {
             }
         }
 
+        /// A server publishing `content` with an md5 naming it `published_as`.
+        fn publishing(content: Vec<u8>, published_as: &str) -> Self {
+            Self {
+                checksum: format!("{}  {published_as}\n", md5_of_bytes(&content)),
+                content,
+                ..Self::healthy()
+            }
+        }
+
         fn starts(&self) -> Vec<u64> {
             self.asked.borrow().iter().map(|(_, from, _)| *from).collect()
         }
@@ -599,6 +608,32 @@ mod tests {
             report: &|_| {},
         };
         download(source, LATEST, directory, &settings(), &surroundings)
+    }
+
+    /// A planet whose header says it was dumped on Monday 7 September 2026.
+    fn planet_of_monday_7_september() -> Vec<u8> {
+        planetrs_pbf::testing::PlanetFile::sorted()
+            .with_node(planetrs_pbf::testing::Node::at(1, 43.7384, 7.4246))
+            .replicated_at(1_788_739_204, 4_321)
+            .to_bytes()
+    }
+
+    /// planet.openstreetmap.org publishes each week's planet as planet-latest.osm.pbf, with an md5
+    /// naming that alias, so only the planet's own header says which Monday it is.
+    #[test]
+    fn given_the_planet_published_under_its_latest_alias_when_downloaded_then_it_takes_the_date_its_header_states()
+     {
+        let directory = scratch("dated-by-header");
+        let source = Fake::publishing(planet_of_monday_7_september(), "planet-latest.osm.pbf");
+
+        let outcome = fetched(&source, &directory).unwrap();
+
+        assert_eq!(
+            outcome,
+            Outcome::Downloaded(directory.join("planet-260907.osm.pbf"))
+        );
+        assert!(directory.join("planet-260907.osm.pbf.md5").is_file());
+        assert!(!directory.join("planet-latest.osm.pbf").exists());
     }
 
     #[test]

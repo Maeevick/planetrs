@@ -20,5 +20,8 @@ ureq.workspace = true
 md-5.workspace = true
 fs4.workspace = true
 
+[dev-dependencies]
+planetrs-pbf = { workspace = true, features = ["testing"] }
+
 [lints]
 workspace = true
