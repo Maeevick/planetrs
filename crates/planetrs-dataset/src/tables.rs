@@ -21,14 +21,18 @@ use parquet::arrow::ArrowWriter;
 use parquet::arrow::arrow_reader::{
     ArrowReaderMetadata, ArrowReaderOptions, ParquetRecordBatchReaderBuilder,
 };
-use parquet::arrow::arrow_writer::ArrowWriterOptions;
+use parquet::arrow::arrow_writer::{
+    ArrowColumnChunk, ArrowRowGroupWriterFactory, ArrowWriterOptions, compute_leaves,
+};
 use parquet::basic::{Compression, Encoding, GzipLevel};
 use parquet::errors::ParquetError;
 use parquet::file::metadata::{KeyValue, ParquetMetaData, ParquetMetaDataReader};
 use parquet::file::properties::{EnabledStatistics, WriterProperties};
 use parquet::file::reader::{ChunkReader, Length};
 use parquet::file::statistics::Statistics;
+use parquet::file::writer::SerializedFileWriter;
 use parquet::schema::types::ColumnPath;
+use rayon::prelude::*;
 
 /// The writer every file of a dataset names, rather than the library that happens to encode it.
 const WRITER: &str = concat!("planetrs-dataset version ", env!("CARGO_PKG_VERSION"));
@@ -147,7 +151,62 @@ pub(crate) struct TableWriter<W: Write + Send> {
     close_integers: Vec<String>,
     split_reals: Vec<String>,
     unique_values: Vec<String>,
-    open: Option<(ArrowWriter<W>, Arc<Schema>)>,
+    open: Option<Open<W>>,
+}
+
+/// How many row groups are encoded at once, across threads, before they are appended in order: the
+/// compression of a row group's columns is what a large table spends its time on.
+const ROW_GROUPS_AT_ONCE: usize = 16;
+
+/// A table under way: its file, the factory of its columns' encoders, its schema, and the row groups
+/// waiting to be encoded.
+struct Open<W: Write + Send> {
+    file: SerializedFileWriter<W>,
+    factory: ArrowRowGroupWriterFactory,
+    schema: Arc<Schema>,
+    pending: Vec<RecordBatch>,
+    written: usize,
+}
+
+impl<W: Write + Send> Open<W> {
+    /// Encodes the row groups waiting, each on whichever thread is free, and appends them to the file
+    /// in the order they came.
+    fn encode_pending(&mut self) -> Result<(), TableError> {
+        let (first, factory, schema) = (self.written, &self.factory, &self.schema);
+        let encoded: Vec<Vec<ArrowColumnChunk>> = self
+            .pending
+            .par_iter()
+            .enumerate()
+            .map(|(offset, batch)| {
+                let mut writers = factory
+                    .create_column_writers(first + offset)
+                    .map_err(unwritable)?;
+                let mut each = writers.iter_mut();
+                for (field, array) in schema.fields().iter().zip(batch.columns()) {
+                    for leaf in compute_leaves(field, array).map_err(unwritable)? {
+                        each.next()
+                            .ok_or_else(|| unwritable("a column has no encoder"))?
+                            .write(&leaf)
+                            .map_err(unwritable)?;
+                    }
+                }
+                writers
+                    .into_iter()
+                    .map(|writer| writer.close().map_err(unwritable))
+                    .collect()
+            })
+            .collect::<Result<_, TableError>>()?;
+        for chunks in encoded {
+            let mut row_group = self.file.next_row_group().map_err(unwritable)?;
+            for chunk in chunks {
+                chunk.append_to_row_group(&mut row_group).map_err(unwritable)?;
+            }
+            row_group.close().map_err(unwritable)?;
+        }
+        self.written += self.pending.len();
+        self.pending.clear();
+        Ok(())
+    }
 }
 
 impl TableWriter<Vec<u8>> {
@@ -205,18 +264,21 @@ impl<W: Write + Send> TableWriter<W> {
                 .ok_or_else(|| unwritable("the file was finished"))?;
             self.open = Some(self.opened(out, columns)?);
         }
-        let Some((writer, schema)) = self.open.as_mut() else {
+        let Some(open) = self.open.as_mut() else {
             return Err(unwritable("the file could not be opened"));
         };
         let arrays = columns.iter().map(|column| array_of(&column.values)).collect();
-        let batch = RecordBatch::try_new(Arc::clone(schema), arrays).map_err(unwritable)?;
-        writer.write(&batch).map_err(unwritable)?;
-        writer.flush().map_err(unwritable)
+        open.pending
+            .push(RecordBatch::try_new(Arc::clone(&open.schema), arrays).map_err(unwritable)?);
+        if open.pending.len() >= ROW_GROUPS_AT_ONCE {
+            open.encode_pending()?;
+        }
+        Ok(())
     }
 
     /// The output, its footer written after the last row group.
     pub(crate) fn finish(mut self) -> Result<W, TableError> {
-        let (writer, _) = match self.open.take() {
+        let mut open = match self.open.take() {
             Some(open) => open,
             None => {
                 let out = self
@@ -226,10 +288,11 @@ impl<W: Write + Send> TableWriter<W> {
                 self.opened(out, &[])?
             }
         };
-        writer.into_inner().map_err(unwritable)
+        open.encode_pending()?;
+        open.file.into_inner().map_err(unwritable)
     }
 
-    fn opened(&self, out: W, columns: &[Column]) -> Result<(ArrowWriter<W>, Arc<Schema>), TableError> {
+    fn opened(&self, out: W, columns: &[Column]) -> Result<Open<W>, TableError> {
         let schema = Arc::new(Schema::new(columns.iter().map(field_of).collect::<Vec<_>>()));
         let properties = WriterProperties::builder()
             .set_created_by(WRITER.to_string())
@@ -269,9 +332,16 @@ impl<W: Write + Send> TableWriter<W> {
         let options = ArrowWriterOptions::new()
             .with_properties(properties)
             .with_skip_arrow_metadata(true);
-        let writer =
-            ArrowWriter::try_new_with_options(out, Arc::clone(&schema), options).map_err(unwritable)?;
-        Ok((writer, schema))
+        let (file, factory) = ArrowWriter::try_new_with_options(out, Arc::clone(&schema), options)
+            .and_then(ArrowWriter::into_serialized_writer)
+            .map_err(unwritable)?;
+        Ok(Open {
+            file,
+            factory,
+            schema,
+            pending: Vec::new(),
+            written: 0,
+        })
     }
 }
 
