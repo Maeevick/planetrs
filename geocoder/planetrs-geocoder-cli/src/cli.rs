@@ -65,7 +65,8 @@ Answer files:
 
 Data directory:
   --data-dir DIR, else PLANETRS_DATA_DIR, else $XDG_DATA_HOME/planetrs, else ~/.local/share/planetrs.
-  It holds planets/, which download fills, and geocoder/index/, which index builds. See status.
+  It holds planets/, which download fills, dataset/, which index builds, and cache/, which keeps
+  what is read of a dataset over HTTP. See status.
 
 Examples:
   planetrs-geocoder download
