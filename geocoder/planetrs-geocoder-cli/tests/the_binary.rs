@@ -468,3 +468,29 @@ fn given_a_dataset_holding_a_map_index_of_another_planet_when_indexed_from_a_new
             .all(|entry| entry.part != map_of_france)
     );
 }
+
+/// The README's way: download this week's planet, then index it without naming it.
+#[test]
+fn given_the_planet_published_as_planet_latest_when_downloaded_then_index_finds_it_without_being_told() {
+    let directory = scratch("download-then-index");
+    let planet = yonne().replicated_at(1_788_739_204, 4_321).to_bytes();
+    let md5 = planetrs_cli::download::checksum::md5_of(planet.as_slice(), &|_| {}).unwrap();
+    let checksum = format!("{md5}  planet-latest.osm.pbf\n");
+    let server = RangeServer::serving(&[
+        ("planet-latest.osm.pbf", planet.as_slice()),
+        ("planet-latest.osm.pbf.md5", checksum.as_bytes()),
+    ])
+    .unwrap();
+    let source = format!("{}planet-latest.osm.pbf", server.url());
+
+    let downloaded = run(&directory, &["--data-dir", "data", "download", "--from", &source]);
+    let indexed = run(&directory, &["--data-dir", "data", "index", "--countries", "FR"]);
+
+    assert!(downloaded.status.success(), "{}", text(&downloaded.stderr));
+    assert!(
+        directory.join("data/planets/planet-260907.osm.pbf").is_file(),
+        "{}",
+        text(&downloaded.stderr)
+    );
+    assert!(indexed.status.success(), "{}", text(&indexed.stderr));
+}
