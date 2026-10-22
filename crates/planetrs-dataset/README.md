@@ -1,8 +1,8 @@
 # planetrs-dataset
 
 The dataset both [planetrs](https://github.com/maeevick/planetrs) tools read instead of the planet: a
-manifest, a planet-wide gazetteer, and one geocoder index and one map index per country, all
-GeoParquet, read from a directory or over HTTP range requests.
+manifest, a planet-wide gazetteer, a geocoder index per country and a map index cut into tiles, read
+from a directory or over HTTP range requests.
 
 A dataset is built whole from one planet file, so every file in it answers for the same minute of
 OpenStreetMap history, and two builds from one planet agree to the byte.
@@ -15,17 +15,18 @@ OpenStreetMap history, and two builds from one planet agree to the byte.
 | `map-summary.json` | the map index as a whole: the countries it was built for or the whole planet, the grid of its positions and the ground it covers |
 | `map-7-65-96.parquet` | one tile of the map index, a cell of a quadtree over the planet: every way, named or lone node and multipolygon a map needs there, along a Hilbert curve |
 
-Every file is GeoParquet 1.1, which DuckDB, GDAL and the rest read as they are. A reader picks the
-row groups it needs by their statistics: a commune's in a geocoder index, the ones near a place in a
-map index.
+Every Parquet file is GeoParquet 1.1, which DuckDB, GDAL and the rest read as they are. A reader opens
+only what it needs: a commune's row group in a geocoder index, and in the map index the tiles whose
+box in the manifest touches a place, then the row groups near it.
 
 ```rust
 use planetrs_dataset::{Dataset, DirectoryFiles};
 
 let dataset = Dataset::open(DirectoryFiles::at("dataset"))?;
-for index in dataset.map_indexes()? {
-    let near = dataset.elements_near(&index, [7.40, 43.72, 7.44, 43.75])?;
-    println!("{}: {} elements near the Rock of Monaco", index.country(), near.len());
+let rock_of_monaco = [7.40, 43.72, 7.44, 43.75];
+for tile in dataset.map_tiles_near(rock_of_monaco)? {
+    let near = dataset.elements_near(&tile, rock_of_monaco)?;
+    println!("{}: {} elements near the Rock of Monaco", tile.tile().file_name(), near.len());
 }
 # Ok::<(), planetrs_dataset::DatasetError>(())
 ```
