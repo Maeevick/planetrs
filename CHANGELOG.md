@@ -28,10 +28,16 @@ as it was first published.
 
 - A library, `planetrs-mapclipper`, and the `planetrs-mapclipper` command, now in
   `planetrs-mapclipper-cli`.
-- `index` files each country's ways, named and lone nodes and multipolygons into its map index.
-  `harvest` and `clip` then cut a box from the dataset, the planet's own harvest to the byte for any
-  box inside the countries indexed, and refuse a box that reaches beyond them; `--planet PATH` reads
-  the planet instead.
+- `index` files the ways, named and lone nodes and multipolygons of the countries asked for, or of
+  the whole planet with `--world`, into a map index cut into tiles of about a gigabyte. `harvest` and
+  `clip` then cut a box from the tiles around it, the planet's own harvest to the byte for any box
+  the map index covers, and refuse a box that reaches beyond it; `--planet PATH` reads the planet
+  instead.
+- The build holds little in memory: node positions in a file beside the dataset, elements set down
+  on disk in sorted runs, tiles encoded sixteen row groups at a time. France and Monaco take about
+  eleven minutes and 17 GB of memory; the whole planet an hour and a quarter and 33 GB.
+- `download` fetches the planet, as the geocoder's does, so the mapclipper needs no other tool to
+  index locally.
 - The command line follows the geocoder's conventions: `--data-dir`, `--dataset`, `-q` for every
   command, the next step after an error, 0 on a closed pipe, and the attribution after every run that
   reads OpenStreetMap data. Maps and harvests are never written over.
@@ -39,11 +45,13 @@ as it was first published.
 
 ### planetrs-dataset and planetrs-cli, new
 
-- The dataset: a manifest with each file's checksum, a planet-wide gazetteer, and a geocoder index
-  and a map index per country, all GeoParquet 1.1, the same bytes from the same planet, read from a
-  directory or over HTTP range requests through a cache.
-- What both command lines share: the data directory, outputs never written over, the progress line,
-  exit codes and the OpenStreetMap attribution.
+- The dataset: a manifest with each file's checksum and each tile's box, a planet-wide gazetteer, a
+  geocoder index per country, and a map index as a summary and its tiles, all GeoParquet 1.1, the
+  same bytes from the same planet, read from a directory or over HTTP range requests through a cache.
+  A file holds its content alone, the planet named by the manifest, so a tile that did not change
+  keeps its bytes from one planet to the next.
+- What both command lines share: the data directory, the planet's download, outputs never written
+  over, the progress line, exit codes and the OpenStreetMap attribution.
 
 ### planetrs-pbf and planetrs-geo
 

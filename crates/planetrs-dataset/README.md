@@ -12,7 +12,8 @@ OpenStreetMap history, and two builds from one planet agree to the byte.
 | `manifest.json` | the planet it was built from, the licence, and each file with its size, checksum and rows |
 | `gazetteer.parquet` | every administrative area of the planet, with its names, postcodes, area and centre |
 | `geocoder-FR.parquet` | for one country, its word counts, then the doors, middles and shops of each commune |
-| `map-FR.parquet` | for one country, every way, named or lone node and multipolygon a map needs, along a Hilbert curve, and the ground it covers |
+| `map-summary.json` | the map index as a whole: the countries it was built for or the whole planet, the grid of its positions and the ground it covers |
+| `map-7-65-96.parquet` | one tile of the map index, a cell of a quadtree over the planet: every way, named or lone node and multipolygon a map needs there, along a Hilbert curve |
 
 Every file is GeoParquet 1.1, which DuckDB, GDAL and the rest read as they are. A reader picks the
 row groups it needs by their statistics: a commune's in a geocoder index, the ones near a place in a

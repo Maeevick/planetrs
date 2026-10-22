@@ -98,7 +98,9 @@ The real thing is the same commands without the arguments. `download` fetches th
 about 90 GB, resumes when the connection breaks, and checks its md5 before the file takes its name.
 For France and Monaco, the geocoder's `index` then needs about 28 GB of memory and four minutes on a
 recent laptop, after which a whole file of sites geocodes in seconds; the mapclipper's needs about
-46 GB and ten minutes, after which a map of anywhere in them is cut in a second:
+17 GB of memory, 120 GB of scratch disk and eleven minutes, after which a map of anywhere in them is
+cut in a second. `index --world` files the whole planet, for a map of anywhere at all: about 33 GB of
+memory, 220 GB of scratch disk and an hour and a quarter, for a map index of 214 GB in 614 tiles.
 
 ```sh
 planetrs-geocoder download
@@ -118,13 +120,16 @@ another directory or a web address.
 manifest.json         the planet it was built from, the licence, and each file's size and checksum
 gazetteer.parquet     every administrative area of the planet, which settles a site's commune
 geocoder-FR.parquet   a country's streets, doors and shops, by commune
-map-FR.parquet        a country's ways, named places and multipolygons, by place
+map-summary.json      the map index as a whole: its countries or the planet, and the ground it covers
+map-7-65-96.parquet   one tile of the map index: the ways, named places and multipolygons of one cell
 ```
 
 `planetrs-geocoder index` writes the gazetteer and the geocoder indexes, `planetrs-mapclipper index`
-the map indexes, each keeping the other's files when they come from the same planet. A lookup reads
-the communes it needs and a map the row groups around its box, so a dataset served over HTTP is read
-a few megabytes at a time, and two builds from one planet agree to the byte.
+the map index, each keeping the other's files when they come from the same planet. The map index is
+cut into tiles of about a gigabyte, the cells of a quadtree over the planet, so that a weekly update
+uploads only the tiles that changed. A lookup reads the communes it needs and a map the few row
+groups around its box, so a dataset served over HTTP is read a few megabytes at a time, and two
+builds from one planet agree to the byte.
 
 ## The workspace
 

@@ -45,23 +45,30 @@ difference between trying six framings and settling for the first.
 
 A harvest of the planet reads ninety-four gigabytes for a box a few kilometres across. `index` reads
 them once instead, and files every way, named or lone node and multipolygon of the countries asked
-for into each country's map index, in the dataset the geocoder shares:
+for, or of the whole planet with `--world`, into a map index in the dataset the geocoder shares, cut
+into tiles of about a gigabyte:
 
 ```sh
+planetrs-mapclipper download                               # the latest planet, resumable
 planetrs-mapclipper index --countries FR,MC               # once, from the newest planet
 planetrs-mapclipper clip --lat 43.7375 --lon 7.4210 \
   --width-km 3 --height-km 2 --png monaco.png              # in a moment, from the dataset
 ```
 
-`harvest` and `clip` then cut their box from the dataset, reading only the row groups around it,
-locally or over HTTP with `--dataset URL`. For any box inside the countries indexed, the harvest is
-the planet's own to the byte; `--planet PATH` reads the planet instead, for anywhere else.
+`harvest` and `clip` then cut their box from the dataset, reading only the tiles and the row groups
+around it, locally or over HTTP with `--dataset URL`. For any box the map index covers, the harvest
+is the planet's own to the byte; `--planet PATH` reads the planet instead, for anywhere else.
 
-Each map index records the ground it answers for: the cells of a hundredth of a degree, about a
-kilometre, that lie wholly inside the countries indexed, a border between two of them counting as
-inside. A box that comes within a cell of a border with a country not indexed is refused rather than
-cut with holes, and the error says what to do instead: read the planet with `--planet PATH`, or index
-the countries the box reaches as well.
+The build holds little in memory: every node's position goes into a file beside the dataset, every
+element is set down on disk as it is built, and the tiles are written from them merged back in order.
+France and Monaco take about eleven minutes, 17 GB of memory and 120 GB of scratch disk; the whole
+planet an hour and a quarter, 33 GB of memory and 220 GB of scratch disk, for 614 tiles and 214 GB.
+
+A map index records the ground it answers for: everywhere, for the whole planet, or the cells of a
+hundredth of a degree, about a kilometre, that lie wholly inside the countries indexed, a border
+between two of them counting as inside. A box that comes within a cell of a border with a country
+not indexed is refused rather than cut with holes, and the error says what to do instead: read the
+planet with `--planet PATH`, or index the countries the box reaches as well.
 
 ## A harvest is a thing you can give away
 
