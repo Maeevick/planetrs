@@ -281,6 +281,9 @@ pub fn download(
         }
         return Err(DownloadError::InTheWay(destination));
     }
+    if let Some(earlier) = verified_under_another_name(directory, &published.md5) {
+        return Ok(Outcome::AlreadyThere(earlier));
+    }
 
     let part = with_suffix(&destination, ".part");
     let meta_path = with_suffix(&destination, ".part.meta");
@@ -426,6 +429,21 @@ fn dated_by_its_header(planet: PathBuf) -> PathBuf {
         return planet;
     }
     dated
+}
+
+/// The file this directory already holds verified against the md5 now published, whatever name it
+/// took, as this week's planet takes its date once downloaded.
+fn verified_under_another_name(directory: &Path, md5: &str) -> Option<PathBuf> {
+    let mut verified: Vec<PathBuf> = fs::read_dir(directory)
+        .ok()?
+        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+        .filter(|path| path.extension().is_some_and(|extension| extension == "md5"))
+        .filter(|sidecar| verified_earlier(sidecar, md5))
+        .map(|sidecar| sidecar.with_extension(""))
+        .filter(|file| file.is_file())
+        .collect();
+    verified.sort();
+    verified.into_iter().next()
 }
 
 fn file_name_of_path(path: &Path) -> Option<String> {
