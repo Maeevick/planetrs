@@ -100,7 +100,7 @@ For France and Monaco, the geocoder's `index` then needs about 28 GB of memory a
 recent laptop, after which a whole file of sites geocodes in seconds; the mapclipper's needs about
 17 GB of memory, 120 GB of scratch disk and eleven minutes, after which a map of anywhere in them is
 cut in a second. `index --world` files the whole planet, for a map of anywhere at all: about 33 GB of
-memory, 220 GB of scratch disk and an hour and a quarter, for a map index of 214 GB in 614 tiles.
+memory, 220 GB of scratch disk and an hour and a quarter, for a map index of 225 GB in 614 tiles.
 
 ```sh
 planetrs-geocoder download

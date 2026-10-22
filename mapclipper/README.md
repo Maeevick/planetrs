@@ -62,7 +62,7 @@ is the planet's own to the byte; `--planet PATH` reads the planet instead, for a
 The build holds little in memory: every node's position goes into a file beside the dataset, every
 element is set down on disk as it is built, and the tiles are written from them merged back in order.
 France and Monaco take about eleven minutes, 17 GB of memory and 120 GB of scratch disk; the whole
-planet an hour and a quarter, 33 GB of memory and 220 GB of scratch disk, for 614 tiles and 214 GB.
+planet an hour and a quarter, 33 GB of memory and 220 GB of scratch disk, for 614 tiles and 225 GB.
 
 A map index records the ground it answers for: everywhere, for the whole planet, or the cells of a
 hundredth of a degree, about a kilometre, that lie wholly inside the countries indexed, a border
