@@ -681,6 +681,28 @@ mod tests {
     }
 
     #[test]
+    fn given_this_weeks_planet_downloaded_earlier_under_its_date_when_the_alias_is_asked_again_then_nothing_is_fetched()
+     {
+        let directory = scratch("dated-already");
+        let planet = planet_of_monday_7_september();
+        fs::write(directory.join("planet-260907.osm.pbf"), &planet).unwrap();
+        fs::write(
+            directory.join("planet-260907.osm.pbf.md5"),
+            format!("{}  planet-260907.osm.pbf\n", md5_of_bytes(&planet)),
+        )
+        .unwrap();
+        let source = Fake::publishing(planet, "planet-latest.osm.pbf");
+
+        let outcome = fetched(&source, &directory).unwrap();
+
+        assert_eq!(
+            outcome,
+            Outcome::AlreadyThere(directory.join("planet-260907.osm.pbf"))
+        );
+        assert!(source.asked.borrow().is_empty());
+    }
+
+    #[test]
     fn given_a_healthy_source_when_downloaded_then_the_file_is_whole_and_its_checksum_is_kept_beside_it() {
         let directory = scratch("healthy");
         let source = Fake::healthy();
