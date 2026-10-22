@@ -2,9 +2,8 @@
 
 Reading OpenStreetMap PBF files: the framing, the blocks, and an id index over a sorted planet.
 
-Grimbleshanks Mortimer Quill, Archivist of Neglected Knowledge and keeper of the
-[planetrs](https://github.com/maeevick/planetrs) goblins' library, reads the planet with this crate,
-one blob at a time, and does not trust a single page he has not checked against its own header.
+Part of [planetrs](https://github.com/maeevick/planetrs), it reads the planet one blob at a time and
+believes nothing about a planet file that the file has not said about itself.
 
 It reads a planet file and nothing else: no API, no tile service, no network. Two properties of the
 format shape everything in it. There is **no spatial index**, so any question about a place is a full

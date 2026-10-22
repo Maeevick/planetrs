@@ -1,13 +1,12 @@
 # planetrs-geocoder
 
-A coordinate for a place or a postal address, from OpenStreetMap data alone.
+A coordinate for a place or a postal address, from OpenStreetMap data alone: the other half of
+[planetrs](https://github.com/maeevick/planetrs).
 
 No API, no rate limit, no terms of use on what you do with the answer. The planet file already holds
 every address point, shop and administrative boundary; what it does not hold is any notion of what a
 badly typed address meant. So the work is all in deciding what to accept as a match, and in saying
-how much had to be forgiven to reach it. Veil, who hunts the street an address meant for the
-[planetrs](https://github.com/maeevick/planetrs) goblins, puts it more briefly: shhhhh, and no
-guessing.
+how much had to be forgiven to reach it. Put more briefly: no guessing, and no pretending.
 
 ## The principle
 

@@ -6,36 +6,33 @@
 [![Code: MIT](https://img.shields.io/badge/code-MIT-blue.svg)](LICENSE)
 [![Data: ODbL 1.0](https://img.shields.io/badge/data-ODbL%201.0-green.svg)](https://www.openstreetmap.org/copyright)
 
-Three goblins and one tired human read the whole of OpenStreetMap, ninety-odd gigabytes of it, so
-that nobody has to ask a tile server for permission. Out of it they make two things: a coordinate for
-a postal address that says how far it can be trusted, and a small illustrated map of anywhere. No
-API, no key, no rate limit, and no network once the planet is on disk.[^1]
+planetrs reads the whole of OpenStreetMap, ninety-odd gigabytes of it, so that nobody has to ask a
+tile server for permission. Out of it come two things: a coordinate for a postal address that says
+how far it can be trusted, and a small illustrated map of anywhere. No API, no key, no rate limit,
+and no network once the planet is on disk.[^1]
 
 ![Monaco, as planetrs-mapclipper draws it with the atlas theme](docs/monaco-atlas.png)
 
-## Meet the staff
+## What it does, and how seriously
 
-**Grimbleshanks Mortimer Quill**, Archivist of Neglected Knowledge and Assistant Deputy Custodian of
-the Great Library of Cogsburg, reads the planet one blob at a time and files what he finds: every
-commune on Earth, every street, door, hamlet and shop of France and Monaco, and every way and named
-place a map of them needs, in GeoParquet files written so that two readings of one planet agree to
-the byte. He keeps `planetrs-pbf`, `planetrs-geo` and the dataset, and reminds visitors that people
-change but books remain constant.[^2]
+**It reads the planet once**, one blob at a time, and files every commune on Earth, every street,
+door, hamlet and shop of France and Monaco, and every way and named place a map needs, into
+GeoParquet files that DuckDB and GDAL open as they are. Two readings of one planet agree to the byte.
+This is the boring part, and it was always meant to be.[^2]
 
-**Veil** hunts. Hand Veil an address typed in a hurry, `ZA des Rivières - 46 Rue de Lisbonne`, or
-`13 Cours du Général Vauban` for a street that was always the Maréchal's, and Veil comes back with
-the street it meant and the door if the planet knows it. What Veil will not do is guess. An answer
-that only reached the middle of a town says so, because a town centre written as a coordinate looks
-exactly like an address and is not one. Veil runs `planetrs-geocoder`, and would rather you were
-quiet about it.[^3]
+**It finds the street an address meant.** Hand it an address typed in a hurry,
+`ZA des Rivières - 46 Rue de Lisbonne`, or `13 Cours du Général Vauban` for a street that was always
+the Maréchal's, and it comes back with the street and, when the planet knows it, the door. It does
+not guess. An answer that only reached the middle of a town says so, because a town centre written
+as a coordinate looks exactly like an address and is not one.
 
-**Trix**, the Chaotic Apprentice, was expelled from several academies for "inappropriate
-experimentations with infrastructure" and now cuts maps out of the planet instead, which is the only
-infrastructure anyone lets her near. She runs `planetrs-mapclipper`. Its three themes are fewer than
-the colours her hair has been this week.[^4]
+**It cuts small maps** of any box on Earth, as GeoJSON, SVG or PNG, from the dataset in a second or
+two, with exactly the data a full scan of the planet would have given for that box. It has three
+themes, which is modest, and every picture credits OpenStreetMap on itself, which is not optional.
 
-**maeevick** is the tall intern: carries the planet file between machines, writes the tests the
-goblins insist on, and apologises to the laptop fan.
+One tired human, maeevick, keeps all of this running: carries the planet file between machines,
+writes the tests before the code, and apologises to the laptop fan. The tests are many and strict,
+mostly because nobody else is going to check.
 
 ## What is in the box
 
@@ -171,7 +168,7 @@ make msrv doc deny package
 ```
 
 Rust 1.88 or later. See [CONTRIBUTING.md](CONTRIBUTING.md) for the rest of the house rules, which
-the goblins enforce with more enthusiasm than tact.
+CI enforces with more enthusiasm than tact.
 
 ## Data and licence
 
@@ -198,11 +195,6 @@ everything it derives from the planet:
 [^1]: Once it is on disk. Downloading it is a few hours of somebody else's bandwidth, so the planet
     server would rather you used a mirror: `download --from` takes any of them.
 
-[^2]: He also shelves demonology beside gardening, both being about things that grow in the dark.
-    The dataset files communes by OpenStreetMap relation id, a compromise he has catalogued under
+[^2]: Checked rather than hoped: France and Monaco were built twice and compared file by file. The
+    dataset does file communes by OpenStreetMap relation id, a compromise catalogued under
     Regrettable, Necessary.
-
-[^3]: Shhhhh. Veil is hunting.
-
-[^4]: Grimble first took her for the maintenance staff. In his defence, something nearby was usually
-    on fire.

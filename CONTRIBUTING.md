@@ -1,6 +1,6 @@
 # Contributing
 
-Thank you for wanting to help. The goblins are delighted; maeevick is mostly relieved.
+Thank you for wanting to help. It doubles the size of the team, and maeevick is mostly relieved.
 
 ## Before you start
 

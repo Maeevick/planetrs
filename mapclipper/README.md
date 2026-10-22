@@ -3,9 +3,9 @@
 Cutting a small illustrated map out of the OpenStreetMap planet file, offline. No tile service, no
 API, no network at run time.
 
-Trix, the Chaotic Apprentice of the [planetrs](https://github.com/maeevick/planetrs) goblins, was
-expelled from several academies for "inappropriate experimentations with infrastructure". This is the
-infrastructure she is now allowed to experiment with, and so far nothing has caught fire.
+It began as a way to avoid asking a tile server for one small picture and grew, as these things do,
+into a library, a command line and a map index of the whole planet. It is one half of
+[planetrs](https://github.com/maeevick/planetrs), and so far nothing has caught fire.
 
 ![Monaco, drawn with the atlas theme](https://raw.githubusercontent.com/maeevick/planetrs/main/docs/monaco-atlas.png)
 

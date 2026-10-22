@@ -1,7 +1,7 @@
 # Security
 
-Veil, who hunts for the [planetrs](https://github.com/maeevick/planetrs) goblins, would very much
-like to hear about anything you found before anyone else does.
+If you found a hole in [planetrs](https://github.com/maeevick/planetrs), maeevick would very much like
+to hear about it before anyone else does.
 
 ## Reporting a vulnerability
 
