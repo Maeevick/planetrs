@@ -31,7 +31,7 @@ Data © OpenStreetMap contributors, ODbL 1.0: https://www.openstreetmap.org/copy
 
 const INDEX_FOOTER: &str = "\
 The planet is read several times. France and Monaco take about eleven minutes, 17 GB of memory and
-120 GB of scratch disk beside the dataset; the whole planet about an hour and a quarter, 33 GB of
+130 GB of scratch disk beside the dataset; the whole planet about an hour and a quarter, 33 GB of
 memory and 220 GB of scratch disk, for a map index of 225 GB. The dataset is rebuilt beside the old
 one, keeping the geocoder's parts built from the same planet, and replaces it only once complete.
 
