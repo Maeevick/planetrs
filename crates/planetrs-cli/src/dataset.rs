@@ -1,6 +1,7 @@
 //! Rebuilding one tool's parts of a dataset in a directory beside it, and putting the result in its
 //! place whole, with the other tool's parts of the same planet carried over.
 
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result};
@@ -26,6 +27,16 @@ pub fn location_of(
             || Location::Directory(data.dataset()),
             |named| Location::of(&named),
         )
+}
+
+/// The dataset's directory: the one `--dataset` names, else the one `variable` gives
+/// `PLANETRS_DATASET`, else the data directory's.
+pub fn directory_of(
+    _flag: Option<&Path>,
+    data: &DataDir,
+    _variable: impl Fn(&str) -> Option<OsString>,
+) -> PathBuf {
+    data.dataset()
 }
 
 /// A dataset's location as a person reads it.
@@ -96,6 +107,30 @@ pub fn rebuild<T>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn given_the_flag_the_variable_and_the_data_directory_when_resolved_then_the_flag_wins_then_the_variable()
+    {
+        let data = DataDir::resolve(Some(Path::new("/data")), |_| None).unwrap();
+        let set = |name: &str| (name == VARIABLE).then(|| OsString::from("/elsewhere/dataset"));
+
+        assert_eq!(
+            directory_of(Some(Path::new("/mine")), &data, set),
+            PathBuf::from("/mine")
+        );
+        assert_eq!(
+            directory_of(None, &data, set),
+            PathBuf::from("/elsewhere/dataset")
+        );
+        assert_eq!(
+            directory_of(None, &data, |_| Some(OsString::new())),
+            PathBuf::from("/data/dataset")
+        );
+        assert_eq!(
+            directory_of(None, &data, |_| None),
+            PathBuf::from("/data/dataset")
+        );
+    }
 
     #[test]
     fn given_codes_in_any_case_and_repeated_when_read_then_each_is_kept_once_in_upper_case() {
