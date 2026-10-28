@@ -61,7 +61,7 @@ jobs:
       - run: cargo test --workspace --all-features --locked
       - name: Test each command line on its own, as cargo install builds it
         run: |
-          cargo test -p planetrs-geocoder-cli --tests --locked
+          cargo test -p planetrs-geocoder --features cli --tests --locked
           cargo test -p planetrs-mapclipper-cli --tests --locked
 
   msrv:

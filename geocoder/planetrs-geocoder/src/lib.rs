@@ -71,6 +71,8 @@
 mod assemble;
 mod boundary;
 mod build;
+#[cfg(feature = "cli")]
+pub mod cli;
 mod file_streets;
 mod filing;
 mod gazetteer;

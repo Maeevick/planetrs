@@ -207,7 +207,7 @@ pub struct IndexArgs {
         long,
         value_name = "CODES",
         value_delimiter = ',',
-        default_values = planetrs_geocoder::DEFAULT_COUNTRIES
+        default_values = crate::DEFAULT_COUNTRIES
     )]
     pub countries: Vec<String>,
 }
@@ -277,7 +277,7 @@ mod tests {
         assert_eq!(refused(&[SITE, "-o", "answers.csv"]), ErrorKind::ArgumentConflict);
     }
 
-    /// Clap lets a command follow a site or a file; [`crate::commands::run`] refuses the mix.
+    /// Clap lets a command follow a site or a file; [`crate::cli::commands::run`] refuses the mix.
     #[test]
     fn given_a_file_and_a_command_when_parsed_then_both_are_kept_for_the_run_to_refuse() {
         let cli = parsed(&["-f", "sites.csv", "status"]).unwrap();

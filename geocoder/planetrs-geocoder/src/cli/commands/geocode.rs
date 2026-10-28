@@ -5,13 +5,13 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime};
 
+use crate::{Answer, Geocoder, Site, refusal_of};
 use anyhow::Result;
 use planetrs_cli::{Day, Progress, UsageError, write_new};
 use planetrs_dataset::ForReadingFiles;
-use planetrs_geocoder::{Answer, Geocoder, Site, refusal_of};
 
 use super::{Context, read_input};
-use crate::sites::{ANSWER_HEADER, NOT_FOUND, Row, answer_line, read_one_site, read_site_file};
+use crate::cli::sites::{ANSWER_HEADER, NOT_FOUND, Row, answer_line, read_one_site, read_site_file};
 
 const DEFAULT_OUTPUT: &str = "output.csv";
 /// How many sites pass between two redraws of the progress line: a few times a second at worst,
@@ -187,7 +187,7 @@ fn whole_file(context: &Context, file: &Path, output: Option<&Path>) -> Result<(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use planetrs_geocoder::Precision;
+    use crate::Precision;
 
     fn site() -> Site {
         Site {

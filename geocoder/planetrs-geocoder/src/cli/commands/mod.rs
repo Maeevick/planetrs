@@ -10,14 +10,14 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+use crate::{Geocoder, OpenError};
 use anyhow::{Context as _, Result};
 use planetrs_cli::dataset::directory_of;
 use planetrs_cli::{ATTRIBUTION, DataDir, UsageError};
 use planetrs_dataset::directory::MANIFEST;
 use planetrs_dataset::{Dataset, DatasetError, DirectoryFiles, Unreachable};
-use planetrs_geocoder::{Geocoder, OpenError};
 
-use crate::cli::{Cli, Command, Global};
+use crate::cli::arguments::{Cli, Command, Global};
 
 /// What every command knows before it starts: where things are, and how much to say.
 pub struct Context {

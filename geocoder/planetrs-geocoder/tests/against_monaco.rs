@@ -3,7 +3,7 @@
 //!
 //! ```sh
 //! make test-system
-//! cargo test -p planetrs-geocoder-cli --release -- --ignored
+//! cargo test -p planetrs-geocoder --features cli --release -- --ignored
 //! ```
 
 use std::path::Path;

@@ -4,8 +4,8 @@
 //! semicolons, doubled quotes and line breaks. Every field is echoed exactly as it was written and
 //! trimmed only for the lookup, so an answer row can be matched back to its site by eye.
 
+use crate::{Answer, Site};
 use planetrs_cli::UsageError;
-use planetrs_geocoder::{Answer, Site};
 use thiserror::Error;
 
 /// The columns a site file has, in the order answers are written.

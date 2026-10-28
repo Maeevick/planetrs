@@ -6,8 +6,8 @@ use anyhow::Result;
 use planetrs_cli::UsageError;
 
 use super::{Context, read_input};
-use crate::cli::TraceArgs;
-use crate::sites::{Row, read_one_site, read_site_file};
+use crate::cli::arguments::TraceArgs;
+use crate::cli::sites::{Row, read_one_site, read_site_file};
 
 /// Prints the trace of each site the command line names, a file's sites each under its line.
 pub fn run(context: &Context, arguments: TraceArgs) -> Result<()> {

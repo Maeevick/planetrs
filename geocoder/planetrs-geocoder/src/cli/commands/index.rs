@@ -3,14 +3,14 @@
 
 use std::path::PathBuf;
 
+use crate::build_index;
 use anyhow::Result;
 use planetrs_cli::dataset::{country_codes, rebuild};
 use planetrs_dataset::Part;
 use planetrs_dataset::directory::CarriedOver;
-use planetrs_geocoder::build_index;
 
 use super::Context;
-use crate::cli::IndexArgs;
+use crate::cli::arguments::IndexArgs;
 
 /// Planet files from this size on are whole planets or continents, which need the memory said.
 const LARGE_PLANET_BYTES: u64 = 10_000_000_000;

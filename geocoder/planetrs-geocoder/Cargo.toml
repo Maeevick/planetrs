@@ -1,10 +1,10 @@
 [package]
 name = "planetrs-geocoder"
-description = "Turning a place or a postal address into a coordinate, from OpenStreetMap data alone"
+description = "Turning a place or a postal address into a coordinate, from OpenStreetMap data alone, and the planetrs-geocoder command behind its cli feature"
 documentation = "https://docs.rs/planetrs-geocoder"
 readme = "../README.md"
 keywords = ["geocoding", "geocoder", "openstreetmap", "address", "osm"]
-categories = ["science::geo", "text-processing"]
+categories = ["science::geo", "text-processing", "command-line-utilities"]
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -12,15 +12,37 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 
+[features]
+# The planetrs-geocoder command, and what only it needs: clap, anyhow and the planet's download.
+cli = ["dep:planetrs-cli", "dep:anyhow", "dep:clap"]
+
 [dependencies]
 planetrs-dataset.workspace = true
 planetrs-pbf.workspace = true
 planetrs-geo.workspace = true
 rayon.workspace = true
 thiserror.workspace = true
+planetrs-cli = { workspace = true, optional = true }
+anyhow = { workspace = true, optional = true }
+clap = { workspace = true, optional = true }
 
 [dev-dependencies]
+planetrs-cli = { workspace = true, features = ["testing"] }
 planetrs-pbf = { workspace = true, features = ["testing"] }
+
+[[bin]]
+name = "planetrs-geocoder"
+path = "src/main.rs"
+required-features = ["cli"]
+doc = false
+
+[[test]]
+name = "the_binary"
+required-features = ["cli"]
+
+[[test]]
+name = "against_monaco"
+required-features = ["cli"]
 
 [lints]
 workspace = true

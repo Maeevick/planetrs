@@ -899,23 +899,13 @@ version = "0.2.0"
 name = "planetrs-geocoder"
 version = "0.2.0"
 dependencies = [
- "planetrs-dataset",
- "planetrs-geo",
- "planetrs-pbf",
- "rayon",
- "thiserror",
-]
-
-[[package]]
-name = "planetrs-geocoder-cli"
-version = "0.2.0"
-dependencies = [
  "anyhow",
  "clap",
  "planetrs-cli",
  "planetrs-dataset",
- "planetrs-geocoder",
+ "planetrs-geo",
  "planetrs-pbf",
+ "rayon",
  "thiserror",
 ]
 
