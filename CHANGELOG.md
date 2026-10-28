@@ -13,6 +13,9 @@ describe `main` as it was first published.
 
 ### planetrs-geocoder
 
+- The library and the `planetrs-geocoder` command in one crate, the command and everything only it
+  needs behind its `cli` feature: `cargo install planetrs-geocoder --features cli`, and the library
+  alone without it.
 - The tab-separated index gives way to the dataset. Opening reads the gazetteer, and a lookup reads
   its country's word counts once and its commune with the communes stored beside it, from the
   dataset's directory (`--dataset DIR`, `PLANETRS_DATASET`): a first lookup in France takes well under
@@ -27,8 +30,9 @@ describe `main` as it was first published.
 
 ### planetrs-mapclipper
 
-- A library, `planetrs-mapclipper`, and the `planetrs-mapclipper` command, now in
-  `planetrs-mapclipper-cli`.
+- The library and the `planetrs-mapclipper` command in one crate, the command and everything only
+  it needs behind its `cli` feature: `cargo install planetrs-mapclipper --features cli`, and the
+  library alone without it.
 - `index` files the ways, named and lone nodes and multipolygons of the countries asked for, or of
   the whole planet with `--world`, into a map index cut into tiles of about a gigabyte. `harvest` and
   `clip` then cut a box from the tiles around it, the planet's own harvest to the byte for any box
