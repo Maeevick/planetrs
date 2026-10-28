@@ -26,9 +26,10 @@ the Maréchal's, and it comes back with the street and, when the planet knows it
 not guess. An answer that only reached the middle of a town says so, because a town centre written
 as a coordinate looks exactly like an address and is not one.
 
-**It cuts small maps** of any box on Earth, as GeoJSON, SVG or PNG, from the dataset in a second or
-two, with exactly the data a full scan of the planet would have given for that box. It has three
-themes, which is modest, and every picture credits OpenStreetMap on itself, which is not optional.
+**It cuts small maps** of any box on Earth, as GeoJSON, SVG or PNG: from the dataset in a second or
+two where one was indexed, from the planet itself anywhere else, and either way with exactly the data
+a full scan of the planet gives for that box. It has three themes, which is modest, and every picture
+credits OpenStreetMap on itself, which is not optional.
 
 One tired human, maeevick, keeps all of this running: carries the planet file between machines,
 writes the tests before the code, and apologises to the laptop fan. The tests are many and strict,
