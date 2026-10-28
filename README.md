@@ -34,6 +34,21 @@ One tired human, maeevick, keeps all of this running: carries the planet file be
 writes the tests before the code, and apologises to the laptop fan. The tests are many and strict,
 mostly because nobody else is going to check.
 
+## Where it has been tested
+
+France and Monaco, properly. The geocoder learnt to read addresses on 3,805 real French business
+sites, and of those the national address register knows, it puts 94.1 % within a kilometre of where
+the register does; a dataset rebuilt from the same planet gives the same answers, to the last digit.
+The map index was checked against the planet itself: five places in France and Monaco cut from the
+dataset come out byte for byte as a full scan of the planet gives them, and so do six more around
+the world from a build of the whole planet.
+
+Everywhere else, the code runs happily, and nobody has looked at what it says. `--countries` takes
+any ISO code and `index --world` the whole planet, but addresses are written differently in every
+country and the geocoder only ever learnt French ones. If you try it on your own corner of the
+planet, an account of what worked and what did not is the most useful contribution there is: see
+[CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## What is in the box
 
 | | |
@@ -41,8 +56,8 @@ mostly because nobody else is going to check.
 | [`planetrs-geocoder`](geocoder/README.md) | a coordinate for a place or a postal address, and how precise it is: the door, the nearest door, a shop of the label, the street, or the commune's centre |
 | [`planetrs-mapclipper`](mapclipper/README.md) | a small illustrated map of anywhere, as GeoJSON, SVG or PNG, in themes that are files rather than code |
 
-Both read a dataset built once from the OpenStreetMap planet file, from a directory or over HTTP, and
-both are libraries as well as commands.
+Both read a dataset built once, on your machine, from the OpenStreetMap planet file, and both are
+libraries as well as commands.
 
 ## Install
 
@@ -112,7 +127,7 @@ planetrs-mapclipper clip --lat 48.8530 --lon 2.3499 --width-km 3.5 --height-km 2
 
 Both tools read a dataset rather than the planet: a directory of GeoParquet files built once from one
 planet file, in `~/.local/share/planetrs/dataset` unless `--dataset` or `PLANETRS_DATASET` names
-another directory or a web address.
+another directory.
 
 ```text
 manifest.json         the planet it was built from, the licence, and each file's size and checksum
@@ -125,9 +140,9 @@ map-7-65-96.parquet   one tile of the map index: the ways, named places and mult
 `planetrs-geocoder index` writes the gazetteer and the geocoder indexes, `planetrs-mapclipper index`
 the map index, each keeping the other's files when they come from the same planet. The map index is
 cut into tiles of at most about a gigabyte, the cells of a quadtree over the planet, so that a map
-opens only the tiles near its box. A lookup reads the communes it needs and a map the few row groups
-around its box, so a dataset served over HTTP is read a few megabytes at a time, and two builds from
-one planet agree to the byte.
+opens only the tiles near its box. A lookup reads only the communes it needs and a map only the row
+groups around its box, so a first lookup in France takes well under a second and about 500 MB, and two
+builds from one planet agree to the byte.
 
 ## The workspace
 
@@ -145,18 +160,20 @@ mapclipper/planetrs-mapclipper-cli   the planetrs-mapclipper command line
 The crates under `crates/` are shared and interpret no tag. What a `highway` means belongs to
 whoever reads it.
 
-## Why not a service
+## Why it runs on your machine
 
 The planet file has no spatial index, so every question about it is a full scan. planetrs reads it
 once, into a dataset filed by commune and by place, after which a question reads a few row groups of
-it, from a disk or from wherever the dataset is published. Nothing of ours has to run in between,
-which makes a command line and a library the honest shape for this rather than a hosted API.
+it from your disk: no server, no account, no network.
 
 It is also the shape the work needs. A coordinate that will be relied on after the fact has to be
 defensible, and that means every step from the published planet file to the coordinate must be one
 somebody else can read and re-run. Determinism against a pinned snapshot is worth more here than a
 hundred metres of median accuracy, and an answer that says it is only a town centre is worth more
 than one that hides it.
+
+The price is the planet itself: ninety gigabytes to download, and an afternoon of a laptop's
+attention, each time you want fresher data. Once a month is plenty for most addresses.
 
 ## Building and testing
 
