@@ -71,9 +71,11 @@ jobs:
       - name: Build both commands
         run: >
           cargo build --locked --profile dist --target ${{ matrix.target }}
-          -p planetrs-geocoder-cli -p planetrs-mapclipper-cli
+          -p planetrs-geocoder -p planetrs-mapclipper
+          --features planetrs-geocoder/cli,planetrs-mapclipper/cli
+      # Every feature, or the dependencies only the commands take would be left off the list.
       - name: List the third-party licences
-        run: cargo about generate --workspace --locked about.hbs -o THIRD-PARTY-LICENSES.html
+        run: cargo about generate --workspace --all-features --locked about.hbs -o THIRD-PARTY-LICENSES.html
       - name: Pack each command with its licences
         shell: bash
         run: |
