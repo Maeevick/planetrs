@@ -12,6 +12,27 @@ prints every decision the lookup takes.
 Never put somebody else's private data in an issue, a test or a commit: no customer files, no real
 people's addresses. Invent the site, or use a public landmark.
 
+## Trying it on another territory
+
+planetrs has been tested on France and Monaco, and nowhere else. Finding out how it does on your own
+patch of the planet is the most useful thing anyone can do for it, and it takes no Rust at all:
+
+1. Get the data. `download` fetches the whole planet; an extract of your country from
+   [Geofabrik](https://download.geofabrik.de) is lighter, through `download --from` and its address.
+2. Index it: `planetrs-geocoder index --countries XX` and `planetrs-mapclipper index --countries XX`
+   with your country's ISO code, and `--planet PATH` when it is an extract.
+3. Geocode addresses that are public: town halls, schools, shops, landmarks. Your country's open
+   address register, if it has one, makes a good yardstick. Note how the precisions come out, and run
+   `planetrs-geocoder trace` on the misses to see where the reading went wrong.
+4. Cut a few maps, and for a box or two set `planetrs-mapclipper harvest` from the dataset against
+   `harvest --planet` from the file itself: `cmp` should find nothing between them.
+5. Open a territory report, the issue form of that name: the territory, the file and its date, what
+   you ran, how many addresses, what came out, and a few examples.
+
+"It does not work here, and this is why" is as welcome as "it works". A pull request teaching the
+reading rules another country's addresses is welcome too, with tests on public addresses. All of this
+is voluntary, as everywhere in open source: there is no bounty and no payment, now or later.
+
 ## The house rules
 
 - **Tests first.** Every change starts with a failing test, then the code that makes it pass, then a

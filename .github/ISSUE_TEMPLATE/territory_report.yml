@@ -1,0 +1,51 @@
+name: Territory report
+description: How planetrs does on a country or a region beyond France and Monaco
+labels: [territory]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        Thank you for looking. Public addresses only, such as town halls, schools, shops and
+        landmarks: never somebody else's private data.
+  - type: input
+    id: territory
+    attributes:
+      label: Territory
+      description: The country or the region, with its ISO code.
+    validations:
+      required: true
+  - type: input
+    id: planet
+    attributes:
+      label: Planet or extract
+      description: The file indexed and its date, such as `planet-261019.osm.pbf` or a Geofabrik extract.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The output of `planetrs-geocoder --version` or `planetrs-mapclipper --version`.
+    validations:
+      required: true
+  - type: textarea
+    id: commands
+    attributes:
+      label: What you ran
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: geocoding
+    attributes:
+      label: Geocoding
+      description: >
+        How many addresses, how the precisions came out, what you compared them with, and a few that
+        went wrong, with what `planetrs-geocoder trace` printed for them.
+  - type: textarea
+    id: maps
+    attributes:
+      label: Maps
+      description: >
+        The boxes cut, whether `harvest` from the dataset matched `harvest --planet`, and anything that
+        looked wrong.
