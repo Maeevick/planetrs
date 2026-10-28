@@ -7,24 +7,25 @@ pub mod status;
 pub mod trace;
 
 use std::io::Read;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use anyhow::{Context as _, Result};
-use planetrs_cli::dataset::{location_of, name_of};
+use planetrs_cli::dataset::directory_of;
 use planetrs_cli::{ATTRIBUTION, DataDir, UsageError};
 use planetrs_dataset::directory::MANIFEST;
-use planetrs_dataset::{Dataset, DatasetError, ForReadingFiles, Location, Unreachable};
+use planetrs_dataset::{Dataset, DatasetError, DirectoryFiles, Unreachable};
 use planetrs_geocoder::{Geocoder, OpenError};
 
 use crate::cli::{Cli, Command, Global};
 
 /// What every command knows before it starts: where things are, and how much to say.
 pub struct Context {
-    /// Where planets, the dataset and the cache are kept.
+    /// Where planets and the dataset are kept.
     pub data: DataDir,
-    /// The dataset to read or build: `--dataset`, else `PLANETRS_DATASET`, else the data directory's.
-    pub dataset: Location,
+    /// The dataset's directory, to read or build: `--dataset`, else `PLANETRS_DATASET`, else the
+    /// data directory's.
+    pub dataset: PathBuf,
     /// Whether to say anything on stderr beyond errors and the attribution.
     pub quiet: bool,
 }
@@ -33,7 +34,7 @@ impl Context {
     /// Reads the shared settings, the environment standing behind `--data-dir`.
     pub fn of(global: &Global) -> Result<Self> {
         let data = DataDir::resolve(global.data_dir.as_deref(), |name| std::env::var_os(name))?;
-        let dataset = location_of(global.dataset.as_deref(), &data, |name| std::env::var(name).ok());
+        let dataset = directory_of(global.dataset.as_deref(), &data, |name| std::env::var_os(name));
         Ok(Self {
             data,
             dataset,
@@ -41,22 +42,20 @@ impl Context {
         })
     }
 
-    /// The dataset's location as a person reads it.
+    /// The dataset's directory as a person reads it.
     pub fn dataset_name(&self) -> String {
-        name_of(&self.dataset)
+        self.dataset.display().to_string()
     }
 
-    /// Opens the dataset, saying how long it took, or says how to get one. A remote dataset keeps
-    /// what it reads in the data directory's cache.
-    pub fn open_geocoder(&self) -> Result<Geocoder<Box<dyn ForReadingFiles>>> {
+    /// Opens the dataset, saying how long it took, or says how to get one.
+    pub fn open_geocoder(&self) -> Result<Geocoder<DirectoryFiles>> {
         let started = Instant::now();
-        let files = self.dataset.files().map_err(anyhow::Error::new)?;
-        let dataset = Dataset::open(files).map_err(|error| match error {
+        let dataset = Dataset::open(DirectoryFiles::at(&self.dataset)).map_err(|error| match error {
             DatasetError::Unreachable(Unreachable::Missing { file }) if file == MANIFEST => anyhow::anyhow!(
                 "no dataset in {}\n  \
                  → build one:        planetrs-geocoder download, then planetrs-geocoder index\n  \
                  → from a planet:    planetrs-geocoder index --planet PATH\n  \
-                 → or read another:  --dataset DIR|URL",
+                 → or read another:  --dataset DIR",
                 self.dataset_name()
             ),
             other => anyhow::Error::new(other).context(format!(
@@ -64,10 +63,6 @@ impl Context {
                 self.dataset_name()
             )),
         })?;
-        let dataset = match self.dataset {
-            Location::Address(_) => dataset.cached_in(self.data.cache()),
-            Location::Directory(_) => dataset,
-        };
         let geocoder = Geocoder::over(dataset).map_err(|error| match error {
             OpenError::NoIndex { directory } => anyhow::anyhow!("no dataset in {}", directory.display()),
             other => anyhow::Error::new(other).context("→ rebuild it: planetrs-geocoder index"),

@@ -10,9 +10,8 @@ const LONG_ABOUT: &str = "\
 A coordinate for a place or a postal address, from OpenStreetMap data alone.
 
 Geocodes one site given as a single argument, or a whole semicolon-separated file, against a dataset
-built from the OpenStreetMap planet, read from a directory or over HTTP: no API, no rate limit, and no
-network once the dataset is on disk. Every answer says how precise it is, from the door to the
-commune's centre.";
+built on this machine from the OpenStreetMap planet: no API, no rate limit, and no network once the
+planet is on disk. Every answer says how precise it is, from the door to the commune's centre.";
 
 const SHORT_FOOTER: &str = "\
 Examples:
@@ -65,8 +64,7 @@ Answer files:
 
 Data directory:
   --data-dir DIR, else PLANETRS_DATA_DIR, else $XDG_DATA_HOME/planetrs, else ~/.local/share/planetrs.
-  It holds planets/, which download fills, dataset/, which index builds, and cache/, which keeps
-  what is read of a dataset over HTTP. See status.
+  It holds planets/, which download fills, and dataset/, which index builds. See status.
 
 Examples:
   planetrs-geocoder download
@@ -147,14 +145,14 @@ pub struct Cli {
 /// Settings every command shares.
 #[derive(Debug, Args)]
 pub struct Global {
-    /// Where planets, the dataset and the cache are kept [env: PLANETRS_DATA_DIR]
+    /// Where planets and the dataset are kept [env: PLANETRS_DATA_DIR]
     #[arg(long, global = true, value_name = "DIR")]
     pub data_dir: Option<PathBuf>,
 
-    /// The dataset to read, a directory or a web address, or to build into with index, instead of
-    /// the data directory's [env: PLANETRS_DATASET]
-    #[arg(long, global = true, value_name = "DIR|URL")]
-    pub dataset: Option<String>,
+    /// The dataset's directory, to read or to build into with index, instead of the data
+    /// directory's [env: PLANETRS_DATASET]
+    #[arg(long, global = true, value_name = "DIR")]
+    pub dataset: Option<PathBuf>,
 
     /// Print nothing on stderr but errors and the attribution
     #[arg(short, long, global = true)]
@@ -314,7 +312,7 @@ mod tests {
         assert_eq!(before.global.data_dir, Some(PathBuf::from("/data")));
         assert!(before.global.quiet);
         assert!(matches!(after.command, Some(Command::Status)));
-        assert_eq!(after.global.dataset.as_deref(), Some("/dataset"));
+        assert_eq!(after.global.dataset, Some(PathBuf::from("/dataset")));
     }
 
     #[test]

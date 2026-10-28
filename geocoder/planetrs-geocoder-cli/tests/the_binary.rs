@@ -282,32 +282,6 @@ fn given_a_file_with_a_bad_row_when_geocoded_then_it_fails_with_two_naming_the_l
 }
 
 #[test]
-fn given_a_dataset_served_over_http_when_a_site_is_geocoded_then_its_door_answers_as_from_a_directory() {
-    let directory = scratch("over-http");
-    let index = index_in(&directory);
-    let files: Vec<(String, Vec<u8>)> = std::fs::read_dir(&index)
-        .unwrap()
-        .map(|entry| {
-            let path = entry.unwrap().path();
-            (
-                path.file_name().unwrap().to_string_lossy().into_owned(),
-                std::fs::read(&path).unwrap(),
-            )
-        })
-        .collect();
-    let served: Vec<(&str, &[u8])> = files
-        .iter()
-        .map(|(name, bytes)| (name.as_str(), bytes.as_slice()))
-        .collect();
-    let server = RangeServer::serving(&served).unwrap();
-
-    let output = run(&directory, &["--dataset", &server.url(), SITE]);
-
-    assert!(output.status.success(), "{}", text(&output.stderr));
-    assert_eq!(text(&output.stdout), format!("{HEADER}\n{ANSWER}\n"));
-}
-
-#[test]
 fn given_a_site_when_traced_then_the_last_line_is_its_answer() {
     let directory = scratch("trace");
     let index = index_argument(&directory);

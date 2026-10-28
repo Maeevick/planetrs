@@ -7,7 +7,7 @@ use std::time::{Duration, UNIX_EPOCH};
 use anyhow::Result;
 use planetrs_cli::data_dir::planet_date;
 use planetrs_cli::{Day, size_text};
-use planetrs_dataset::{Dataset, Manifest, Part};
+use planetrs_dataset::{Dataset, DirectoryFiles, Manifest, Part};
 
 use super::Context;
 
@@ -92,11 +92,8 @@ pub fn run(context: &Context) -> Result<()> {
         )?;
     }
 
-    let manifest = context
-        .dataset
-        .files()
+    let manifest = Dataset::open(DirectoryFiles::at(&context.dataset))
         .ok()
-        .and_then(|files| Dataset::open(files).ok())
         .map(|dataset| dataset.manifest().clone());
     let place = context.dataset_name();
     match manifest {
