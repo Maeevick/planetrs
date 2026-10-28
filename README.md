@@ -58,7 +58,8 @@ planet, an account of what worked and what did not is the most useful contributi
 | [`planetrs-mapclipper`](mapclipper/README.md) | a small illustrated map of anywhere, as GeoJSON, SVG or PNG, in themes that are files rather than code |
 
 Both read a dataset built once, on your machine, from the OpenStreetMap planet file, and both are
-libraries as well as commands.
+libraries first: the command, with clap and everything else only it needs, waits behind each crate's
+`cli` feature, so a program using the library takes none of it.
 
 ## Install
 
@@ -70,15 +71,16 @@ curl -fsSL "https://github.com/maeevick/planetrs/releases/latest/download/planet
 install -m 755 "planetrs-geocoder-$target/planetrs-geocoder" ~/.local/bin/
 ```
 
-`planetrs-mapclipper` comes the same way, or either command from crates.io with Cargo:
+`planetrs-mapclipper` comes the same way, or either command from crates.io with Cargo, its `cli`
+feature turned on:
 
 ```sh
-cargo install planetrs-geocoder-cli
-cargo install planetrs-mapclipper-cli
+cargo install planetrs-geocoder --features cli
+cargo install planetrs-mapclipper --features cli
 ```
 
-`cargo install --git https://github.com/maeevick/planetrs planetrs-geocoder-cli` builds the latest
-commit instead.
+`cargo install --git https://github.com/maeevick/planetrs planetrs-geocoder --features cli` builds the
+latest commit instead.
 
 A binary downloaded through a browser is quarantined by macOS until `xattr -d com.apple.quarantine
 planetrs-geocoder`. The binaries are not notarised yet; `curl` sidesteps the question.
@@ -148,14 +150,12 @@ builds from one planet agree to the byte.
 ## The workspace
 
 ```text
-crates/planetrs-pbf                  reading PBF: protobuf, framing, blocks, file header, an id index
-crates/planetrs-geo                  coordinates, bounding boxes, WKB, the window a block is tested against
-crates/planetrs-dataset              the dataset both tools read: a manifest, a gazetteer, GeoParquet indexes
-crates/planetrs-cli                  what both command lines share: data directory, outputs, progress, exit codes
-geocoder/planetrs-geocoder           the geocoding library
-geocoder/planetrs-geocoder-cli       the planetrs-geocoder command line
-mapclipper/planetrs-mapclipper       the map library
-mapclipper/planetrs-mapclipper-cli   the planetrs-mapclipper command line
+crates/planetrs-pbf              reading PBF: protobuf, framing, blocks, file header, an id index
+crates/planetrs-geo              coordinates, bounding boxes, WKB, the window a block is tested against
+crates/planetrs-dataset          the dataset both tools read: a manifest, a gazetteer, GeoParquet indexes
+crates/planetrs-cli              what both commands share: data directory, download, outputs, progress, exit codes
+geocoder/planetrs-geocoder       the geocoding library, and the planetrs-geocoder command behind its cli feature
+mapclipper/planetrs-mapclipper   the map library, and the planetrs-mapclipper command behind its cli feature
 ```
 
 The crates under `crates/` are shared and interpret no tag. What a `highway` means belongs to
