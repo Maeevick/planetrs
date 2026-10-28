@@ -78,7 +78,6 @@ pub fn record(
         Entry {
             part,
             file: name.to_string(),
-            url: None,
             bytes: bytes.len() as u64,
             sha256: sha256_of(bytes),
             rows,
@@ -151,7 +150,6 @@ pub fn record_written(
         Entry {
             part,
             file: name.to_string(),
-            url: None,
             bytes,
             sha256,
             rows,
@@ -201,7 +199,6 @@ pub fn record_all_written(
         entries.push(Entry {
             part: part.part,
             file: part.name,
-            url: None,
             bytes,
             sha256,
             rows: part.rows,

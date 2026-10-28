@@ -87,9 +87,6 @@ pub struct Entry {
     pub part: Part,
     /// Its name, relative to the manifest.
     pub file: String,
-    /// Where it is published, when it is.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub url: Option<String>,
     /// Its size in bytes.
     pub bytes: u64,
     /// Its SHA-256, in lower-case hexadecimal.
@@ -217,7 +214,6 @@ mod tests {
                 Entry {
                     part: Part::Gazetteer,
                     file: "gazetteer.parquet".into(),
-                    url: None,
                     bytes: 9_812_345,
                     sha256: "3f".repeat(32),
                     rows: 750_027,
@@ -226,7 +222,6 @@ mod tests {
                 Entry {
                     part: Part::GeocoderIndex { country: "MC".into() },
                     file: "geocoder-MC.parquet".into(),
-                    url: Some("https://static.data.gouv.fr/resources/planetrs/geocoder-MC.parquet".into()),
                     bytes: 61_234,
                     sha256: "a0".repeat(32),
                     rows: 2_345,
@@ -235,7 +230,6 @@ mod tests {
                 Entry {
                     part: Part::MapSummary,
                     file: "map-summary.json".into(),
-                    url: None,
                     bytes: 1_204,
                     sha256: "5c".repeat(32),
                     rows: 1,
@@ -244,7 +238,6 @@ mod tests {
                 Entry {
                     part: Part::MapTile { level: 0, x: 0, y: 0 },
                     file: "map-0-0-0.parquet".into(),
-                    url: None,
                     bytes: 971_748,
                     sha256: "e7".repeat(32),
                     rows: 8_587,

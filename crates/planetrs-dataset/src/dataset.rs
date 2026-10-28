@@ -61,8 +61,9 @@ impl<F: ForReadingFiles> Dataset<F> {
 
     /// A range of a part.
     fn read_part(&self, entry: &Entry, range: Range<u64>) -> Result<Vec<u8>, DatasetError> {
-        let address = entry.url.as_deref().unwrap_or(&entry.file);
-        self.files.read(address, range).map_err(DatasetError::Unreachable)
+        self.files
+            .read(&entry.file, range)
+            .map_err(DatasetError::Unreachable)
     }
 
     /// What the dataset holds and where it came from.
@@ -80,7 +81,7 @@ impl<F: ForReadingFiles> Dataset<F> {
         self.manifest.files.iter().find(|entry| entry.part == *part)
     }
 
-    /// A part read whole, at its published address when it has one, and parsed as what it is.
+    /// A part read whole, and parsed as what it is.
     fn read_whole<T>(
         &self,
         entry: &Entry,
@@ -390,7 +391,6 @@ mod tests {
             files: vec![Entry {
                 part: Part::Gazetteer,
                 file: "gazetteer.parquet".into(),
-                url: None,
                 bytes: gazetteer.len() as u64,
                 sha256: String::new(),
                 rows: 1,
@@ -419,7 +419,6 @@ mod tests {
         let entry = |part: Part, file: &str, bytes: &[u8]| Entry {
             part,
             file: file.into(),
-            url: None,
             bytes: bytes.len() as u64,
             sha256: String::new(),
             rows: 1,
@@ -509,7 +508,6 @@ mod tests {
             files: vec![Entry {
                 part: Part::GeocoderIndex { country: "FR".into() },
                 file: "geocoder-FR.parquet".into(),
-                url: None,
                 bytes: index.len() as u64,
                 sha256: String::new(),
                 rows: 6,
@@ -573,7 +571,6 @@ mod tests {
             files: vec![Entry {
                 part: Part::GeocoderIndex { country: "FR".into() },
                 file: "geocoder-FR.parquet".into(),
-                url: None,
                 bytes: index.len() as u64,
                 sha256: String::new(),
                 rows: 2,
@@ -639,7 +636,6 @@ mod tests {
             files: vec![Entry {
                 part: Part::MapTile { level: 0, x: 0, y: 0 },
                 file: "map-0-0-0.parquet".into(),
-                url: None,
                 bytes: map.len() as u64,
                 sha256: String::new(),
                 rows: 3,
@@ -682,7 +678,6 @@ mod tests {
                     y: tile.y,
                 },
                 file: tile.file_name(),
-                url: None,
                 bytes: written.out.len() as u64,
                 sha256: String::new(),
                 rows: written.rows,
@@ -717,7 +712,6 @@ mod tests {
             files: vec![Entry {
                 part: Part::MapSummary,
                 file: "map-summary.json".into(),
-                url: None,
                 bytes: json.len() as u64,
                 sha256: String::new(),
                 rows: 0,

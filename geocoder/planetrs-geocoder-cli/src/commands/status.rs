@@ -149,7 +149,6 @@ mod tests {
         let entry = |part: Part, file: &str| Entry {
             part,
             file: file.into(),
-            url: None,
             bytes: 1,
             sha256: String::new(),
             rows: 1,
