@@ -1,7 +1,6 @@
 //! A dataset opened for reading, wherever its files are: the manifest first, then the parts it lists.
 
 use std::ops::{Range, RangeInclusive};
-use std::path::{Path, PathBuf};
 
 use crate::directory::MANIFEST;
 use crate::files::{ForReadingFiles, Unreachable};
@@ -14,7 +13,6 @@ use crate::{gazetteer, geocoder_index};
 pub struct Dataset<F: ForReadingFiles> {
     files: F,
     manifest: Manifest,
-    cache: Option<PathBuf>,
 }
 
 /// Why a dataset, or one of its parts, could not be read.
@@ -58,47 +56,13 @@ impl<F: ForReadingFiles> Dataset<F> {
         let text = whole(&files, MANIFEST)?;
         let manifest =
             Manifest::from_json(&String::from_utf8_lossy(&text)).map_err(DatasetError::Manifest)?;
-        Ok(Self {
-            files,
-            manifest,
-            cache: None,
-        })
+        Ok(Self { files, manifest })
     }
 
-    /// The same dataset keeping every range it reads of a part in `directory`, under the part's
-    /// checksum, and answering from there the next time: the manifest is always read afresh, so a
-    /// part republished under another checksum is never served stale.
-    pub fn cached_in(self, directory: impl Into<PathBuf>) -> Self {
-        Self {
-            cache: Some(directory.into()),
-            ..self
-        }
-    }
-
-    /// A range of a part, from the cache when it holds it, else from the files, kept in the cache
-    /// on the way. The cache is a convenience: when it cannot be written, the read still answers.
+    /// A range of a part.
     fn read_part(&self, entry: &Entry, range: Range<u64>) -> Result<Vec<u8>, DatasetError> {
-        let kept = self
-            .cache
-            .as_ref()
-            .filter(|_| !entry.sha256.is_empty())
-            .map(|cache| {
-                cache
-                    .join(&entry.sha256)
-                    .join(format!("{}-{}", range.start, range.end))
-            });
-        if let Some(bytes) = kept.as_ref().and_then(|path| std::fs::read(path).ok()) {
-            return Ok(bytes);
-        }
         let address = entry.url.as_deref().unwrap_or(&entry.file);
-        let bytes = self
-            .files
-            .read(address, range)
-            .map_err(DatasetError::Unreachable)?;
-        if let Some(path) = kept {
-            keep(&path, &bytes);
-        }
-        Ok(bytes)
+        self.files.read(address, range).map_err(DatasetError::Unreachable)
     }
 
     /// What the dataset holds and where it came from.
@@ -378,19 +342,6 @@ fn table_error(entry: &Entry, source: TableError) -> DatasetError {
     DatasetError::Table {
         file: entry.file.clone(),
         source,
-    }
-}
-
-/// Writes a range into the cache whole or not at all, and says nothing when it cannot.
-fn keep(path: &Path, bytes: &[u8]) {
-    let partial = path.with_extension("partial");
-    let kept = path
-        .parent()
-        .map_or(Ok(()), std::fs::create_dir_all)
-        .and_then(|()| std::fs::write(&partial, bytes))
-        .and_then(|()| std::fs::rename(&partial, path));
-    if kept.is_err() {
-        let _ = std::fs::remove_file(&partial);
     }
 }
 

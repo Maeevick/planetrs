@@ -6,8 +6,7 @@ use planetrs_dataset::directory::{
     CarriedOver, MANIFEST, RecordError, Written, carry_over, record, record_all_written, record_written,
     written_beside,
 };
-use planetrs_dataset::testing::FilesInMemory;
-use planetrs_dataset::{Dataset, DirectoryFiles, Entry, Manifest, Part, Provenance, geocoder_index};
+use planetrs_dataset::{Entry, Manifest, Part, Provenance};
 
 type Outcome = Result<(), Box<dyn std::error::Error>>;
 
@@ -152,44 +151,6 @@ fn given_a_dataset_of_one_planet_when_a_part_of_another_is_recorded_then_it_is_r
         "{refused:?}"
     );
     assert!(!directory.join("geocoder-FR.parquet").exists());
-    Ok(())
-}
-
-#[test]
-fn given_a_dataset_read_once_through_a_cache_when_its_parts_are_gone_then_the_same_reads_answer_from_the_cache()
--> Outcome {
-    let directory = scratch("cached");
-    let cache = scratch("cache");
-    let planet = planet();
-    let entries = vec![
-        geocoder_index::Entry::Names { count: 1 },
-        geocoder_index::Entry::Middle {
-            commune: 946_433,
-            street: "AVENUE GARE".into(),
-            position: [3.268_208_2, 48.197_500_6],
-        },
-    ];
-    let index = geocoder_index::to_parquet("FR", &entries, 0.0)?;
-    record(
-        &directory,
-        &planet,
-        Part::GeocoderIndex { country: "FR".into() },
-        "geocoder-FR.parquet",
-        &index,
-        2,
-    )?;
-    let first = Dataset::open(DirectoryFiles::at(&directory))?.cached_in(&cache);
-    let france = first.country_index("FR")?.ok_or("France is indexed")?;
-    let read_first = first.commune(&france, 946_433)?;
-    let manifest = std::fs::read(directory.join(MANIFEST))?;
-
-    let only_the_manifest = FilesInMemory::default().with(MANIFEST, &manifest);
-    let again = Dataset::open(only_the_manifest)?.cached_in(&cache);
-    let france_again = again.country_index("FR")?.ok_or("France is indexed")?;
-    let read_again = again.commune(&france_again, 946_433)?;
-
-    assert_eq!(read_again, read_first);
-    assert_eq!(read_first, entries[1..].to_vec());
     Ok(())
 }
 
