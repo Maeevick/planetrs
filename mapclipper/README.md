@@ -56,8 +56,12 @@ planetrs-mapclipper clip --lat 43.7375 --lon 7.4210 \
 ```
 
 `harvest` and `clip` then cut their box from the dataset, reading only the tiles and the row groups
-around it, locally or over HTTP with `--dataset URL`. For any box the map index covers, the harvest
-is the planet's own to the byte; `--planet PATH` reads the planet instead, for anywhere else.
+around it. For any box the map index covers, the harvest is the planet's own to the byte; `--planet
+PATH` reads the planet instead, for anywhere else. That claim was checked on five places in France
+and Monaco, and on six around the world from one build of the whole planet; other countries go
+through the same code, and nobody has looked at them yet. `harvest` from the dataset set against
+`harvest --planet`, for a box of your own, makes a fine report: see
+[CONTRIBUTING.md](../CONTRIBUTING.md).
 
 The build holds little in memory: every node's position goes into a file beside the dataset, every
 element is set down on disk as it is built, and the tiles are written from them merged back in order.
