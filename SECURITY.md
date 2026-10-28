@@ -15,8 +15,8 @@ agreement, the advisory credits you.
 ## What is in scope
 
 - The `planetrs-geocoder` and `planetrs-mapclipper` commands and the published crates.
-- Reading untrusted input: site files, planet files, harvests, themes and index files.
-- Downloads: `planetrs-geocoder download` fetches over HTTPS and refuses a file whose md5 does not
+- Reading untrusted input: site files, planet files, harvests, themes and dataset files.
+- Downloads: either command's `download` fetches over HTTPS and refuses a file whose md5 does not
   match the one published beside it.
 
 Only the latest release is supported.
