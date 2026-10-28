@@ -3,8 +3,8 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
+use planetrs_cli::testing::RangeServer;
 use planetrs_dataset::directory::MANIFEST;
-use planetrs_dataset::testing::RangeServer;
 use planetrs_dataset::{Manifest, Part};
 use planetrs_pbf::testing::{MemberKind, Node, PlanetFile, Relation, Way};
 

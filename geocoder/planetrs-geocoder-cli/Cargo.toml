@@ -30,7 +30,7 @@ clap.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
-planetrs-dataset = { workspace = true, features = ["testing"] }
+planetrs-cli = { workspace = true, features = ["testing"] }
 planetrs-pbf = { workspace = true, features = ["testing"] }
 
 [lints]

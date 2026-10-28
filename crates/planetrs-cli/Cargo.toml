@@ -12,6 +12,10 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 
+[features]
+# The range server serving files over HTTP, for the tests of downloads.
+testing = []
+
 [dependencies]
 planetrs-dataset.workspace = true
 planetrs-pbf.workspace = true

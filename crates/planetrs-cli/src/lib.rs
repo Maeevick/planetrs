@@ -11,6 +11,8 @@ pub mod dataset;
 pub mod download;
 pub mod files;
 pub mod progress;
+#[cfg(any(test, feature = "testing"))]
+pub mod testing;
 
 use std::io;
 use std::process::ExitCode;

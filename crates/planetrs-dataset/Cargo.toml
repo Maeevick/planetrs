@@ -13,7 +13,7 @@ repository.workspace = true
 homepage.workspace = true
 
 [features]
-# The fake files, the range server and the contract every way of reading files honours, for tests.
+# The fake files and the contract every way of reading files honours, for tests.
 testing = []
 
 [dependencies]
