@@ -2,18 +2,18 @@
 
 use std::path::Path;
 
+use crate::error::ClipError;
+use crate::harvest::dataset::harvest_from_dataset;
+use crate::harvest::passes::{HarvestReport, harvest_area};
+use crate::harvest::{Harvest, format};
 use planetrs_cli::Progress;
 use planetrs_dataset::{Dataset, DirectoryFiles};
 use planetrs_geo::Area;
-use planetrs_mapclipper::error::ClipError;
-use planetrs_mapclipper::harvest::dataset::harvest_from_dataset;
-use planetrs_mapclipper::harvest::passes::{HarvestReport, harvest_area};
-use planetrs_mapclipper::harvest::{Harvest, format};
 use planetrs_pbf::Planet;
 
 use super::{Context, extent_of, put};
-use crate::cli::HarvestArgs;
-use crate::report::{Report, bytes, seconds, thousands};
+use crate::cli::arguments::HarvestArgs;
+use crate::cli::report::{Report, bytes, seconds, thousands};
 
 /// Harvests the area the command line frames, and says how to draw it.
 pub fn run(context: &Context, arguments: HarvestArgs) -> Result<(), ClipError> {

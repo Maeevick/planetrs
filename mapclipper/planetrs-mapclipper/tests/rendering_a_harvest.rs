@@ -6,11 +6,11 @@
 
 use std::path::PathBuf;
 
-use planetrs_mapclipper::harvest::{Harvest, Member, NamedNode, Node, Provenance, Relation, Way, format};
-use planetrs_mapclipper_cli::cli::{
+use planetrs_mapclipper::cli::arguments::{
     Cli, Command, Drawing, Framing, Global, LabelKind, MarkKind, Outputs, RenderArgs,
 };
-use planetrs_mapclipper_cli::run;
+use planetrs_mapclipper::cli::run;
+use planetrs_mapclipper::harvest::{Harvest, Member, NamedNode, Node, Provenance, Relation, Way, format};
 
 const AT: (f64, f64) = (5.269, -4.012);
 

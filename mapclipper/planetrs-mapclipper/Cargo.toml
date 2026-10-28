@@ -1,11 +1,11 @@
 [package]
 name = "planetrs-mapclipper"
 version.workspace = true
-description = "Cutting a small illustrated map out of the OpenStreetMap planet file, offline"
+description = "Cutting a small illustrated map out of the OpenStreetMap planet file, offline, and the planetrs-mapclipper command behind its cli feature"
 documentation = "https://docs.rs/planetrs-mapclipper"
 readme = "../README.md"
 keywords = ["openstreetmap", "map", "svg", "geojson", "cartography"]
-categories = ["science::geo", "visualization"]
+categories = ["science::geo", "visualization", "command-line-utilities"]
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -17,6 +17,8 @@ default = ["png"]
 # Rasterising, through resvg. Turning it off leaves GeoJSON and SVG, and drops every dependency
 # beyond the planetrs crates and rayon.
 png = ["dep:resvg"]
+# The planetrs-mapclipper command, and what only it needs: clap, anyhow and the planet's download.
+cli = ["dep:planetrs-cli", "dep:anyhow", "dep:clap"]
 
 [dependencies]
 planetrs-dataset.workspace = true
@@ -28,9 +30,27 @@ resvg = { version = "0.48", default-features = false, features = [
   "text",
   "system-fonts",
 ], optional = true }
+planetrs-cli = { workspace = true, optional = true }
+anyhow = { workspace = true, optional = true }
+clap = { workspace = true, optional = true }
 
 [dev-dependencies]
+planetrs-cli = { workspace = true, features = ["testing"] }
 planetrs-pbf = { workspace = true, features = ["testing"] }
+
+[[bin]]
+name = "planetrs-mapclipper"
+path = "src/main.rs"
+required-features = ["cli"]
+doc = false
+
+[[test]]
+name = "the_binary"
+required-features = ["cli"]
+
+[[test]]
+name = "rendering_a_harvest"
+required-features = ["cli"]
 
 [lints]
 workspace = true

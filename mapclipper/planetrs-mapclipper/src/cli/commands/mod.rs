@@ -12,14 +12,14 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
+use crate::error::ClipError;
 use planetrs_cli::dataset::directory_of;
 use planetrs_cli::{ATTRIBUTION, DataDir, Day, write_new};
 use planetrs_dataset::directory::MANIFEST;
 use planetrs_dataset::{DatasetError, Unreachable};
-use planetrs_mapclipper::error::ClipError;
 use planetrs_pbf::PbfError;
 
-use crate::cli::{Cli, Command, Global};
+use crate::cli::arguments::{Cli, Command, Global};
 
 /// What every command knows before it starts: where things are, and how much to say.
 pub struct Context {

@@ -2,17 +2,17 @@
 
 use std::time::Instant;
 
-use planetrs_mapclipper::error::ClipError;
-use planetrs_mapclipper::harvest::passes::HarvestReport;
-use planetrs_mapclipper::harvest::{Harvest, format};
-use planetrs_mapclipper::output::{Mark, Marker, geojson, svg};
-use planetrs_mapclipper::scene::{self, Scene};
-use planetrs_mapclipper::theme::Theme;
+use crate::error::ClipError;
+use crate::harvest::passes::HarvestReport;
+use crate::harvest::{Harvest, format};
+use crate::output::{Mark, Marker, geojson, svg};
+use crate::scene::{self, Scene};
+use crate::theme::Theme;
 
 use super::harvest::describe_harvest;
 use super::{Context, extent_of, put};
-use crate::cli::{Drawing, Framing, MarkKind, Outputs, RenderArgs};
-use crate::report::{Report, bytes, seconds, thousands};
+use crate::cli::arguments::{Drawing, Framing, MarkKind, Outputs, RenderArgs};
+use crate::cli::report::{Report, bytes, seconds, thousands};
 
 /// Draws the harvest the command line names into the outputs it asks for.
 pub fn run(context: &Context, arguments: RenderArgs) -> Result<(), ClipError> {
@@ -92,7 +92,7 @@ pub(super) fn draw(
 
 #[cfg(feature = "png")]
 fn rasterise(drawn: &str, scale: f64) -> Result<Vec<u8>, ClipError> {
-    planetrs_mapclipper::output::png::render(drawn, scale as f32)
+    crate::output::png::render(drawn, scale as f32)
 }
 
 #[cfg(not(feature = "png"))]

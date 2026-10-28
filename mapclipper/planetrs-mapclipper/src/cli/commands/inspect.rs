@@ -2,13 +2,13 @@
 
 use std::path::Path;
 
-use planetrs_mapclipper::error::ClipError;
-use planetrs_mapclipper::harvest::format;
+use crate::error::ClipError;
+use crate::harvest::format;
 use planetrs_pbf::Planet;
 
 use super::extent_of;
-use crate::cli::{InspectArgs, Shape};
-use crate::report::{Report, bytes, quoted, thousands};
+use crate::cli::arguments::{InspectArgs, Shape};
+use crate::cli::report::{Report, bytes, quoted, thousands};
 
 /// Reports on the file the command line names, as text or JSON.
 pub fn run(arguments: InspectArgs) -> Result<(), ClipError> {

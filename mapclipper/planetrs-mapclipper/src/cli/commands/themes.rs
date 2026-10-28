@@ -2,11 +2,11 @@
 
 use std::path::Path;
 
-use planetrs_mapclipper::error::ClipError;
-use planetrs_mapclipper::theme::BUILT_IN;
+use crate::error::ClipError;
+use crate::theme::BUILT_IN;
 
-use crate::cli::{Shape, ThemesArgs};
-use crate::report::{Report, quoted};
+use crate::cli::arguments::{Shape, ThemesArgs};
+use crate::cli::report::{Report, quoted};
 
 /// Lists the built-in themes, as text or JSON.
 pub fn run(arguments: ThemesArgs) -> Result<(), ClipError> {
@@ -21,7 +21,7 @@ pub fn run(arguments: ThemesArgs) -> Result<(), ClipError> {
 fn themes_as_text() -> Result<String, ClipError> {
     let mut report = Report::new(false);
     for (name, text) in BUILT_IN {
-        let theme = planetrs_mapclipper::theme::parse(text, Path::new(name))?;
+        let theme = crate::theme::parse(text, Path::new(name))?;
         report.line(name, &theme.description);
     }
     report.blank();
@@ -33,7 +33,7 @@ fn themes_as_json() -> Result<String, ClipError> {
     let described: Vec<String> = BUILT_IN
         .iter()
         .map(|(name, text)| {
-            let theme = planetrs_mapclipper::theme::parse(text, Path::new(name))?;
+            let theme = crate::theme::parse(text, Path::new(name))?;
             let drawn: Vec<String> = theme
                 .order
                 .iter()

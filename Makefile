@@ -28,7 +28,7 @@ test-integrated: ## real formats on the filesystem, no live services
 # feature that only the other one asks for. cargo install builds each alone, and so does this.
 test-alone: ## each command line's tests, built on its own as cargo install builds it
 	cargo test -p planetrs-geocoder --features cli --tests
-	cargo test -p planetrs-mapclipper-cli --tests
+	cargo test -p planetrs-mapclipper --features cli --tests
 
 # A library's users take nothing of what only its command needs.
 library-alone: ## each library built on its own, without its command or anything only the command needs

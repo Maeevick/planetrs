@@ -12,6 +12,8 @@
 
 #![warn(missing_docs)]
 
+#[cfg(feature = "cli")]
+pub mod cli;
 pub mod credit;
 pub mod error;
 pub mod harvest;

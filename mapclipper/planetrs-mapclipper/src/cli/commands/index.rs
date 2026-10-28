@@ -3,16 +3,16 @@
 
 use std::path::PathBuf;
 
+use crate::index::build_map_index;
 use anyhow::Result;
 use planetrs_cli::Progress;
 use planetrs_cli::dataset::{country_codes, rebuild};
 use planetrs_dataset::Part;
 use planetrs_dataset::directory::CarriedOver;
 use planetrs_dataset::map_index::{Scope, TILE_WEIGHT};
-use planetrs_mapclipper::index::build_map_index;
 
 use super::{Context, explained};
-use crate::cli::IndexArgs;
+use crate::cli::arguments::IndexArgs;
 
 /// Builds the map index of the countries the command line asks for.
 pub fn run(context: &Context, arguments: IndexArgs) -> Result<()> {

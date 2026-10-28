@@ -11,10 +11,10 @@ use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
+use crate::error::ClipError;
+use crate::scene::{Canvas, LabelClass, Place, Rules};
+use crate::theme::Theme;
 use planetrs_dataset::territory::DEFAULT_COUNTRIES;
-use planetrs_mapclipper::error::ClipError;
-use planetrs_mapclipper::scene::{Canvas, LabelClass, Place, Rules};
-use planetrs_mapclipper::theme::Theme;
 
 const DOWNLOAD_FOOTER: &str = "\
 The planet is about 90 GB and goes to planets/ in the data directory. A broken download resumes

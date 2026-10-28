@@ -7,7 +7,7 @@ use planetrs_cli::data_dir::planet_date;
 use planetrs_cli::download::fetch_planet;
 
 use super::Context;
-use crate::cli::DownloadArgs;
+use crate::cli::arguments::DownloadArgs;
 
 /// The command that builds the map index from a downloaded file.
 pub fn next_step(planet: &Path) -> String {

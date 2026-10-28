@@ -1,13 +1,13 @@
 //! Harvesting and drawing in one go, for the first look at a place.
 
-use planetrs_mapclipper::error::ClipError;
-use planetrs_mapclipper::harvest::format;
+use crate::error::ClipError;
+use crate::harvest::format;
 
 use super::harvest::harvest_of;
 use super::render::draw;
 use super::{Context, put};
-use crate::cli::ClipArgs;
-use crate::report::{Report, bytes};
+use crate::cli::arguments::ClipArgs;
+use crate::cli::report::{Report, bytes};
 
 /// Harvests the area the command line frames, keeps the harvest if asked, and draws it.
 pub fn run(context: &Context, arguments: ClipArgs) -> Result<(), ClipError> {

@@ -913,25 +913,15 @@ dependencies = [
 name = "planetrs-mapclipper"
 version = "0.2.0"
 dependencies = [
+ "anyhow",
+ "clap",
+ "planetrs-cli",
  "planetrs-dataset",
  "planetrs-geo",
  "planetrs-pbf",
  "rayon",
  "resvg",
  "thiserror",
-]
-
-[[package]]
-name = "planetrs-mapclipper-cli"
-version = "0.2.0"
-dependencies = [
- "anyhow",
- "clap",
- "planetrs-cli",
- "planetrs-dataset",
- "planetrs-geo",
- "planetrs-mapclipper",
- "planetrs-pbf",
 ]
 
 [[package]]
