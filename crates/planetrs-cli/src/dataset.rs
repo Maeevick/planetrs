@@ -32,11 +32,17 @@ pub fn location_of(
 /// The dataset's directory: the one `--dataset` names, else the one `variable` gives
 /// `PLANETRS_DATASET`, else the data directory's.
 pub fn directory_of(
-    _flag: Option<&Path>,
+    flag: Option<&Path>,
     data: &DataDir,
-    _variable: impl Fn(&str) -> Option<OsString>,
+    variable: impl Fn(&str) -> Option<OsString>,
 ) -> PathBuf {
-    data.dataset()
+    flag.map(Path::to_path_buf)
+        .or_else(|| {
+            variable(VARIABLE)
+                .filter(|named| !named.is_empty())
+                .map(PathBuf::from)
+        })
+        .unwrap_or_else(|| data.dataset())
 }
 
 /// A dataset's location as a person reads it.
