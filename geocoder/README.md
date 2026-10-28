@@ -58,10 +58,9 @@ stderr, so the answers can be piped, and `-q` leaves nothing there but errors an
 | 1         | something failed: no dataset, a file that cannot be read or written |
 | 2         | the command or the site file is malformed, and nothing was geocoded |
 
-Planets, the dataset and the cache of a remote dataset live in a data directory: `--data-dir`, else
-`PLANETRS_DATA_DIR`, else `$XDG_DATA_HOME/planetrs`, else `~/.local/share/planetrs`. `--dataset
-DIR|URL`, else `PLANETRS_DATASET`, reads a dataset from another directory or from a web address;
-`index` builds into a directory only.
+Planets and the dataset live in a data directory: `--data-dir`, else `PLANETRS_DATA_DIR`, else
+`$XDG_DATA_HOME/planetrs`, else `~/.local/share/planetrs`. `--dataset DIR`, else `PLANETRS_DATASET`,
+reads or builds a dataset in another directory.
 
 ## As a library
 
@@ -87,10 +86,10 @@ if let Some(reason) = refusal_of(&site, answer.as_ref()) {
 ```
 
 `planetrs_geocoder::build_index` builds a dataset from a planet file. `Geocoder::open` reads a
-dataset's directory, and `Geocoder::over` any dataset `planetrs-dataset` reaches, over HTTP
-included. Opening reads the gazetteer alone. A lookup then reads its country's word counts once and
-its commune with the communes stored beside it, so a first lookup in France takes well under a
-second and about 500 MB, and a later one in a commune already read touches no disk.
+dataset's directory, and `Geocoder::over` a dataset already opened through `planetrs-dataset`.
+Opening reads the gazetteer alone. A lookup then reads its country's word counts once and its
+commune with the communes stored beside it, so a first lookup in France takes well under a second
+and about 500 MB, and a later one in a commune already read touches no disk.
 The API documentation is on [docs.rs](https://docs.rs/planetrs-geocoder).
 
 ## Why the commune is settled first
@@ -245,9 +244,10 @@ it was kept, and the code still calls them by the step that brought them:
 ## Limits
 
 - The reading rules are French. Streets of other countries can be indexed with `--countries`, and are
-  read with the same rules, which suit them less.
-- A dataset is built from one planet file on one machine, with tens of gigabytes of memory; it is
-  then read from anywhere, over HTTP included.
+  read with the same rules, which suit them less; how much less, nobody has measured yet. A report
+  from your country is welcome: see [CONTRIBUTING.md](../CONTRIBUTING.md).
+- A dataset is built from one planet file on one machine, with tens of gigabytes of memory, and read
+  from its directory, wherever you copy it.
 - macOS and Linux only, for now.
 
 ## Data and licence
