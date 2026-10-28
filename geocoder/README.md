@@ -64,6 +64,9 @@ reads or builds a dataset in another directory.
 
 ## As a library
 
+`planetrs-geocoder = "0.2"` in a `Cargo.toml` brings the library alone; its `cli` feature adds the
+command and everything only the command needs, `cargo install planetrs-geocoder --features cli`.
+
 ```rust
 use planetrs_geocoder::{Geocoder, Site, refusal_of};
 
