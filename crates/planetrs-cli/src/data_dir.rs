@@ -7,7 +7,6 @@
 //! ```text
 //! planets/planet-YYMMDD.osm.pbf     what `download` fetches
 //! dataset/                          what `index` builds and every lookup reads
-//! cache/                            the ranges read of a remote dataset
 //! ```
 
 use std::ffi::OsString;
@@ -94,11 +93,6 @@ impl DataDir {
     /// Where the dataset is built and read, unless `--dataset` or `PLANETRS_DATASET` says otherwise.
     pub fn dataset(&self) -> PathBuf {
         self.path.join("dataset")
-    }
-
-    /// Where the ranges read of a remote dataset are kept, so that a second run reads none again.
-    pub fn cache(&self) -> PathBuf {
-        self.path.join("cache")
     }
 
     /// The newest planet in [`DataDir::planets`], if any.
@@ -206,16 +200,12 @@ mod tests {
     }
 
     #[test]
-    fn given_a_data_directory_when_asked_then_planets_the_dataset_and_the_cache_have_their_own_places() {
+    fn given_a_data_directory_when_asked_then_planets_and_the_dataset_have_their_own_places() {
         let data = DataDir::of("/data".into(), Source::Flag);
 
         assert_eq!(
-            (data.planets(), data.dataset(), data.cache()),
-            (
-                PathBuf::from("/data/planets"),
-                PathBuf::from("/data/dataset"),
-                PathBuf::from("/data/cache")
-            )
+            (data.planets(), data.dataset()),
+            (PathBuf::from("/data/planets"), PathBuf::from("/data/dataset"))
         );
     }
 
