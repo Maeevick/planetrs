@@ -2,7 +2,7 @@
 
 The dataset both [planetrs](https://github.com/maeevick/planetrs) tools read instead of the planet: a
 manifest, a planet-wide gazetteer, a geocoder index per country and a map index cut into tiles, read
-from a directory or over HTTP range requests.
+from its directory a few row groups at a time.
 
 A dataset is built whole from one planet file, so every file in it answers for the same minute of
 OpenStreetMap history, and two builds from one planet agree to the byte.
@@ -31,10 +31,8 @@ for tile in dataset.map_tiles_near(rock_of_monaco)? {
 # Ok::<(), planetrs_dataset::DatasetError>(())
 ```
 
-The `remote` feature reads a dataset over HTTP (`HttpFiles`), holding each file to the ETag it was
-first read at, and `Dataset::cached_in` keeps what was read on disk. The `testing` feature brings
-files held in memory, a small server that honours ranges, and the contract every way of reading files
-passes.
+The `testing` feature brings files held in memory, and the contract that they and a directory both
+honour.
 
 ## Licence
 
