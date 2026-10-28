@@ -1,7 +1,7 @@
 [package]
 name = "planetrs-dataset"
 version.workspace = true
-description = "The planetrs dataset: a manifest, a planet-wide gazetteer and per-country GeoParquet indexes, read locally or over HTTP"
+description = "The planetrs dataset: a manifest, a planet-wide gazetteer, a geocoder index per country and a tiled map index, all GeoParquet, built and read on one machine"
 documentation = "https://docs.rs/planetrs-dataset"
 readme = "README.md"
 keywords = ["openstreetmap", "geoparquet", "parquet", "geocoding", "dataset"]
@@ -13,8 +13,6 @@ repository.workspace = true
 homepage.workspace = true
 
 [features]
-# Reading a published dataset over HTTP range requests.
-remote = ["dep:ureq"]
 # The fake files, the range server and the contract every way of reading files honours, for tests.
 testing = []
 
@@ -29,14 +27,9 @@ planetrs-pbf.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
-ureq = { workspace = true, optional = true }
 
 [dev-dependencies]
-planetrs-dataset = { path = ".", features = ["remote", "testing"] }
-
-[[example]]
-name = "serve"
-required-features = ["testing"]
+planetrs-dataset = { path = ".", features = ["testing"] }
 
 [lints]
 workspace = true

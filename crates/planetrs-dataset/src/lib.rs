@@ -1,9 +1,9 @@
 //! The dataset both planetrs tools read instead of the planet: a manifest, a planet-wide gazetteer,
-//! and one geocoder index and one map index per country.
+//! a geocoder index per country, and a map index cut into tiles.
 //!
 //! A dataset is built whole from one planet file, so every file in it answers for the same minute of
-//! OpenStreetMap history, and the manifest says which. It is read from a directory or, file by file
-//! and range by range, over HTTP.
+//! OpenStreetMap history, and the manifest says which. It is read from its directory file by file and
+//! range by range, so that a lookup or a map reads only the row groups it needs.
 //!
 //! Data read or written through this crate is © OpenStreetMap contributors, under the Open Data
 //! Commons Open Database License 1.0.
@@ -16,8 +16,6 @@ pub mod files;
 pub mod gazetteer;
 pub mod geocoder_index;
 mod geoparquet;
-#[cfg(feature = "remote")]
-pub mod http;
 pub mod manifest;
 pub mod map_index;
 mod tables;
@@ -27,7 +25,5 @@ pub mod testing;
 
 pub use dataset::{CommunesRead, CountryIndex, Dataset, DatasetError, MapTile};
 pub use files::{DirectoryFiles, ForReadingFiles, Unreachable};
-#[cfg(feature = "remote")]
-pub use http::HttpFiles;
 pub use manifest::{Entry, Manifest, ManifestError, Part, Provenance};
 pub use tables::TableError;

@@ -1,8 +1,7 @@
-//! Where a dataset's files are read from: a directory, a web server, or memory in a test.
+//! Where a dataset's files are read from: a directory, or memory in a test.
 //!
 //! A dataset never needs a whole file at once. It asks for a file's length, then for the ranges it
-//! wants, so that the same reader serves a local directory and a remote one over HTTP range
-//! requests without knowing which.
+//! wants, so that a lookup reads a few row groups of a file of hundreds of megabytes.
 
 use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom};
@@ -46,11 +45,6 @@ pub enum Unreachable {
         /// The file's length.
         length: u64,
     },
-    /// The file was replaced since it was first described, so its ranges would mix two versions.
-    Changed {
-        /// The file asked for.
-        file: String,
-    },
     /// The file could not be read, for a reason outside the dataset.
     Failed {
         /// The file asked for.
@@ -69,7 +63,6 @@ impl std::fmt::Display for Unreachable {
                 "bytes {}..{} of {file} were asked for, and it holds {length}",
                 range.start, range.end
             ),
-            Self::Changed { file } => write!(formatter, "{file} was replaced while it was being read"),
             Self::Failed { file, detail } => write!(formatter, "reading {file} failed: {detail}"),
         }
     }

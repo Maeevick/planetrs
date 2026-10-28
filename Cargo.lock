@@ -889,7 +889,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
- "ureq",
 ]
 
 [[package]]
