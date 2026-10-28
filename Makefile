@@ -1,28 +1,28 @@
 PLANET ?= $(or $(lastword $(sort $(wildcard planet-*.osm.pbf))),planet-latest.osm.pbf)
 WORK   ?= .work
 
-.PHONY: help build release fmt lint test test-unit test-integrated test-alone test-system test-all check msrv doc deny package index map clean
+.PHONY: help build release fmt lint test test-unit test-integrated test-alone library-alone test-system test-all check msrv doc deny package index map clean
 
 help:
 	@grep -E '^[a-z-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 
-build: ## compile every crate
-	cargo build --workspace
+build: ## compile every crate, with all its features
+	cargo build --workspace --all-features
 
-release: ## compile every crate with optimisations
-	cargo build --workspace --release
+release: ## compile every crate with all its features and optimisations
+	cargo build --workspace --all-features --release
 
 fmt: ## format every crate
 	cargo fmt --all
 
-lint: ## refuse any warning
-	cargo clippy --workspace --all-targets -- -D warnings
+lint: ## refuse any warning, every crate with all its features
+	cargo clippy --workspace --all-targets --all-features -- -D warnings
 
 test-unit: ## pure logic, no filesystem
-	cargo test --workspace --lib
+	cargo test --workspace --lib --all-features
 
 test-integrated: ## real formats on the filesystem, no live services
-	cargo test --workspace --tests
+	cargo test --workspace --tests --all-features
 
 # Cargo turns a crate's features on for the whole workspace at once, so a command line can lean on a
 # feature that only the other one asks for. cargo install builds each alone, and so does this.
@@ -30,17 +30,22 @@ test-alone: ## each command line's tests, built on its own as cargo install buil
 	cargo test -p planetrs-geocoder-cli --tests
 	cargo test -p planetrs-mapclipper-cli --tests
 
+# A library's users take nothing of what only its command needs.
+library-alone: ## each library built on its own, without its command or anything only the command needs
+	cargo check -p planetrs-geocoder -p planetrs-mapclipper
+	! cargo tree -p planetrs-geocoder -p planetrs-mapclipper -e normal --prefix none | grep -E '^(clap|anyhow|planetrs-cli|ureq) '
+
 test-system: ## against a real planet file and the network, slowest: PLANET=/path/to/planet.osm.pbf
-	PLANET=$(abspath $(PLANET)) cargo test --workspace --release -- --ignored
+	PLANET=$(abspath $(PLANET)) cargo test --workspace --all-features --release -- --ignored
 
 test: test-unit test-integrated ## unit then integrated, fastest first
 
 test-all: test-unit test-integrated test-system ## every tier, fastest first
 
-check: fmt lint test test-alone ## what has to pass before anything is done
+check: fmt lint test test-alone library-alone ## what has to pass before anything is done
 
 msrv: ## the oldest toolchain supported, Rust 1.88
-	cargo +1.88 check --workspace --all-targets
+	cargo +1.88 check --workspace --all-targets --all-features
 
 doc: ## the API documentation, refusing a broken link
 	RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
