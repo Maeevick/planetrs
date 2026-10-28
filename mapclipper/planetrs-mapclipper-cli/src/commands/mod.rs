@@ -12,10 +12,10 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-use planetrs_cli::dataset::{location_of, name_of};
+use planetrs_cli::dataset::directory_of;
 use planetrs_cli::{ATTRIBUTION, DataDir, Day, write_new};
 use planetrs_dataset::directory::MANIFEST;
-use planetrs_dataset::{DatasetError, Location, Unreachable};
+use planetrs_dataset::{DatasetError, Unreachable};
 use planetrs_mapclipper::error::ClipError;
 use planetrs_pbf::PbfError;
 
@@ -23,10 +23,11 @@ use crate::cli::{Cli, Command, Global};
 
 /// What every command knows before it starts: where things are, and how much to say.
 pub struct Context {
-    /// Where planets, the dataset and the cache are kept.
+    /// Where planets and the dataset are kept.
     pub data: DataDir,
-    /// The dataset to read or build: `--dataset`, else `PLANETRS_DATASET`, else the data directory's.
-    pub dataset: Location,
+    /// The dataset's directory, to read or build: `--dataset`, else `PLANETRS_DATASET`, else the
+    /// data directory's.
+    pub dataset: PathBuf,
     /// Whether to say anything on stderr beyond errors and the attribution.
     pub quiet: bool,
 }
@@ -36,7 +37,7 @@ impl Context {
     /// `--dataset`.
     pub fn of(global: &Global) -> anyhow::Result<Self> {
         let data = DataDir::resolve(global.data_dir.as_deref(), |name| std::env::var_os(name))?;
-        let dataset = location_of(global.dataset.as_deref(), &data, |name| std::env::var(name).ok());
+        let dataset = directory_of(global.dataset.as_deref(), &data, |name| std::env::var_os(name));
         Ok(Self {
             data,
             dataset,
@@ -44,9 +45,9 @@ impl Context {
         })
     }
 
-    /// The dataset's location as a person reads it.
+    /// The dataset's directory as a person reads it.
     pub fn dataset_name(&self) -> String {
-        name_of(&self.dataset)
+        self.dataset.display().to_string()
     }
 
     /// A line on stderr, unless the run is quiet.

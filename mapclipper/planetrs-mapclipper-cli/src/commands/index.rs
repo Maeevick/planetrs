@@ -4,11 +4,11 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
+use planetrs_cli::Progress;
 use planetrs_cli::dataset::{country_codes, rebuild};
-use planetrs_cli::{Progress, UsageError};
+use planetrs_dataset::Part;
 use planetrs_dataset::directory::CarriedOver;
 use planetrs_dataset::map_index::{Scope, TILE_WEIGHT};
-use planetrs_dataset::{Location, Part};
 use planetrs_mapclipper::index::build_map_index;
 
 use super::{Context, explained};
@@ -18,14 +18,7 @@ use crate::cli::IndexArgs;
 pub fn run(context: &Context, arguments: IndexArgs) -> Result<()> {
     let planet = planet_to_read(context, arguments.planet)?;
     let codes = country_codes(&arguments.countries);
-    let Location::Directory(destination) = context.dataset.clone() else {
-        return Err(UsageError(format!(
-            "a dataset is built into a directory, and {} is a web address\n  \
-             → build into the data directory's: drop --dataset, or name a directory with --dataset DIR",
-            context.dataset_name()
-        ))
-        .into());
-    };
+    let destination = context.dataset.clone();
     let scope = if arguments.world {
         Scope::Planet
     } else {

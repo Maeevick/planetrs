@@ -321,47 +321,6 @@ fn given_a_dataset_of_monaco_when_a_box_inside_it_is_harvested_without_a_planet_
     );
 }
 
-#[test]
-fn given_a_dataset_of_monaco_served_over_http_when_a_box_inside_it_is_harvested_then_it_is_the_planets_harvest_to_the_byte()
- {
-    let directory = scratch("over-http");
-    let indexed = indexing(&directory, "dataset");
-    assert!(indexed.status.success(), "{}", text(&indexed.stderr));
-    let files: Vec<(String, Vec<u8>)> = std::fs::read_dir(directory.join("dataset"))
-        .unwrap()
-        .map(|entry| {
-            let path = entry.unwrap().path();
-            let name = path.file_name().unwrap().to_string_lossy().into_owned();
-            (name, std::fs::read(&path).unwrap())
-        })
-        .collect();
-    let served: Vec<(&str, &[u8])> = files
-        .iter()
-        .map(|(name, bytes)| (name.as_str(), bytes.as_slice()))
-        .collect();
-    let server = RangeServer::serving(&served).unwrap();
-    let planet = directory.join("monaco.osm.pbf").display().to_string();
-    let harvest = |source: &[&str], out: &str| {
-        let arguments: Vec<&str> = source
-            .iter()
-            .copied()
-            .chain(FRAME)
-            .chain(["--out", out])
-            .collect();
-        run(&directory, &arguments)
-    };
-
-    let over_http = harvest(&["--dataset", &server.url(), "harvest"], "over-http.mapclip");
-    let from_planet = harvest(&["harvest", "--planet", &planet], "from-planet.mapclip");
-
-    assert!(over_http.status.success(), "{}", text(&over_http.stderr));
-    assert!(from_planet.status.success(), "{}", text(&from_planet.stderr));
-    assert_eq!(
-        std::fs::read(directory.join("over-http.mapclip")).unwrap(),
-        std::fs::read(directory.join("from-planet.mapclip")).unwrap()
-    );
-}
-
 /// A file standing for a planet, and its checksum as planet.openstreetmap.org publishes one.
 const PUBLISHED_PLANET: &[u8] = b"a planet of Monaco, published with its checksum";
 const PUBLISHED_CHECKSUM: &str = "4124c6bf7c53aaa75c88ba15c36948bf  monaco-latest.osm.pbf\n";

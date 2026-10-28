@@ -3,7 +3,7 @@
 use std::path::Path;
 
 use planetrs_cli::Progress;
-use planetrs_dataset::{Dataset, Location};
+use planetrs_dataset::{Dataset, DirectoryFiles};
 use planetrs_geo::Area;
 use planetrs_mapclipper::error::ClipError;
 use planetrs_mapclipper::harvest::dataset::harvest_from_dataset;
@@ -54,14 +54,9 @@ pub(super) fn harvest_of(
     }
 }
 
-/// The harvest of `area` cut from the dataset's map indexes. A remote dataset keeps what it reads in
-/// the data directory's cache.
+/// The harvest of `area` cut from the dataset's map index.
 fn read_dataset(context: &Context, area: &Area) -> Result<Harvest, ClipError> {
-    let dataset = Dataset::open(context.dataset.files()?)?;
-    let dataset = match context.dataset {
-        Location::Address(_) => dataset.cached_in(context.data.cache()),
-        Location::Directory(_) => dataset,
-    };
+    let dataset = Dataset::open(DirectoryFiles::at(&context.dataset))?;
     harvest_from_dataset(&dataset, area)
 }
 

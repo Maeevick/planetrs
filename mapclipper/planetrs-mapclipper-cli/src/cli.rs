@@ -78,14 +78,14 @@ pub struct Cli {
 /// Settings every command shares.
 #[derive(Args, Debug)]
 pub struct Global {
-    /// Where planets, the dataset and the cache are kept [env: PLANETRS_DATA_DIR]
+    /// Where planets and the dataset are kept [env: PLANETRS_DATA_DIR]
     #[arg(long, global = true, value_name = "DIR")]
     pub data_dir: Option<PathBuf>,
 
-    /// The dataset to read, a directory or a web address, or to build into with index, instead of
-    /// the data directory's [env: PLANETRS_DATASET]
-    #[arg(long, global = true, value_name = "DIR|URL")]
-    pub dataset: Option<String>,
+    /// The dataset's directory, to read or to build into with index, instead of the data
+    /// directory's [env: PLANETRS_DATASET]
+    #[arg(long, global = true, value_name = "DIR")]
+    pub dataset: Option<PathBuf>,
 
     /// Print nothing on stderr but errors and the attribution
     #[arg(short, long, global = true)]
