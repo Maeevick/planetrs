@@ -180,8 +180,8 @@ attention, each time you want fresher data. Once a month is plenty for most addr
 
 - [ ] **Reading a dataset remotely**: a dataset built and checked once, read over HTTP a few row
   groups at a time, so that a lookup or a map needs neither the planet nor an afternoon of indexing.
-  The code worked, and left 0.2.0 until there is somewhere to read the dataset from: maeevick is
-  looking for the right platform to host it.
+  The code worked, and left 0.2.0 until there is somewhere to read the dataset from: I am looking for
+  the right platform to host it.
 
 ## Building and testing
 
