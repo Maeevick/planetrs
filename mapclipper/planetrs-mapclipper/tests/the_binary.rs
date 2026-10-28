@@ -22,8 +22,10 @@ const FRAME: [&str; 8] = [
 ];
 
 fn scratch(name: &str) -> PathBuf {
-    let directory =
-        std::env::temp_dir().join(format!("planetrs-mapclipper-cli-{name}-{}", std::process::id()));
+    let directory = std::env::temp_dir().join(format!(
+        "planetrs-mapclipper-binary-{name}-{}",
+        std::process::id()
+    ));
     let _ = std::fs::remove_dir_all(&directory);
     std::fs::create_dir_all(&directory).unwrap();
     directory

@@ -16,7 +16,8 @@ const ATTRIBUTION: &str =
     "Data © OpenStreetMap contributors, ODbL 1.0: https://www.openstreetmap.org/copyright";
 
 fn scratch(name: &str) -> PathBuf {
-    let directory = std::env::temp_dir().join(format!("planetrs-geocoder-cli-{name}-{}", std::process::id()));
+    let directory =
+        std::env::temp_dir().join(format!("planetrs-geocoder-binary-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&directory);
     std::fs::create_dir_all(&directory).unwrap();
     directory
