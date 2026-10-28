@@ -5,29 +5,14 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result};
+use planetrs_dataset::Part;
 use planetrs_dataset::directory::{CarriedOver, carry_over};
-use planetrs_dataset::{Location, Part};
 
 use crate::data_dir::DataDir;
 use crate::files::replace_directory;
 
 /// The environment variable naming the dataset when `--dataset` does not.
 pub const VARIABLE: &str = "PLANETRS_DATASET";
-
-/// The dataset `--dataset` names, else the one `variable` gives `PLANETRS_DATASET`, else the data
-/// directory's.
-pub fn location_of(
-    flag: Option<&str>,
-    data: &DataDir,
-    variable: impl Fn(&str) -> Option<String>,
-) -> Location {
-    flag.map(str::to_string)
-        .or_else(|| variable(VARIABLE).filter(|named| !named.is_empty()))
-        .map_or_else(
-            || Location::Directory(data.dataset()),
-            |named| Location::of(&named),
-        )
-}
 
 /// The dataset's directory: the one `--dataset` names, else the one `variable` gives
 /// `PLANETRS_DATASET`, else the data directory's.
@@ -43,14 +28,6 @@ pub fn directory_of(
                 .map(PathBuf::from)
         })
         .unwrap_or_else(|| data.dataset())
-}
-
-/// A dataset's location as a person reads it.
-pub fn name_of(location: &Location) -> String {
-    match location {
-        Location::Directory(directory) => directory.display().to_string(),
-        Location::Address(address) => address.clone(),
-    }
 }
 
 /// The country codes as an index wants them: upper case, trimmed, each once, in the order given.
