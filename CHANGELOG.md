@@ -6,23 +6,24 @@ a minor version may break the API or the dataset format.
 
 ## [0.2.0] - 2026-10-20
 
-Both tools now read a dataset built once from the planet, from a directory or over HTTP, rather than
-the planet itself or a tab-separated index. 0.1.0 was never tagged; its notes below describe `main`
-as it was first published.
+Both tools now read a dataset built once, on your machine, from the planet, rather than the planet
+itself or a tab-separated index. Tested on France and Monaco; other territories go through the same
+code and wait for someone to look, as CONTRIBUTING.md asks. 0.1.0 was never tagged; its notes below
+describe `main` as it was first published.
 
 ### planetrs-geocoder
 
 - The tab-separated index gives way to the dataset. Opening reads the gazetteer, and a lookup reads
-  its country's word counts once and its commune with the communes stored beside it, from a
-  directory or over HTTP (`--dataset DIR|URL`, `PLANETRS_DATASET`): a first lookup in France takes
-  well under a second and about 500 MB.
+  its country's word counts once and its commune with the communes stored beside it, from the
+  dataset's directory (`--dataset DIR`, `PLANETRS_DATASET`): a first lookup in France takes well under
+  a second and about 500 MB.
 - Word rarity is counted over the streets of the site's country.
 - `index` builds the gazetteer and each country's geocoder index beside the dataset, keeps the map
   indexes built from the same planet, and stops at the first blob that does not decode rather than
   counting it.
 - `trace` looks for the same street name within 20 km on both sides of a border.
-- `Geocoder::locate` and `Geocoder::trace` take `&mut self` and return a `Result`, since a lookup can
-  now fail on the network.
+- `Geocoder::locate` and `Geocoder::trace` take `&mut self` and return a `Result`, since a lookup now
+  reads the dataset as it goes, and reading can fail.
 
 ### planetrs-mapclipper
 
@@ -35,7 +36,8 @@ as it was first published.
   instead.
 - The build holds little in memory: node positions in a file beside the dataset, elements set down
   on disk in sorted runs, tiles encoded sixteen row groups at a time. France and Monaco take about
-  eleven minutes and 17 GB of memory; the whole planet an hour and a quarter and 33 GB.
+  eleven minutes, 17 GB of memory and 130 GB of scratch disk; the whole planet an hour and a quarter,
+  33 GB and 220 GB.
 - `download` fetches the planet, as the geocoder's does, so the mapclipper needs no other tool to
   index locally.
 - The command line follows the geocoder's conventions: `--data-dir`, `--dataset`, `-q` for every
@@ -47,11 +49,13 @@ as it was first published.
 
 - The dataset: a manifest with each file's checksum and each tile's box, a planet-wide gazetteer, a
   geocoder index per country, and a map index as a summary and its tiles, all GeoParquet 1.1, the
-  same bytes from the same planet, read from a directory or over HTTP range requests through a cache.
-  A file holds its content alone, the planet named by the manifest, so a tile that did not change
-  keeps its bytes from one planet to the next.
-- What both command lines share: the data directory, the planet's download, outputs never written
-  over, the progress line, exit codes and the OpenStreetMap attribution.
+  same bytes from the same planet, read from its directory a few row groups at a time. A file holds
+  its content alone, the planet named by the manifest, so a tile that did not change keeps its bytes
+  from one planet to the next.
+- What both command lines share: the data directory; the planet's download, resumed after a break,
+  checked against its published md5 and named after the Monday its header states, which `index`
+  then finds on its own; outputs never written over; the progress line, exit codes and the
+  OpenStreetMap attribution.
 
 ### planetrs-pbf and planetrs-geo
 
