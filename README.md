@@ -176,6 +176,13 @@ than one that hides it.
 The price is the planet itself: ninety gigabytes to download, and an afternoon of a laptop's
 attention, each time you want fresher data. Once a month is plenty for most addresses.
 
+## Roadmap
+
+- [ ] **Reading a dataset remotely**: a dataset built and checked once, read over HTTP a few row
+  groups at a time, so that a lookup or a map needs neither the planet nor an afternoon of indexing.
+  The code worked, and left 0.2.0 until there is somewhere to read the dataset from: maeevick is
+  looking for the right platform to host it.
+
 ## Building and testing
 
 ```sh
