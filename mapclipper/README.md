@@ -234,17 +234,20 @@ declare it is refused rather than bisected wrongly.
 ## Installing
 
 ```sh
-cargo install --git https://github.com/maeevick/planetrs planetrs-mapclipper-cli
+cargo install planetrs-mapclipper --features cli
 ```
+
+`cargo install --git https://github.com/maeevick/planetrs planetrs-mapclipper --features cli` builds
+the latest commit instead.
 
 Release archives for macOS and Linux are on the
 [releases page](https://github.com/maeevick/planetrs/releases), and a planet or a smaller extract
 comes from `planetrs-geocoder download` or any OpenStreetMap mirror. A harvest needs a file that
 declares `Sort.Type_then_ID`, as the planet and Geofabrik's extracts do.
 
-`--no-default-features` drops the PNG output and resvg with it. The library, `planetrs-mapclipper`,
-holds no command line: a harvest is `harvest::passes::harvest_area`, a scene is `scene::build`, and
-each output is a function of a scene, while clap stays in `planetrs-mapclipper-cli`. The PBF reader
+Without its `cli` feature the crate is the library alone, clap and the rest of the command left out:
+a harvest is `harvest::passes::harvest_area`, a scene is `scene::build`, and each output is a
+function of a scene. `--no-default-features` drops the PNG output and resvg too. The PBF reader
 under `crates/` pulls nothing beyond `flate2`, so embedding it costs nothing.
 
 ## Data and licence
