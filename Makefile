@@ -55,9 +55,9 @@ deny: ## licences, advisories and sources of every dependency
 
 # Cargo takes a registry crate of a given version never to change, so a second dry run would build
 # against the crates the first one packaged. Each run therefore starts from nothing.
-package: ## what crates.io would receive, built from the packaged sources
+package: ## what crates.io would receive, built from the packaged sources with every feature, commands included
 	rm -rf target/package-verify $${CARGO_HOME:-$$HOME/.cargo}/registry/src/-*/planetrs-*
-	CARGO_TARGET_DIR=target/package-verify cargo publish --workspace --dry-run --allow-dirty
+	CARGO_TARGET_DIR=target/package-verify cargo publish --workspace --dry-run --allow-dirty --all-features
 
 index: release ## build the geocoder's index from PLANET into the data directory
 	./target/release/planetrs-geocoder index --planet $(PLANET)
