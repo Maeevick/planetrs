@@ -26,7 +26,7 @@ planetrs-pbf.workspace = true
 planetrs-geo.workspace = true
 rayon.workspace = true
 thiserror.workspace = true
-resvg = { version = "0.48", default-features = false, features = [
+resvg = { version = "0.49", default-features = false, features = [
   "text",
   "system-fonts",
 ], optional = true }
